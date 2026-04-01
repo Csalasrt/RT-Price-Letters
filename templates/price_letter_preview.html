@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+  <h2 style="margin:0;">Price Letter Preview</h2>
+
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('price_letter_history_page') }}">History</a>
+
+    {% if saved_letter %}
+      <a class="btn btn-primary btn-sm" href="{{ url_for('download_saved_price_letter', letter_id=saved_letter.id) }}">Download PDF</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card section-card shadow-sm">
+  <div class="card-body">
+
+    {% if payload.logo_path %}
+      <div style="margin-bottom:16px;">
+        <img src="/{{ payload.logo_path }}" alt="Logo" style="max-height:70px;">
+      </div>
+    {% endif %}
+
+    <div style="margin-bottom:14px;">
+      <strong>{{ payload.company_info.company_name }}</strong><br>
+      {% if payload.company_info.address %}{{ payload.company_info.address }}<br>{% endif %}
+      {% if payload.company_info.phone %}{{ payload.company_info.phone }}<br>{% endif %}
+      {% if payload.company_info.email %}{{ payload.company_info.email }}<br>{% endif %}
+      {% if payload.company_info.website %}{{ payload.company_info.website }}{% endif %}
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <strong>Customer:</strong> {{ payload.customer_name }}<br>
+      {% if payload.attention %}<strong>Attention:</strong> {{ payload.attention }}<br>{% endif %}
+      {% if payload.letter_date %}<strong>Date:</strong> {{ payload.letter_date }}<br>{% endif %}
+      {% if payload.month_key %}<strong>Month:</strong> {{ payload.month_key }}{% endif %}
+    </div>
+
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Del/FOB</th>
+          <th>U/M</th>
+          <th>Price</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in payload.products %}
+        <tr>
+          <td>{{ row.product_name }}</td>
+          <td>{{ row.del_fob }}</td>
+          <td>{{ row.uom }}</td>
+          <td>{{ row.price }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Price Letter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      color: #111;
+      margin: 30px;
+    }
+    .logo {
+      max-height: 70px;
+      margin-bottom: 16px;
+    }
+    .header-block {
+      margin-bottom: 16px;
+      line-height: 1.45;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background: #f3f3f3;
+    }
+    .notes {
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<body>
+
+  {% if payload.logo_path %}
+    <img class="logo" src="{{ payload.logo_path }}" alt="Logo">
+  {% endif %}
+
+  <div class="header-block">
+    <strong>{{ payload.company_info.company_name }}</strong><br>
+    {% if payload.company_info.address %}{{ payload.company_info.address }}<br>{% endif %}
+    {% if payload.company_info.phone %}{{ payload.company_info.phone }}<br>{% endif %}
+    {% if payload.company_info.email %}{{ payload.company_info.email }}<br>{% endif %}
+    {% if payload.company_info.website %}{{ payload.company_info.website }}{% endif %}
+  </div>
+
+  <div class="header-block">
+    <strong>Customer:</strong> {{ payload.customer_name }}<br>
+    {% if payload.attention %}<strong>Attention:</strong> {{ payload.attention }}<br>{% endif %}
+    {% if payload.letter_date %}<strong>Date:</strong> {{ payload.letter_date }}<br>{% endif %}
+    {% if payload.month_key %}<strong>Month:</strong> {{ payload.month_key }}{% endif %}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Del/FOB</th>
+        <th>U/M</th>
+        <th>Price</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in payload.products %}
+      <tr>
+        <td>{{ row.product_name }}</td>
+        <td>{{ row.del_fob }}</td>
+        <td>{{ row.uom }}</td>
+        <td>{{ row.price }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if payload.notes %}
+    <div class="notes">
+      <strong>Notes:</strong><br>
+      {{ payload.notes }}
+    </div>
+  {% endif %}
+
+</body>
+</html>
+    {% if payload.notes %}
+      <div style="margin-top:16px;">
+        <strong>Notes:</strong><br>
+        {{ payload.notes }}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

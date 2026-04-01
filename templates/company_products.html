@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+  <h2 class="section-title" style="margin:0;">Company Products</h2>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_users_page') }}">← Back to Admin</a>
+</div>
+
+<div class="card section-card shadow-sm">
+  <div class="card-body">
+    <div style="font-weight:700; margin-bottom:10px;">Products List</div>
+
+    {% if company_products and company_products|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th style="min-width:320px;">Product Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in company_products %}
+              <tr>
+                <td>{{ p }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No company products have been added yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="text-muted-small" style="margin-bottom:12px;">
+  Selected list:
+  <span style="display:inline-block; padding:4px 10px; border:1px solid #e5e7eb;">
+    <strong>{{ month_key }}</strong>
+  </span>
+</div>
+
+{% if errors %}
+  <ul class="errors">
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+{% endif %}
+
+<div class="card section-card shadow-sm">
+  <div class="card-body">
+
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:700;">Paste pricing rows</div>
+        <div class="text-muted-small" style="margin-top:4px;">
+          Format: <code>Product,U/M,Price,Freight/Tax,Final Price</code>
+          <span style="margin-left:6px;">(multiple lines supported)</span>
+        </div>
+      </div>
+
+      <div class="text-muted-small">
+        5 columns • Append-only for the selected list
+      </div>
+    </div>
+
+    <form method="GET" action="{{ url_for('pricing_page') }}" id="pricing-select-form" style="margin-top:10px;">
+      <div class="row-form">
+        <label>Month *</label>
+        <select name="selected_month" required onchange="submitPricingSelection()">
+          {% for m in month_options %}
+            <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="row-form">
+        <label>Year *</label>
+        <select name="selected_year" required onchange="submitPricingSelection()">
+          {% for y in year_options %}
+            <option value="{{ y }}" {% if selected_year == y|string %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+
+    <form method="POST" action="{{ url_for('pricing_page') }}" style="margin-top:10px;">
+      <input type="hidden" name="selected_month" value="{{ selected_month }}">
+      <input type="hidden" name="selected_year" value="{{ selected_year }}">
+
+      <div class="row-form" style="align-items:flex-start;">
+        <label style="padding-top:6px;">Paste</label>
+        <div style="flex:1;">
+          <textarea
+            name="paste_data"
+            rows="8"
+            style="width:100%;"
+            placeholder="Methanol,GAL,2.2000,0.1500,2.3500"
+          >{{ paste_text }}</textarea>
+
+          <div class="text-muted-small" style="margin-top:6px;">
+            Tip: You can paste from Excel too (tabs still work).
+          </div>
+        </div>
+      </div>
+
+      <div class="row-form" style="justify-content:flex-end; gap:8px;">
+        <button class="btn btn-primary btn-sm"
+                type="submit"
+                name="action"
+                value="append">
+          Append Rows
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<div class="card section-card shadow-sm" style="margin-top:12px;">
+  <div class="card-body">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <div style="font-weight:700;">Rows in {{ month_key }}</div>
+      <div class="text-muted-small">Showing {{ rows|length }} row(s)</div>
+    </div>
+
+    <form method="POST" action="{{ url_for('pricing_page') }}" id="pricing-rows-form" style="margin-top:10px;">
+      <input type="hidden" name="selected_month" value="{{ selected_month }}">
+      <input type="hidden" name="selected_year" value="{{ selected_year }}">
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th style="width:52px; min-width:52px; text-align:center; vertical-align:middle;">
+                <input type="checkbox" id="select-all-rows">
+              </th>
+              <th style="min-width:240px; text-align:center; vertical-align:middle;">Product</th>
+              <th style="min-width:80px; text-align:center; vertical-align:middle;">U/M</th>
+              <th style="min-width:120px; text-align:center; vertical-align:middle;">Price</th>
+              <th style="min-width:130px; text-align:center; vertical-align:middle;">Freight/Tax</th>
+              <th style="min-width:130px; text-align:center; vertical-align:middle;">Final Price</th>
+              <th style="min-width:95px; text-align:center; vertical-align:middle;">Added</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% if rows and rows|length > 0 %}
+              {% for r in rows %}
+                <tr>
+                  <td style="text-align:center;">
+                    <input type="checkbox" name="delete_row" value="{{ r.id }}" class="delete-row-check">
+                  </td>
+
+                  <td>
+                    <input type="hidden" name="row_id" value="{{ r.id }}">
+                    <input
+                        class="form-control form-control-sm editable-product"
+                        name="row_product"
+                        value="{{ r.product }}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm editable-um"
+                      name="row_um"
+                      value="{{ r.um }}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm editable-price"
+                      name="row_price"
+                      value="{{ '%.4f'|format(r.price or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm editable-freight"
+                      name="row_freight_tax"
+                      value="{{ '%.4f'|format(r.freight_tax or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm editable-final"
+                      name="row_final_price"
+                      value="{{ '%.4f'|format(r.final_price or 0) }}"
+                      inputmode="decimal"
+                      readonly
+                    >
+                  </td>
+
+                  <td class="text-muted-small text-center">
+                    {{ (r.created_at[5:7] ~ "/" ~ r.created_at[8:10] ~ "/" ~ r.created_at[2:4]) if r.created_at else "—" }}
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="7" class="text-center text-muted">No pricing rows yet.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
+        <button class="btn btn-outline-secondary btn-sm"
+                type="submit"
+                name="action"
+                value="delete_selected"
+                onclick="return confirm('Delete selected rows?');">
+          Delete Selected
+        </button>
+
+        <button class="btn btn-primary btn-sm"
+                type="submit"
+                name="action"
+                value="save_rows">
+          Save Changes
+        </button>
+      </div>
+    </form>
+
+    <form method="POST" action="{{ url_for('pricing_page') }}" style="margin-top:12px;">
+      <input type="hidden" name="selected_month" value="{{ selected_month }}">
+      <input type="hidden" name="selected_year" value="{{ selected_year }}">
+      <button class="btn btn-outline-secondary btn-sm"
+              type="submit"
+              name="action"
+              value="clear"
+              onclick="return confirm('Clear the selected list?');">
+        Clear List
+      </button>
+    </form>
+
+  </div>
+</div>
+
+<div class="text-center text-muted mt-3">
+  <small>Pricing Upload • RT PL</small>
+</div>
+
+{% if show_mod_modal %}
+<div class="modal fade" id="modsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title" style="font-weight:700;">Pricing Changes Detected</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div style="font-weight:700; margin-bottom:6px;">
+          We found modified products for {{ month_key }}.
+        </div>
+
+        <div class="text-muted-small" style="margin-bottom:10px;">
+          New products: <strong>{{ new_count }}</strong> •
+          Modified products: <strong>{{ mod_count }}</strong><br>
+          Exact duplicates ignored automatically: <strong>{{ ignored_exact }}</strong>
+        </div>
+
+        <div style="border:1px solid #e5e7eb; padding:10px; margin-bottom:12px;">
+          <div class="text-muted-small" style="margin-bottom:6px;">Modified products:</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            {% for p in mod_products %}
+              <span style="display:inline-block; padding:4px 10px; border:1px solid #e5e7eb;">
+                {{ p }}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="text-muted-small">
+          Choose how you want to handle these modifications.
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+        <form method="POST" action="{{ url_for('pricing_apply_mods') }}" style="margin:0; display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-outline-secondary btn-sm" type="submit" name="decision" value="cancel">
+            Cancel
+          </button>
+
+          <button class="btn btn-outline-secondary btn-sm" type="submit" name="decision" value="append_anyway">
+            Append Anyway (keep both versions)
+          </button>
+
+          <button class="btn btn-primary btn-sm" type="submit" name="decision" value="replace_mods">
+            Replace Modified Products
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+  function submitPricingSelection() {
+    const form = document.getElementById("pricing-select-form");
+    if (form) {
+      form.submit();
+    }
+  }
+
+  function toNum(v) {
+    if (v === null || v === undefined) return 0;
+    const s = String(v).replace("$", "").replace(/,/g, "").trim();
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function fmt4(n) {
+    return (Math.round(n * 10000) / 10000).toFixed(4);
+  }
+
+  function isEditablePricingInput(el) {
+    return el && (
+      el.classList.contains("editable-product") ||
+      el.classList.contains("editable-um") ||
+      el.classList.contains("editable-price") ||
+      el.classList.contains("editable-freight") ||
+      el.classList.contains("editable-final")
+    );
+  }
+
+  function isNumericPricingInput(el) {
+    return el && (
+      el.classList.contains("editable-price") ||
+      el.classList.contains("editable-freight") ||
+      el.classList.contains("editable-final")
+    );
+  }
+
+  function clearZeroOnFocus(e) {
+    const el = e.target;
+    if (!isNumericPricingInput(el)) return;
+
+    const val = toNum(el.value);
+    if (val === 0) {
+      el.value = "";
+    }
+
+    setTimeout(() => {
+      try {
+        el.select();
+      } catch (err) {}
+    }, 0);
+  }
+
+  function selectTextOnFocus(e) {
+    const el = e.target;
+    if (!isEditablePricingInput(el)) return;
+
+    setTimeout(() => {
+      try {
+        el.select();
+      } catch (err) {}
+    }, 0);
+  }
+
+  function restoreZeroOnBlur(e) {
+    const el = e.target;
+    if (!isNumericPricingInput(el)) return;
+
+    if (String(el.value).trim() === "") {
+      el.value = "0.0000";
+    }
+  }
+
+  function updatePricingRow(tr) {
+    const priceEl = tr.querySelector(".editable-price");
+    const freightEl = tr.querySelector(".editable-freight");
+    const finalEl = tr.querySelector(".editable-final");
+
+    if (!priceEl || !freightEl || !finalEl) return;
+
+    const price = toNum(priceEl.value);
+    const freight = toNum(freightEl.value);
+    const finalPrice = price + freight;
+
+    finalEl.value = fmt4(finalPrice);
+  }
+
+  function focusAndSelect(el) {
+    if (!el) return;
+    el.focus();
+    try {
+      el.select();
+    } catch (err) {}
+  }
+
+  function getEditableInputsInRow(tr) {
+    if (!tr) return [];
+    return Array.from(
+      tr.querySelectorAll(".editable-product, .editable-um, .editable-price, .editable-freight, .editable-final")
+    );
+  }
+
+  function focusSameColumnNextRow(currentInput) {
+    const tr = currentInput.closest("tr");
+    if (!tr) return;
+
+    const nextTr = tr.nextElementSibling;
+    if (!nextTr) return;
+
+    const classes = ["editable-product", "editable-um", "editable-price", "editable-freight", "editable-final"];
+    const colClass = classes.find(cls => currentInput.classList.contains(cls));
+    if (!colClass) return;
+
+    const nextInput = nextTr.querySelector("." + colClass);
+    if (!nextInput) return;
+
+    focusAndSelect(nextInput);
+  }
+
+  function focusSameColumnPrevRow(currentInput) {
+    const tr = currentInput.closest("tr");
+    if (!tr) return;
+
+    const prevTr = tr.previousElementSibling;
+    if (!prevTr) return;
+
+    const classes = ["editable-product", "editable-um", "editable-price", "editable-freight", "editable-final"];
+    const colClass = classes.find(cls => currentInput.classList.contains(cls));
+    if (!colClass) return;
+
+    const prevInput = prevTr.querySelector("." + colClass);
+    if (!prevInput) return;
+
+    focusAndSelect(prevInput);
+  }
+
+  function focusNextEditableCell(currentInput) {
+    const tr = currentInput.closest("tr");
+    if (!tr) return;
+
+    const rowInputs = getEditableInputsInRow(tr);
+    const idx = rowInputs.indexOf(currentInput);
+
+    if (idx >= 0 && idx < rowInputs.length - 1) {
+      focusAndSelect(rowInputs[idx + 1]);
+      return;
+    }
+
+    const nextTr = tr.nextElementSibling;
+    if (!nextTr) return;
+
+    const nextRowInputs = getEditableInputsInRow(nextTr);
+    if (nextRowInputs.length > 0) {
+      focusAndSelect(nextRowInputs[0]);
+    }
+  }
+
+  function focusPrevEditableCell(currentInput) {
+    const tr = currentInput.closest("tr");
+    if (!tr) return;
+
+    const rowInputs = getEditableInputsInRow(tr);
+    const idx = rowInputs.indexOf(currentInput);
+
+    if (idx > 0) {
+      focusAndSelect(rowInputs[idx - 1]);
+      return;
+    }
+
+    const prevTr = tr.previousElementSibling;
+    if (!prevTr) return;
+
+    const prevRowInputs = getEditableInputsInRow(prevTr);
+    if (prevRowInputs.length > 0) {
+      focusAndSelect(prevRowInputs[prevRowInputs.length - 1]);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const selectAll = document.getElementById("select-all-rows");
+    if (selectAll) {
+      selectAll.addEventListener("change", function () {
+        document.querySelectorAll(".delete-row-check").forEach(function (cb) {
+          cb.checked = selectAll.checked;
+        });
+      });
+    }
+
+    const pricingRowsForm = document.getElementById("pricing-rows-form");
+    if (pricingRowsForm) {
+      pricingRowsForm.addEventListener("focusin", function(e) {
+        clearZeroOnFocus(e);
+        selectTextOnFocus(e);
+      });
+
+      pricingRowsForm.addEventListener("click", function(e) {
+        const el = e.target;
+        if (!isEditablePricingInput(el)) return;
+
+        try {
+          el.select();
+        } catch (err) {}
+      });
+
+      pricingRowsForm.addEventListener("focusout", function(e) {
+        const tr = e.target.closest("tr");
+        restoreZeroOnBlur(e);
+
+        if (!tr) return;
+
+        if (
+          e.target.classList.contains("editable-price") ||
+          e.target.classList.contains("editable-freight")
+        ) {
+          updatePricingRow(tr);
+        }
+      });
+
+      pricingRowsForm.addEventListener("input", function(e) {
+        const tr = e.target.closest("tr");
+        if (!tr) return;
+
+        if (
+          e.target.classList.contains("editable-price") ||
+          e.target.classList.contains("editable-freight")
+        ) {
+          updatePricingRow(tr);
+        }
+      });
+
+      pricingRowsForm.addEventListener("keydown", function(e) {
+        const el = e.target;
+        if (!isEditablePricingInput(el)) return;
+
+        const tr = el.closest("tr");
+
+        if (e.key === "Enter") {
+          e.preventDefault();
+
+          if (
+            tr &&
+            (
+              el.classList.contains("editable-price") ||
+              el.classList.contains("editable-freight")
+            )
+          ) {
+            updatePricingRow(tr);
+          }
+
+          focusSameColumnNextRow(el);
+          return;
+        }
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+
+          if (
+            tr &&
+            (
+              el.classList.contains("editable-price") ||
+              el.classList.contains("editable-freight")
+            )
+          ) {
+            updatePricingRow(tr);
+          }
+
+          focusSameColumnNextRow(el);
+          return;
+        }
+
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+
+          if (
+            tr &&
+            (
+              el.classList.contains("editable-price") ||
+              el.classList.contains("editable-freight")
+            )
+          ) {
+            updatePricingRow(tr);
+          }
+
+          focusSameColumnPrevRow(el);
+          return;
+        }
+
+        if (e.key === "ArrowRight") {
+          const start = el.selectionStart;
+          const end = el.selectionEnd;
+          const len = el.value.length;
+
+          if (start === len && end === len) {
+            e.preventDefault();
+            focusNextEditableCell(el);
+            return;
+          }
+        }
+
+        if (e.key === "ArrowLeft") {
+          const start = el.selectionStart;
+          const end = el.selectionEnd;
+
+          if (start === 0 && end === 0) {
+            e.preventDefault();
+            focusPrevEditableCell(el);
+            return;
+          }
+        }
+      });
+    }
+
+    const el = document.getElementById("modsModal");
+    if (el) {
+      const modal = new bootstrap.Modal(el, { backdrop: "static", keyboard: false });
+      modal.show();
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+
+.home-wrap{
+  max-width:1200px;
+  margin:auto;
+  padding:20px 0 40px 0;
+}
+
+.home-title{
+  font-size:32px;
+  font-weight:700;
+  margin-bottom:6px;
+}
+
+.home-subtitle{
+  color:#6b7280;
+  font-size:14px;
+  margin-bottom:30px;
+}
+
+.workflow-section,
+.tools-section,
+.advanced-section{
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  padding:28px;
+  box-shadow:0 4px 14px rgba(0,0,0,0.04);
+  margin-bottom:24px;
+}
+
+.section-label{
+  font-size:13px;
+  font-weight:700;
+  color:#6b7280;
+  letter-spacing:.05em;
+  margin-bottom:30px;
+}
+
+/* workflow layout */
+
+.workflow-grid{
+  display:grid;
+  grid-template-columns: 150px 120px 150px 120px 150px;
+  grid-template-rows: auto 70px auto;
+  justify-content:center;
+  align-items:center;
+  row-gap:16px;
+}
+
+.workflow-line{
+  width:120px;
+  height:3px;
+  background:#cbd5e1;
+  justify-self:center;
+}
+
+.arrow-down{
+  width:3px;
+  height:70px;
+  background:#cbd5e1;
+  justify-self:center;
+  position:relative;
+}
+
+.arrow-down:after{
+  content:"";
+  position:absolute;
+  bottom:-10px;
+  left:50%;
+  transform:translateX(-50%);
+  border-left:8px solid transparent;
+  border-right:8px solid transparent;
+  border-top:12px solid #cbd5e1;
+}
+
+/* cards */
+
+.workflow-card,
+.tool-card{
+  background:#fff;
+  border:1px solid #dbe3ea;
+  border-radius:14px;
+  width:150px;
+  min-height:110px;
+  padding:12px 10px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  text-align:center;
+  box-shadow:0 3px 10px rgba(0,0,0,0.04);
+  transition:.15s;
+}
+
+.workflow-card:hover,
+.tool-card:hover{
+  transform:translateY(-3px);
+  box-shadow:0 8px 18px rgba(0,0,0,.08);
+  border-color:#bfd3e6;
+}
+
+.workflow-card img,
+.tool-card img{
+  width:42px;
+  height:42px;
+}
+
+.card-title{
+  font-weight:700;
+  font-size:15px;
+}
+
+.card-subtext{
+  font-size:12px;
+  color:#6b7280;
+}
+
+.card-link{
+  text-decoration:none;
+  color:inherit;
+}
+
+/* grids */
+
+.tools-grid,
+.advanced-grid{
+  display:flex;
+  justify-content:center;
+  gap:40px;
+  flex-wrap:wrap;
+}
+
+</style>
+
+<div class="home-wrap">
+
+  <h1 class="home-title">Home</h1>
+  <div class="home-subtitle">
+    Manage pricing, build letters, and print customer-ready price sheets.
+  </div>
+
+  <!-- ================= WORKFLOW ================= -->
+  <div class="workflow-section">
+
+    <div class="section-label">PRICING WORKFLOW</div>
+
+    <div class="workflow-grid" style="grid-template-columns: 150px 120px 150px;">
+
+      <!-- TOP ROW -->
+      <a href="{{ url_for('printer_page') }}" class="card-link" style="grid-column:1; grid-row:1;">
+        <div class="workflow-card">
+          <img src="{{ url_for('static', filename='images/build_letter_icon.png') }}">
+          <div class="card-title">Build</div>
+          <div class="card-subtext">Create price letters</div>
+        </div>
+      </a>
+
+      <div class="workflow-line" style="grid-column:2; grid-row:1;"></div>
+
+      <a href="{{ url_for('customers_page') }}" class="card-link" style="grid-column:3; grid-row:1;">
+        <div class="workflow-card">
+          <img src="{{ url_for('static', filename='images/customers_icon.png') }}">
+          <div class="card-title">Customers</div>
+          <div class="card-subtext">Manage accounts</div>
+        </div>
+      </a>
+
+      <!-- ARROWS -->
+      <div class="arrow-down" style="grid-column:1; grid-row:2;"></div>
+      <div class="arrow-down" style="grid-column:3; grid-row:2;"></div>
+
+      <!-- BOTTOM ROW -->
+      <a href="{{ url_for('printer_print') }}" class="card-link" style="grid-column:1; grid-row:3;">
+        <div class="workflow-card">
+          <img src="{{ url_for('static', filename='images/print_letter_icon.png') }}">
+          <div class="card-title">Print Letter</div>
+          <div class="card-subtext">Preview & export</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('todo_page') }}" class="card-link" style="grid-column:3; grid-row:3;">
+        <div class="workflow-card">
+          <img src="{{ url_for('static', filename='images/todos.png') }}">
+          <div class="card-title">To-Do List</div>
+          <div class="card-subtext">Track monthly letters</div>
+        </div>
+      </a>
+
+    </div>
+
+  </div>
+
+  <!-- ================= ADVANCED / ANALYTICS BOX ================= -->
+  <div class="advanced-section">
+
+    <div class="section-label">PRICING TOOLS</div>
+
+    <div class="advanced-grid">
+
+      <a href="{{ url_for('pricing_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/upload_prices_icon.png') }}">
+          <div class="card-title">Prices</div>
+          <div class="card-subtext">View & manage pricing</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('reverse_margin_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/reverse_margin.png') }}">
+          <div class="card-title">Reverse Margin</div>
+          <div class="card-subtext">Back into cost & margin</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('margin_analytics_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/analytics.png') }}">
+          <div class="card-title">Analytics</div>
+          <div class="card-subtext">Track margin trends</div>
+        </div>
+      </a>
+
+    </div>
+
+  </div>
+
+  <!-- ================= SYSTEM TOOLS ================= -->
+  <div class="tools-section">
+
+    <div class="section-label">SYSTEM TOOLS</div>
+
+    <div class="tools-grid">
+
+      <a href="{{ url_for('users_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/users_icon.png') }}">
+          <div class="card-title">Users</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('sales_people_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/sales.png') }}">
+          <div class="card-title">Salespeople</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('products_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/products.png') }}">
+          <div class="card-title">Products</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('history_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/history_icon.png') }}">
+          <div class="card-title">History</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('admin_users_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/admin_icon.png') }}">
+          <div class="card-title">Admin</div>
+        </div>
+      </a>
+
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}

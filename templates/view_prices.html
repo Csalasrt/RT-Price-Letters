@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:-6px;">
+  <h2 class="section-title" style="margin:0;">View Prices</h2>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('history_page') }}">← Back to History</a>
+</div>
+
+<div class="text-muted-small" style="margin-bottom:12px;">
+  Pricing Month: <strong>{{ month_key }}</strong>
+</div>
+
+{% if errors %}
+  <ul class="errors">
+    {% for e in errors %}
+      <li>{{ e }}</li>
+    {% endfor %}
+  </ul>
+{% endif %}
+
+<form method="POST" action="{{ url_for('pricing_view_page', month_key=month_key) }}">
+  <div class="card section-card shadow-sm">
+    <div class="card-body">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="font-weight:700;">Monthly Pricing</div>
+        <div class="text-muted-small">Rows: {{ rows|length }}</div>
+      </div>
+
+      {% if rows and rows|length > 0 %}
+        <div class="table-responsive" style="margin-top:10px;">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="min-width:320px;">Product</th>
+                <th>U/M</th>
+                <th class="text-end">Price</th>
+                <th class="text-end">Freight/Tax</th>
+                <th class="text-end">Final Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr>
+                  <input type="hidden" name="row_id" value="{{ r.id }}">
+
+                  <td style="min-width:320px;">
+                    <input class="form-control form-control-sm"
+                            name="row_product"
+                            value="{{ r.product }}"
+                            style="min-width:300px;">
+                  </td>
+
+                  <td>
+                    <input class="form-control form-control-sm"
+                           name="row_um"
+                           value="{{ r.um }}">
+                  </td>
+
+                  <td>
+                    <input class="form-control form-control-sm text-end"
+                           name="row_price"
+                           value="{{ '%.4f'|format(r.price or 0) }}">
+                  </td>
+
+                  <td>
+                    <input class="form-control form-control-sm text-end"
+                           name="row_freight_tax"
+                           value="{{ '%.4f'|format(r.freight_tax or 0) }}">
+                  </td>
+
+                  <td>
+                    <input class="form-control form-control-sm text-end"
+                           name="row_final_price"
+                           value="{{ '%.4f'|format(r.final_price or 0) }}">
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+          <button class="btn btn-primary btn-sm" type="submit">Save Changes</button>
+        </div>
+      {% else %}
+        <div class="text-muted">No pricing rows found for this month.</div>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+{% endblock %}

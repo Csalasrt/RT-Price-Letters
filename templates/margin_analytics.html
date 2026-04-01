@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+.page-wrap{
+  padding:20px;
+}
+
+.card{
+  border:1px solid #d1d5db;
+  margin-bottom:18px;
+}
+
+.card-body{
+  padding:18px;
+}
+
+.title{
+  font-size:24px;
+  font-weight:700;
+  margin-bottom:12px;
+}
+
+.charts-row{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:18px;
+  margin-bottom:18px;
+}
+
+.chart-box{
+  position:relative;
+  height:300px;
+  width:100%;
+  min-height:300px;
+  max-height:300px;
+}
+
+.table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.table th, .table td{
+  border:1px solid #d1d5db;
+  padding:8px;
+  text-align:center;
+}
+
+.chart-title{
+  font-size:16px;
+  font-weight:700;
+  margin-bottom:10px;
+}
+
+@media (max-width: 1100px){
+  .charts-row{
+    grid-template-columns:1fr;
+  }
+}
+</style>
+
+<div class="page-wrap">
+
+  <div class="card">
+    <div class="card-body">
+      <div class="title">
+        Margin Analytics{% if product %} - {{ product }}{% endif %}{% if analytics_um %} ({{ analytics_um }}){% endif %}
+      </div>
+
+      <form method="GET">
+        <select name="product" onchange="this.form.submit()">
+          <option value="">Select Product</option>
+          {% for p in product_options %}
+            <option value="{{ p }}" {% if product == p %}selected{% endif %}>
+              {{ p }}
+            </option>
+          {% endfor %}
+        </select>
+      </form>
+    </div>
+  </div>
+
+  {% if chart_data %}
+
+  <div class="charts-row">
+
+    <!-- COST -->
+    <div class="card">
+      <div class="card-body">
+        <div class="chart-title">Cost Over Time{% if analytics_um %} ({{ analytics_um }}){% endif %}</div>
+        <div class="chart-box">
+            <canvas id="costChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- FINAL -->
+    <div class="card">
+      <div class="card-body">
+        <div class="chart-title">Final Price Over Time{% if analytics_um %} ({{ analytics_um }}){% endif %}</div>
+        <div class="chart-box">
+            <canvas id="finalChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMBINED -->
+    <div class="card">
+      <div class="card-body">
+        <div class="chart-title">Cost vs Final Price{% if analytics_um %} ({{ analytics_um }}){% endif %}</div>
+        <div class="chart-box">
+            <canvas id="combinedChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TABLE -->
+  <div class="card">
+    <div class="card-body">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Customer</th> <!-- ✅ ADDED -->
+            <th>Saved U/M</th>
+            <th>Chart U/M</th>
+            <th>Cost</th>
+            <th>Final Price</th>
+            <th>Margin %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td>{{ r.pricing_date }}</td>
+            <td>{{ r.customer or '-' }}</td> <!-- ✅ ADDED -->
+            <td>{{ r.saved_um or '-' }}</td>
+            <td>{{ r.default_um or '-' }}</td>
+            <td>{{ '%.4f'|format(r.normalized_cost or 0) }}</td>
+            <td>{{ '%.4f'|format(r.normalized_final_price or 0) }}</td>
+            <td>{{ '%.2f'|format(r.margin_pct or 0) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+const data = {{ chart_data|tojson }};
+
+const labels = data.map(d => d.date);
+const cost = data.map(d => d.cost);
+const finalPrice = data.map(d => d.final_price);
+
+// COST CHART
+new Chart(document.getElementById('costChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Cost',
+      data: cost,
+      tension: 0.3
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false
+    },
+    plugins: {
+      tooltip: {
+        enabled: true
+      }
+    }
+  }
+});
+
+// FINAL PRICE CHART
+new Chart(document.getElementById('finalChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Final Price',
+      data: finalPrice,
+      tension: 0.3
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false
+    },
+    plugins: {
+      tooltip: {
+        enabled: true
+      }
+    }
+  }
+});
+
+// COMBINED CHART
+new Chart(document.getElementById('combinedChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Cost',
+        data: cost,
+        tension: 0.3
+      },
+      {
+        label: 'Final Price',
+        data: finalPrice,
+        tension: 0.3
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false
+    },
+    plugins: {
+      tooltip: {
+        enabled: true
+      }
+    }
+  }
+});
+</script>
+
+{% endblock %}

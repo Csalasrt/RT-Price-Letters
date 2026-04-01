@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+{% if errors %}
+  <ul class="errors">
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+{% endif %}
+
+<div class="card section-card shadow-sm">
+  <div class="card-body">
+    <div style="font-weight:700; margin-bottom:10px;">Edit My Information</div>
+
+    <form method="POST">
+      <div class="row-form">
+        <label>Name</label>
+        <input name="full_name" value="{{ form.full_name }}" required>
+      </div>
+
+      <div class="row-form">
+        <label>Email</label>
+        <input name="email" value="{{ form.email }}" required>
+      </div>
+
+      <div class="row-form">
+        <label>Phone</label>
+        <input name="phone" value="{{ form.phone }}">
+      </div>
+
+      <div class="row-form">
+        <label>Password</label>
+        <input name="password" type="password" value="" placeholder="Leave blank to keep current password">
+      </div>
+
+      <div class="row-form" style="justify-content:flex-end;">
+        <button class="btn btn-primary btn-sm" type="submit">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ app_title or "RT PL" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/nstock.css') }}">
+
+  <style>
+    html,
+    body {
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+
+    body {
+      background: #ffffff;
+      color: #1f2937;
+      font-family: Arial, sans-serif;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e5e7eb;
+      background: white;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .topbar-title {
+      display: flex;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .topbar-title img {
+      height: 44px;
+      width: auto;
+      display: block;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      flex: 1 1 auto;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      color: #374151;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .nav-links a:hover {
+      color: #111827;
+      background: #f3f4f6;
+    }
+
+    .nav-links a.active {
+      color: #111827;
+      background: #e5e7eb;
+      border-color: #d1d5db;
+    }
+
+    .logout-btn {
+      text-decoration: none;
+      background: #dc2626;
+      color: white;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.1;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    .logout-btn:hover {
+      background: #b91c1c;
+      color: white;
+    }
+
+    .app-main {
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 8px 10px 10px 10px;
+      box-sizing: border-box;
+    }
+
+    .app-main .container,
+    .app-main .container-fluid {
+      max-width: none;
+      width: 100%;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    .card,
+    .section-card {
+      border-radius: 6px;
+    }
+
+    .card-body {
+      padding: 12px 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table,
+    table {
+      margin-bottom: 0;
+    }
+
+    .table th,
+    .table td,
+    table th,
+    table td {
+      vertical-align: middle;
+      padding: 10px 12px;
+    }
+
+    .table th.text-center,
+    .table td.text-center,
+    table th.text-center,
+    table td.text-center {
+      text-align: center !important;
+    }
+
+    .table th.text-start,
+    .table td.text-start,
+    table th.text-start,
+    table td.text-start {
+      text-align: left !important;
+    }
+
+    .table th.text-end,
+    .table td.text-end,
+    table th.text-end,
+    table td.text-end {
+      text-align: right !important;
+    }
+    .table thead th {
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    textarea {
+      vertical-align: middle;
+    }
+
+    @media (max-width: 900px) {
+      .top-bar {
+        align-items: flex-start;
+      }
+
+      .nav-links {
+        justify-content: flex-start;
+      }
+
+      .table th,
+      .table td,
+      table th,
+      table td {
+        padding: 8px 10px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+{% if session.get("user_id") %}
+
+<div class="top-bar">
+
+  <div class="topbar-title">
+    <img src="{{ url_for('static', filename='uploads/logos/company_logo.png') }}" alt="Company Logo">
+  </div>
+
+  {% if page != "Price Letter Printer" %}
+  <div class="nav-links">
+
+    <a href="{{ url_for('dashboard') }}" class="{% if page == 'dashboard' %}active{% endif %}">Home</a>
+
+    <a href="{{ url_for('printer_page') }}" class="{% if page == 'printer' %}active{% endif %}">Build Letter</a>
+
+    <a href="{{ url_for('printer_print') }}" class="{% if page == 'print' %}active{% endif %}">Print</a>
+
+    <a href="{{ url_for('history_page') }}" class="{% if page == 'history' %}active{% endif %}">History</a>
+
+    <a href="{{ url_for('users_page') }}" class="{% if page == 'users' %}active{% endif %}">Users</a>
+
+    <a href="{{ url_for('pricing_page') }}" class="{% if page == 'pricing' %}active{% endif %}">Prices</a>
+
+    <a href="{{ url_for('customers_page') }}" class="{% if page == 'customers' %}active{% endif %}">Customers</a>
+
+    <a href="{{ url_for('todo_page') }}" class="{% if page == 'todos' %}active{% endif %}">To-Do List</a>
+
+    <a href="{{ url_for('admin_users_page') }}" class="{% if page == 'admin' %}active{% endif %}">Admin</a>
+
+  </div>
+  {% endif %}
+
+  <a href="{{ url_for('logout') }}" class="logout-btn">
+    Log Out
+  </a>
+
+</div>
+
+{% endif %}
+
+<main class="app-main">
+  {% block content %}{% endblock %}
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

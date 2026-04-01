@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex; gap:8px; flex-wrap:wrap; margin:14px 0 12px 0;">
+  <button type="button" class="btn btn-primary btn-sm" id="tab-price-letters-btn">Price Letters</button>
+  <button type="button" class="btn btn-outline-secondary btn-sm" id="tab-products-btn">Products by Month</button>
+</div>
+
+<div id="tab-price-letters" class="card section-card shadow-sm">
+  <div class="card-body">
+    <div style="font-weight:700; margin-bottom:10px;">Price Letter History</div>
+
+    {% if letter_history and letter_history|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>File Name</th>
+              <th>Customer</th>
+              <th>Date</th>
+              <th>Created By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in letter_history %}
+                <tr>
+                    <td>
+                    <a href="{{ url_for('open_price_letter_history', entry_id=r.id) }}">
+                        {{ r.file_name }}
+                    </a>
+                    </td>
+                    <td>{{ r.customer_name }}</td>
+                    <td>
+                        {% if r.created_at %}
+                            {% set y = r.created_at[0:4] %}
+                            {% set m = r.created_at[5:7] %}
+                            {% set d = r.created_at[8:10]|int %}
+                            {% set month_map = {
+                            '01':'Jan', '02':'Feb', '03':'Mar', '04':'Apr',
+                            '05':'May', '06':'Jun', '07':'Jul', '08':'Aug',
+                            '09':'Sep', '10':'Oct', '11':'Nov', '12':'Dec'
+                            } %}
+                            {{ month_map.get(m, m) }} {{ d }}, {{ y }}
+                        {% endif %}
+                    </td>
+                    <td>{{ r.created_by }}</td>
+                </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No price letters saved yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div id="tab-products" class="card section-card shadow-sm" style="display:none; margin-top:12px;">
+  <div class="card-body">
+    <div style="font-weight:700; margin-bottom:10px;">Products by Month</div>
+
+    {% if product_months and product_months|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Month / Year</th>
+              <th class="text-end">Rows</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in product_months %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('pricing_view_page', month_key=m.month_key) }}"
+                     style="text-decoration:none; font-weight:600;">
+                    {{ m.label }}
+                  </a>
+                </td>
+                <td class="text-end">{{ m.count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No product history found yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  const priceBtn = document.getElementById("tab-price-letters-btn");
+  const productsBtn = document.getElementById("tab-products-btn");
+  const priceTab = document.getElementById("tab-price-letters");
+  const productsTab = document.getElementById("tab-products");
+
+  if (priceBtn && productsBtn && priceTab && productsTab) {
+    priceBtn.addEventListener("click", function() {
+      priceTab.style.display = "";
+      productsTab.style.display = "none";
+      priceBtn.className = "btn btn-primary btn-sm";
+      productsBtn.className = "btn btn-outline-secondary btn-sm";
+    });
+
+    productsBtn.addEventListener("click", function() {
+      priceTab.style.display = "none";
+      productsTab.style.display = "";
+      priceBtn.className = "btn btn-outline-secondary btn-sm";
+      productsBtn.className = "btn btn-primary btn-sm";
+    });
+  }
+</script>
+
+{% endblock %}

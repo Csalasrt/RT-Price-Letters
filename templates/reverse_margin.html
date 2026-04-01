@@ -1,0 +1,858 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .rm-wrap{
+    width:100%;
+    max-width:none;
+    margin:0;
+    padding:0 8px 24px;
+  }
+
+  .rm-card{
+    background:#fff;
+    border:1px solid #d1d5db;
+    border-radius:0;
+    box-shadow:none;
+    margin-bottom:18px;
+  }
+
+  .rm-card .card-body{
+    padding:18px;
+  }
+
+  .rm-title{
+    font-size:26px;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+
+  .rm-subtitle{
+    font-size:14px;
+    color:#6b7280;
+    margin-bottom:16px;
+  }
+
+  .rm-grid{
+    display:grid;
+    grid-template-columns: 240px 240px;
+    gap:12px;
+    align-items:end;
+  }
+
+  .rm-field label{
+    display:block;
+    font-size:12px;
+    font-weight:700;
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+
+  .rm-field input,
+  .rm-field select{
+    width:100%;
+    height:40px;
+    border:1px solid #cbd5e1;
+    border-radius:0;
+    padding:8px 10px;
+    font-size:14px;
+    background:#fff;
+  }
+
+  .rm-table-wrap{
+    overflow-x:auto;
+  }
+
+  .rm-table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:1340px;
+  }
+
+  .rm-table th{
+    background:#f3f4f6;
+    border:1px solid #d1d5db;
+    padding:10px 8px;
+    text-align:center;
+    font-size:12px;
+    font-weight:700;
+    vertical-align:middle;
+  }
+
+  .rm-table td{
+    border:1px solid #d1d5db;
+    padding:6px;
+    vertical-align:middle;
+    text-align:center;
+  }
+
+  .rm-table input,
+  .rm-table select{
+    width:100%;
+    min-width:110px;
+    height:36px;
+    border:1px solid #cbd5e1;
+    border-radius:0;
+    padding:6px 8px;
+    font-size:14px;
+    background:#fff;
+    text-align:center;
+  }
+
+  .rm-readonly{
+    background:#f9fafb;
+    font-weight:600;
+  }
+
+  .rm-actions-bottom{
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:16px;
+  }
+
+  .status-ok{
+    color:#166534;
+    font-weight:700;
+  }
+
+  .status-missing{
+    color:#b91c1c;
+    font-weight:700;
+  }
+
+  .rm-remove-col{
+    width:52px;
+    min-width:52px;
+  }
+
+  .rm-remove-btn{
+    width:30px;
+    height:30px;
+    border:1px solid #cbd5e1;
+    background:#fff;
+    color:#111827;
+    font-size:18px;
+    font-weight:700;
+    line-height:1;
+    padding:0;
+    cursor:pointer;
+  }
+
+  .rm-remove-btn:hover{
+    background:#f3f4f6;
+  }
+</style>
+
+<div class="rm-wrap">
+  <div class="rm-card">
+    <div class="card-body">
+      <div class="rm-title">Reverse Margin Calculator</div>
+      <div class="rm-subtitle">
+        Enter old quoted lines and the system will calculate margin using the historical cost already stored in the system.
+      </div>
+
+      {% if errors %}
+        <div class="alert alert-danger">
+          {% for e in errors %}
+            <div>{{ e }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="POST" id="reverse-margin-form">
+        <input type="hidden" name="action" id="rm-action" value="">
+
+        <div class="rm-grid">
+          <div class="rm-field">
+            <label>Pricing Date</label>
+            <div style="display:flex; gap:6px;">
+
+              <select name="pricing_year" id="pricing_year" style="flex:1;">
+                {% for y in range(2020, 2036) %}
+                <option value="{{ y }}" {% if form.pricing_year == y|string %}selected{% endif %}>
+                  {{ y }}
+                </option>
+                {% endfor %}
+              </select>
+
+              <select name="pricing_month" id="pricing_month" style="flex:1;">
+                {% set months = [
+                  ('1','JAN'), ('2','FEB'), ('3','MAR'), ('4','APR'),
+                  ('5','MAY'), ('6','JUN'), ('7','JUL'), ('8','AUG'),
+                  ('9','SEP'), ('10','OCT'), ('11','NOV'), ('12','DEC')
+                ] %}
+                {% for val, label in months %}
+                <option value="{{ val }}" {% if form.pricing_month == val %}selected{% endif %}>
+                  {{ label }}
+                </option>
+                {% endfor %}
+              </select>
+
+              <select name="pricing_day" id="pricing_day" style="flex:1;">
+                {% for d in range(1, 32) %}
+                <option value="{{ d }}" {% if form.pricing_day == d|string %}selected{% endif %}>
+                  {{ '%02d' % d }}
+                </option>
+                {% endfor %}
+              </select>
+
+            </div>
+          </div>
+
+          <div class="rm-field">
+            <label>Customer</label>
+            <select
+              name="customer_id"
+              id="customer_id"
+              onchange="handleReverseHeaderSubmit('load_customer_products');"
+            >
+              <option value="">Select customer</option>
+              {% for c in customers %}
+                <option value="{{ c.id }}" {% if form.customer_id == c.id|string %}selected{% endif %}>
+                  {{ c.name }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="rm-card mt-3">
+          <div class="card-body">
+            <div class="rm-table-wrap">
+              <table class="rm-table">
+                <thead>
+                  <tr>
+                    <th class="rm-remove-col"></th>
+                    <th>Product</th>
+                    <th>U/M</th>
+                    <th>Final Price</th>
+                    <th>Shipping</th>
+                    <th>Packaging</th>
+                    <th>Net Price</th>
+                    <th>Historical Cost</th>
+                    <th>Margin %</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in quote_rows %}
+                  <tr
+                    class="rm-row"
+                    data-source-cost="{{ row.historical_source_cost if row.historical_source_cost is not none else row.historical_cost if row.historical_cost is not none else 0 }}"
+                    data-source-um="{{ row.historical_source_um or row.um or '' }}"
+                    data-weight="{{ row.product_weight if row.product_weight is not none else '' }}"
+                    data-found="{{ 1 if row.historical_cost_found else 0 }}"
+                  >
+                    <td class="rm-remove-col">
+                      <button type="button" class="rm-remove-btn" onclick="removeReverseRow(this);">-</button>
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        name="row_product"
+                        list="company-products-list"
+                        value="{{ row.product }}"
+                        placeholder="Product"
+                      >
+                    </td>
+                    <td>
+                      <select name="row_um" class="rm-um">
+                        <option value=""></option>
+                        <option value="LB" {% if row.um == "LB" %}selected{% endif %}>LB</option>
+                        <option value="GAL" {% if row.um == "GAL" %}selected{% endif %}>GAL</option>
+                        <option value="EACH" {% if row.um == "EACH" %}selected{% endif %}>EACH</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        name="row_final"
+                        value="{{ row.final_price }}"
+                        class="rm-final"
+                      >
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        name="row_shipping"
+                        value="{{ row.shipping }}"
+                        class="rm-shipping"
+                      >
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        name="row_packaging"
+                        value="{{ row.packaging }}"
+                        class="rm-packaging"
+                      >
+                    </td>
+                    <td class="rm-readonly rm-net-price">
+                      {{ '%.4f'|format(row.reverse_net_price or 0) }}
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        name="row_historical_cost"
+                        value="{% if row.historical_cost_found %}{{ '%.4f'|format(row.historical_cost or 0) }}{% elif row.historical_cost is not none %}{{ '%.4f'|format(row.historical_cost or 0) }}{% endif %}"
+                        class="rm-historical-cost-input"
+                        placeholder="Cost"
+                      >
+                    </td>
+                    <td class="rm-readonly rm-margin-pct">
+                      {% if row.final_price == 0 or row.final_price == 0.0 %}
+                        -
+                      {% elif row.reverse_margin_pct is not none %}
+                        {{ '%.2f'|format(row.reverse_margin_pct) }}%
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+                    <td class="rm-readonly rm-status">
+                      {% if row.reverse_margin_status == "ok" %}
+                        <span class="status-ok">Matched</span>
+                      {% else %}
+                        <span class="status-missing">No Cost</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="rm-actions-bottom">
+              <button
+                type="submit"
+                class="btn btn-outline-primary btn-sm"
+                onclick="setReverseAction('calculate');"
+              >
+                Calculate
+              </button>
+
+              <button
+                type="submit"
+                class="btn btn-outline-primary btn-sm"
+                onclick="setReverseAction('add_row');"
+              >
+                Add Row
+              </button>
+
+              <button
+                type="submit"
+                class="btn btn-outline-primary btn-sm"
+                onclick="setReverseAction('clear'); clearReverseDraftState();"
+              >
+                Clear
+              </button>
+
+              <button
+                type="submit"
+                class="btn btn-success btn-sm"
+                onclick="setReverseAction('save_history');"
+              >
+                Save
+              </button>
+            </div>
+
+            <datalist id="company-products-list">
+              {% for p in company_products %}
+                <option value="{{ p.product }}"></option>
+              {% endfor %}
+            </datalist>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setReverseAction(actionValue) {
+    const actionInput = document.getElementById("rm-action");
+    if (actionInput) {
+      actionInput.value = actionValue || "";
+    }
+  }
+
+  function getReverseHeaderState() {
+    const yearEl = document.getElementById("pricing_year");
+    const monthEl = document.getElementById("pricing_month");
+    const dayEl = document.getElementById("pricing_day");
+    const customerEl = document.getElementById("customer_id");
+
+    return {
+      pricing_year: yearEl ? yearEl.value : "",
+      pricing_month: monthEl ? monthEl.value : "",
+      pricing_day: dayEl ? dayEl.value : "",
+      customer_id: customerEl ? customerEl.value : ""
+    };
+  }
+
+  function getReverseRows() {
+    return Array.from(document.querySelectorAll(".rm-row"))
+      .map((tr) => {
+        const productEl = tr.querySelector('input[name="row_product"]');
+        const umEl = tr.querySelector('select[name="row_um"]');
+        const finalEl = tr.querySelector('input[name="row_final"]');
+        const shippingEl = tr.querySelector('input[name="row_shipping"]');
+        const packagingEl = tr.querySelector('input[name="row_packaging"]');
+        const historicalCostEl = tr.querySelector('input[name="row_historical_cost"]');
+
+        const row = {
+          product: productEl ? productEl.value.trim() : "",
+          um: umEl ? umEl.value : "",
+          final_price: finalEl ? finalEl.value : "",
+          shipping: shippingEl ? shippingEl.value : "",
+          packaging: packagingEl ? packagingEl.value : "",
+          historical_cost: historicalCostEl ? historicalCostEl.value : ""
+        };
+
+        const hasAnyRealValue =
+          row.product !== "" ||
+          row.um !== "" ||
+          row.final_price !== "" ||
+          row.shipping !== "" ||
+          row.packaging !== "" ||
+          row.historical_cost !== "";
+
+        return hasAnyRealValue ? row : null;
+      })
+      .filter(Boolean);
+  }
+
+  function saveReverseDraftState() {
+    const state = {
+      header: getReverseHeaderState(),
+      rows: getReverseRows()
+    };
+    sessionStorage.setItem("reverse_margin_draft_state", JSON.stringify(state));
+  }
+
+  function clearReverseDraftState() {
+    sessionStorage.removeItem("reverse_margin_draft_state");
+  }
+
+  function syncReverseRowsToForm() {
+    const form = document.getElementById("reverse-margin-form");
+    if (!form) return;
+
+    /*
+      Do not append hidden row_* inputs.
+      The visible row inputs already submit naturally.
+      Only clear any old preserved inputs if they exist.
+    */
+    form.querySelectorAll(".rm-preserved-row").forEach((el) => el.remove());
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function buildReverseRowHtml(row) {
+    const product = escapeHtml(row.product || "");
+    const um = String(row.um || "").toUpperCase();
+    const finalPrice = escapeHtml(row.final_price || "");
+    const shipping = escapeHtml(row.shipping || "");
+    const packaging = escapeHtml(row.packaging || "");
+    const historicalCost = escapeHtml(row.historical_cost || "");
+
+    return `
+      <tr
+        class="rm-row"
+        data-source-cost="0"
+        data-source-um="${escapeHtml(um)}"
+        data-weight=""
+        data-found="0"
+      >
+        <td class="rm-remove-col">
+          <button type="button" class="rm-remove-btn" onclick="removeReverseRow(this);">-</button>
+        </td>
+        <td>
+          <input
+            type="text"
+            name="row_product"
+            list="company-products-list"
+            value="${product}"
+            placeholder="Product"
+          >
+        </td>
+        <td>
+          <select name="row_um" class="rm-um">
+            <option value=""></option>
+            <option value="LB" ${um === "LB" ? "selected" : ""}>LB</option>
+            <option value="GAL" ${um === "GAL" ? "selected" : ""}>GAL</option>
+            <option value="EACH" ${um === "EACH" ? "selected" : ""}>EACH</option>
+          </select>
+        </td>
+        <td>
+          <input
+            type="number"
+            step="0.0001"
+            name="row_final"
+            value="${finalPrice}"
+            class="rm-final"
+          >
+        </td>
+        <td>
+          <input
+            type="number"
+            step="0.0001"
+            name="row_shipping"
+            value="${shipping}"
+            class="rm-shipping"
+          >
+        </td>
+        <td>
+          <input
+            type="number"
+            step="0.0001"
+            name="row_packaging"
+            value="${packaging}"
+            class="rm-packaging"
+          >
+        </td>
+        <td class="rm-readonly rm-net-price">0.0000</td>
+        <td>
+          <input
+            type="number"
+            step="0.0001"
+            name="row_historical_cost"
+            value="${historicalCost}"
+            class="rm-historical-cost-input"
+            placeholder="Cost"
+          >
+        </td>
+        <td class="rm-readonly rm-margin-pct">-</td>
+        <td class="rm-readonly rm-status">
+          <span class="status-missing">No Cost</span>
+        </td>
+      </tr>
+    `;
+  }
+
+  function restoreReverseDraftState() {
+    const raw = sessionStorage.getItem("reverse_margin_draft_state");
+    if (!raw) return;
+
+    let state = null;
+    try {
+      state = JSON.parse(raw);
+    } catch (err) {
+      sessionStorage.removeItem("reverse_margin_draft_state");
+      return;
+    }
+
+    const yearEl = document.getElementById("pricing_year");
+    const monthEl = document.getElementById("pricing_month");
+    const dayEl = document.getElementById("pricing_day");
+    const customerEl = document.getElementById("customer_id");
+
+    if (state.header) {
+      if (yearEl && state.header.pricing_year) yearEl.value = state.header.pricing_year;
+      if (monthEl && state.header.pricing_month) monthEl.value = state.header.pricing_month;
+      if (dayEl && state.header.pricing_day) dayEl.value = state.header.pricing_day;
+      if (customerEl && state.header.customer_id) customerEl.value = state.header.customer_id;
+    }
+
+    const tbody = document.querySelector(".rm-table tbody");
+    if (!tbody) return;
+
+    const currentRows = tbody.querySelectorAll(".rm-row");
+
+    if (currentRows.length === 0 && state.rows && state.rows.length) {
+      tbody.innerHTML = state.rows.map(buildReverseRowHtml).join("");
+    }
+
+    wireReverseMarginRows();
+    enableAutoClearOnFocus();
+    enableMoneyFormatting();
+  }
+
+  function clearReversePreservedRows() {
+    const form = document.getElementById("reverse-margin-form");
+    if (!form) return;
+    form.querySelectorAll(".rm-preserved-row").forEach((el) => el.remove());
+  }
+
+  function handleReverseHeaderSubmit(actionValue) {
+    const form = document.getElementById("reverse-margin-form");
+    const actionInput = document.getElementById("rm-action");
+    if (!form || !actionInput) return;
+
+    actionInput.value = actionValue || "";
+
+    if (actionValue === "load_customer_products") {
+      clearReverseDraftState();
+      clearReversePreservedRows();
+      form.submit();
+      return;
+    }
+
+    form.submit();
+  }
+
+  function toNum(value) {
+    const n = parseFloat(value);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function convertCost(cost, fromUM, toUM, weight) {
+    cost = toNum(cost);
+    fromUM = String(fromUM || "").trim().toUpperCase();
+    toUM = String(toUM || "").trim().toUpperCase();
+    weight = toNum(weight);
+
+    if (cost <= 0) return null;
+
+    if (!fromUM || !toUM || fromUM === toUM) {
+      return cost;
+    }
+
+    if (fromUM === "LB" && toUM === "GAL") {
+      if (weight <= 0) return null;
+      return cost * weight;
+    }
+
+    if (fromUM === "GAL" && toUM === "LB") {
+      if (weight <= 0) return null;
+      return cost / weight;
+    }
+
+    return null;
+  }
+
+  function updateReverseMarginRow(tr) {
+    const found = String(tr.dataset.found || "0") === "1";
+    const sourceCost = toNum(tr.dataset.sourceCost);
+    const sourceUM = String(tr.dataset.sourceUm || "").trim().toUpperCase();
+    const weight = toNum(tr.dataset.weight);
+
+    const umEl = tr.querySelector(".rm-um");
+    const finalEl = tr.querySelector(".rm-final");
+    const shippingEl = tr.querySelector(".rm-shipping");
+    const packagingEl = tr.querySelector(".rm-packaging");
+    const costInput = tr.querySelector(".rm-historical-cost-input");
+
+    const um = umEl ? umEl.value : "";
+    const finalPrice = toNum(finalEl ? finalEl.value : 0);
+    const shipping = toNum(shippingEl ? shippingEl.value : 0);
+    const packaging = toNum(packagingEl ? packagingEl.value : 0);
+
+    const netPrice = finalPrice - shipping - packaging;
+
+    const netCell = tr.querySelector(".rm-net-price");
+    const marginCell = tr.querySelector(".rm-margin-pct");
+    const statusCell = tr.querySelector(".rm-status");
+
+    if (netCell) {
+      netCell.textContent = netPrice.toFixed(4);
+    }
+
+    let activeCost = null;
+
+    if (found && sourceCost > 0) {
+      const convertedCost = convertCost(sourceCost, sourceUM, um, weight);
+      if (convertedCost !== null && convertedCost > 0) {
+        activeCost = convertedCost;
+        if (costInput && document.activeElement !== costInput) {
+          costInput.value = convertedCost.toFixed(4);
+        }
+      }
+    }
+
+    if ((activeCost === null || activeCost <= 0) && costInput && costInput.value !== "") {
+      activeCost = toNum(costInput.value);
+    }
+
+    if (activeCost === null || activeCost <= 0) {
+      if (marginCell) marginCell.textContent = "-";
+      if (statusCell) statusCell.innerHTML = '<span class="status-missing">No Cost</span>';
+      return;
+    }
+
+    if (statusCell) {
+      statusCell.innerHTML = '<span class="status-ok">Matched</span>';
+    }
+
+    if (finalPrice === 0) {
+      if (marginCell) marginCell.textContent = "-";
+      return;
+    }
+
+    const marginRatio = (netPrice - activeCost) / activeCost;
+    const marginPct = marginRatio * 100.0;
+
+    if (marginCell) {
+      marginCell.textContent = marginPct.toFixed(2) + "%";
+    }
+  }
+
+  function wireReverseMarginRows() {
+    const rows = document.querySelectorAll(".rm-row");
+
+    rows.forEach((tr) => {
+      if (tr.dataset.wired === "1") return;
+      tr.dataset.wired = "1";
+
+      const um = tr.querySelector(".rm-um");
+      const finalInput = tr.querySelector(".rm-final");
+      const shippingInput = tr.querySelector(".rm-shipping");
+      const packagingInput = tr.querySelector(".rm-packaging");
+      const costInput = tr.querySelector(".rm-historical-cost-input");
+      const productInput = tr.querySelector('input[name="row_product"]');
+
+      [productInput, um, finalInput, shippingInput, packagingInput, costInput].forEach((el) => {
+        if (!el) return;
+        el.addEventListener("change", function() {
+          updateReverseMarginRow(tr);
+          saveReverseDraftState();
+        });
+        el.addEventListener("input", function() {
+          updateReverseMarginRow(tr);
+          saveReverseDraftState();
+        });
+      });
+
+      updateReverseMarginRow(tr);
+    });
+  }
+
+  function removeReverseRow(btn) {
+    const tr = btn.closest(".rm-row");
+    if (!tr) return;
+    tr.remove();
+    saveReverseDraftState();
+  }
+
+  function enableAutoClearOnFocus() {
+    const fields = document.querySelectorAll(
+      ".rm-final, .rm-shipping, .rm-packaging, .rm-historical-cost-input"
+    );
+
+    fields.forEach((el) => {
+      if (el.dataset.focusWired === "1") return;
+      el.dataset.focusWired = "1";
+
+      el.addEventListener("focus", function () {
+        const val = el.value;
+
+        if (
+          val === "0" ||
+          val === "0.0" ||
+          val === "0.00" ||
+          val === "0.0000" ||
+          val === ""
+        ) {
+          el.value = "";
+        }
+      });
+    });
+  }
+
+  function enableMoneyFormatting() {
+    const money2Fields = document.querySelectorAll(
+      ".rm-final, .rm-shipping, .rm-packaging"
+    );
+
+    const money4Fields = document.querySelectorAll(
+      ".rm-historical-cost-input"
+    );
+
+    money2Fields.forEach((el) => {
+      if (el.dataset.moneyWired === "1") return;
+      el.dataset.moneyWired = "1";
+
+      let val = parseFloat(el.value);
+
+      if (!el.value || el.value.trim() === "" || isNaN(val)) {
+        el.value = "0.00";
+      } else {
+        el.value = val.toFixed(2);
+      }
+
+      el.addEventListener("blur", function () {
+        let v = parseFloat(el.value);
+        if (isNaN(v)) {
+          el.value = "0.00";
+        } else {
+          el.value = v.toFixed(2);
+        }
+
+        const tr = el.closest(".rm-row");
+        if (tr) updateReverseMarginRow(tr);
+        saveReverseDraftState();
+      });
+    });
+
+    money4Fields.forEach((el) => {
+      if (el.dataset.moneyWired === "1") return;
+      el.dataset.moneyWired = "1";
+
+      let val = parseFloat(el.value);
+
+      if (!el.value || el.value.trim() === "" || isNaN(val)) {
+        el.value = "0.0000";
+      } else {
+        el.value = val.toFixed(4);
+      }
+
+      el.addEventListener("blur", function () {
+        let v = parseFloat(el.value);
+        if (isNaN(v)) {
+          el.value = "0.0000";
+        } else {
+          el.value = v.toFixed(4);
+        }
+
+        const tr = el.closest(".rm-row");
+        if (tr) updateReverseMarginRow(tr);
+        saveReverseDraftState();
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    restoreReverseDraftState();
+    wireReverseMarginRows();
+    enableAutoClearOnFocus();
+    enableMoneyFormatting();
+
+    const form = document.getElementById("reverse-margin-form");
+    if (form) {
+      form.addEventListener("submit", function() {
+        const actionInput = document.getElementById("rm-action");
+        const actionVal = actionInput ? actionInput.value : "";
+
+        if (actionVal === "clear") {
+          clearReverseDraftState();
+          clearReversePreservedRows();
+          return;
+        }
+
+        if (actionVal === "load_customer_products") {
+          clearReverseDraftState();
+          clearReversePreservedRows();
+          return;
+        }
+
+        clearReversePreservedRows();
+        saveReverseDraftState();
+      });
+    }
+  });
+</script>
+
+{% endblock %}

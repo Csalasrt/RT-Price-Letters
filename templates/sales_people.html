@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+  {% set last = messages[-1] %}
+  <div id="flash-alert" class="alert alert-success" style="margin-bottom:12px;">
+    {{ last[1] }}
+  </div>
+{% endif %}
+
+{% if errors %}
+  <ul class="errors">
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+{% endif %}
+
+<div class="card section-card shadow-sm">
+  <div class="card-body">
+    <div style="font-weight:700; margin-bottom:10px;">Add Salesperson</div>
+
+    <form method="POST">
+      <input type="hidden" name="action" value="add">
+
+      <div class="row-form">
+        <label>Name *</label>
+        <input name="name" required>
+      </div>
+
+      <div class="row-form">
+        <label>Phone *</label>
+        <input
+          name="phone"
+          id="phone-input"
+          type="tel"
+          inputmode="numeric"
+          maxlength="14"
+          placeholder="(123)-456-7890"
+          required
+        >
+      </div>
+
+      <div class="row-form">
+        <label>Email *</label>
+        <input name="email" type="email" required>
+      </div>
+
+      <div class="row-form" style="justify-content:flex-end;">
+        <button class="btn btn-primary btn-sm" type="submit">Add Salesperson</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card section-card shadow-sm" style="margin-top:12px;">
+  <div class="card-body">
+    <div style="font-weight:700; margin-bottom:10px;">Salespeople</div>
+
+    {% if sales_people and sales_people|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in sales_people %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('view_sales_account_page', sales_person_id=s.id) }}">
+                    {{ s.name }}
+                  </a>
+                </td>
+                <td>{{ s.phone }}</td>
+                <td>{{ s.email }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted">No salespeople added yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  const flash = document.getElementById("flash-alert");
+  if (flash) {
+    setTimeout(() => {
+      flash.style.transition = "opacity 0.5s ease";
+      flash.style.opacity = "0";
+      setTimeout(() => flash.remove(), 500);
+    }, 5000);
+  }
+</script>
+
+<script>
+  const phoneInput = document.getElementById("phone-input");
+
+  function formatPhoneNumber(value) {
+    const digits = String(value || "").replace(/\D/g, "").slice(0, 10);
+
+    if (digits.length === 0) return "";
+    if (digits.length < 4) return "(" + digits;
+    if (digits.length < 7) return "(" + digits.slice(0, 3) + ")-" + digits.slice(3);
+    return "(" + digits.slice(0, 3) + ")-" + digits.slice(3, 6) + "-" + digits.slice(6, 10);
+  }
+
+  if (phoneInput) {
+    phoneInput.addEventListener("input", function(e) {
+      e.target.value = formatPhoneNumber(e.target.value);
+    });
+
+    phoneInput.addEventListener("paste", function(e) {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData("text");
+      phoneInput.value = formatPhoneNumber(pasted);
+    });
+
+    phoneInput.addEventListener("blur", function(e) {
+      e.target.value = formatPhoneNumber(e.target.value);
+    });
+  }
+</script>
+
+{% endblock %}

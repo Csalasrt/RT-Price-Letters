@@ -1,0 +1,23 @@
+{
+  "records": [
+    {
+      "id": "455f382d572e43f997a4f43402feec3a",
+      "product": "Methanol",
+      "pricing_date": "2026-03-31",
+      "entry_seq": 1,
+      "source": "price_letter_final",
+      "customer": "J2 Acid",
+      "um": "GAL",
+      "package_type": "Drum",
+      "cost": 1.2314,
+      "margin_pct": 15.0,
+      "price": 1.4161,
+      "shipping": 0.0,
+      "packaging": 0.0,
+      "final_price": 1.4161,
+      "created_at": "2026-03-31T08:11:02.349955+00:00",
+      "created_by": "csalas@robertsonsteam.com",
+      "created_by_name": "Cesar Salas"
+    }
+  ]
+}

@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+  <div>
+    <div style="font-weight:700; font-size:20px;">Products</div>
+    <div class="text-muted-small" style="margin-top:4px;">
+      Store product names and LB/GAL values for use across the system.
+    </div>
+  </div>
+
+  <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+    Back to Dashboard
+  </a>
+</div>
+
+{% if errors %}
+  <ul class="errors">
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+{% endif %}
+
+<div class="card section-card shadow-sm">
+  <div class="card-body">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+      <div style="font-weight:700;">Add Products</div>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="show-single-btn">
+          Add One Product
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="show-mass-btn">
+          Mass Upload
+        </button>
+      </div>
+    </div>
+
+    <!-- SINGLE ADD -->
+    <div id="single-add-section">
+      <form method="POST" action="{{ url_for('products_page') }}">
+        <input type="hidden" name="action" value="add_single_product">
+
+        <div class="row-form">
+          <label>Product Name *</label>
+          <input
+            name="product_name"
+            value="{{ single_product_name or '' }}"
+            placeholder="e.g. Methanol"
+            required
+          >
+        </div>
+
+        <div class="row-form">
+          <label>LB/GAL *</label>
+          <input
+            name="lb_per_gal"
+            value="{{ single_lb_per_gal or '' }}"
+            placeholder="e.g. 6.6300"
+            inputmode="decimal"
+            required
+          >
+        </div>
+
+        <div class="row-form" style="justify-content:flex-end;">
+          <button class="btn btn-primary btn-sm" type="submit">
+            Save Product
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- MASS ADD -->
+    <div id="mass-add-section" style="display:none;">
+      <form method="POST" action="{{ url_for('products_page') }}">
+        <input type="hidden" name="action" value="mass_add_products">
+
+        <div class="row-form" style="align-items:flex-start;">
+          <label style="padding-top:6px;">Paste List *</label>
+          <div style="flex:1;">
+            <textarea
+              name="mass_product_data"
+              rows="10"
+              style="width:100%;"
+              placeholder="Methanol,6.63&#10;MEG,9.30&#10;Windshield Washer Fluid,7.60"
+              required
+            >{{ mass_product_data or '' }}</textarea>
+
+            <div class="text-muted-small" style="margin-top:6px;">
+              Format: <code>Product Name,LB/GAL</code><br>
+              One product per line. Excel paste with tabs can be supported too.
+            </div>
+          </div>
+        </div>
+
+        <div class="row-form" style="justify-content:flex-end;">
+          <button class="btn btn-primary btn-sm" type="submit">
+            Save Product List
+          </button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<div class="card section-card shadow-sm" style="margin-top:12px;">
+  <div class="card-body">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+      <div style="font-weight:700;">Stored Products</div>
+      <div class="text-muted-small">
+        {{ products|length if products else 0 }} product(s)
+      </div>
+    </div>
+
+    {% if products and products|length > 0 %}
+      <form method="POST" action="{{ url_for('products_page') }}">
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="width:52px; min-width:52px; text-align:center;">
+                  <input type="checkbox" id="select-all-products">
+                </th>
+                <th style="min-width:260px;">Product</th>
+                <th style="min-width:120px;" class="text-end">LB/GAL</th>
+                <th style="min-width:95px;">Added</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in products %}
+                <tr>
+                  <td style="text-align:center;">
+                    <input type="checkbox" name="delete_product_id" value="{{ p.id }}" class="delete-product-check">
+                  </td>
+
+                  <td>
+                    <input type="hidden" name="product_id" value="{{ p.id }}">
+                    <input
+                      class="form-control form-control-sm editable-product-name"
+                      name="row_product_name"
+                      value="{{ p.product }}"
+                    >
+                  </td>
+
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end editable-lbpg"
+                      name="row_lb_per_gal"
+                      value="{{ '%.4f'|format((p.lb_per_gal or 0)|float) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td class="text-muted-small">
+                    {{ (p.created_at[5:7] ~ "/" ~ p.created_at[8:10] ~ "/" ~ p.created_at[2:4]) if p.created_at else "—" }}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            type="submit"
+            name="action"
+            value="delete_selected_products"
+            onclick="return confirm('Delete selected products?');"
+          >
+            Delete Selected
+          </button>
+
+          <button
+            class="btn btn-primary btn-sm"
+            type="submit"
+            name="action"
+            value="save_products_table"
+          >
+            Save Changes
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <div class="text-muted">No products stored yet.</div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+  const singleBtn = document.getElementById("show-single-btn");
+  const massBtn = document.getElementById("show-mass-btn");
+  const singleSection = document.getElementById("single-add-section");
+  const massSection = document.getElementById("mass-add-section");
+
+  function showSingleSection() {
+    if (singleSection) singleSection.style.display = "";
+    if (massSection) massSection.style.display = "none";
+    if (singleBtn) singleBtn.classList.add("btn-primary");
+    if (singleBtn) singleBtn.classList.remove("btn-outline-secondary");
+    if (massBtn) massBtn.classList.add("btn-outline-secondary");
+    if (massBtn) massBtn.classList.remove("btn-primary");
+  }
+
+  function showMassSection() {
+    if (singleSection) singleSection.style.display = "none";
+    if (massSection) massSection.style.display = "";
+    if (massBtn) massBtn.classList.add("btn-primary");
+    if (massBtn) massBtn.classList.remove("btn-outline-secondary");
+    if (singleBtn) singleBtn.classList.add("btn-outline-secondary");
+    if (singleBtn) singleBtn.classList.remove("btn-primary");
+  }
+
+  if (singleBtn) {
+    singleBtn.addEventListener("click", showSingleSection);
+  }
+
+  if (massBtn) {
+    massBtn.addEventListener("click", showMassSection);
+  }
+
+  showSingleSection();
+
+  const selectAllProducts = document.getElementById("select-all-products");
+  if (selectAllProducts) {
+    selectAllProducts.addEventListener("change", function() {
+      document.querySelectorAll(".delete-product-check").forEach(function(cb) {
+        cb.checked = selectAllProducts.checked;
+      });
+    });
+  }
+</script>
+
+{% endblock %}

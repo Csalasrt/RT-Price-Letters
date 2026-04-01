@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .analytics-wrap{
+    width:100%;
+    max-width:none;
+    margin:0;
+    padding:0 8px 24px;
+  }
+
+  .analytics-card{
+    background:#fff;
+    border:1px solid #d1d5db;
+    border-radius:0;
+    box-shadow:none;
+    margin-bottom:18px;
+  }
+
+  .analytics-card .card-body{
+    padding:18px;
+  }
+
+  .analytics-title{
+    font-size:26px;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+
+  .analytics-subtitle{
+    font-size:14px;
+    color:#6b7280;
+    margin-bottom:16px;
+  }
+
+  .analytics-grid{
+    display:grid;
+    grid-template-columns: repeat(6, minmax(180px, 1fr));
+    gap:12px;
+    align-items:end;
+  }
+
+  .analytics-field label{
+    display:block;
+    font-size:12px;
+    font-weight:700;
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+
+  .analytics-field input,
+  .analytics-field select{
+    width:100%;
+    height:40px;
+    border:1px solid #cbd5e1;
+    border-radius:0;
+    padding:8px 10px;
+    font-size:14px;
+    background:#fff;
+  }
+
+  .analytics-summary{
+    display:grid;
+    grid-template-columns: repeat(6, minmax(180px, 1fr));
+    gap:12px;
+  }
+
+  .analytics-stat{
+    border:1px solid #d1d5db;
+    background:#f9fafb;
+    padding:14px;
+  }
+
+  .analytics-stat-label{
+    font-size:12px;
+    font-weight:700;
+    color:#6b7280;
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+
+  .analytics-stat-value{
+    font-size:24px;
+    font-weight:700;
+  }
+
+  .analytics-table-wrap{
+    overflow-x:auto;
+  }
+
+  .analytics-table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:1100px;
+  }
+
+  .analytics-table th{
+    background:#f3f4f6;
+    border:1px solid #d1d5db;
+    padding:10px 8px;
+    text-align:center;
+    font-size:12px;
+    font-weight:700;
+  }
+
+  .analytics-table td{
+    border:1px solid #d1d5db;
+    padding:8px;
+    text-align:center;
+    font-size:14px;
+  }
+
+  .chart-box{
+    border:1px solid #d1d5db;
+    background:#fff;
+    padding:12px;
+  }
+
+  @media (max-width: 1200px){
+    .analytics-grid,
+    .analytics-summary{
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+  }
+</style>
+
+<div class="analytics-wrap">
+  <div class="analytics-card">
+    <div class="card-body">
+      <div class="analytics-title">Analytics</div>
+      <div class="analytics-subtitle">Review saved margin history by product, customer, and pricing date.</div>
+
+      <form method="GET">
+        <div class="analytics-grid">
+          <div class="analytics-field">
+            <label>Product</label>
+            <select name="product">
+              <option value="">All Products</option>
+              {% for item in filter_options.products %}
+                <option value="{{ item }}" {% if filters.product == item %}selected{% endif %}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="analytics-field">
+            <label>Customer</label>
+            <select name="customer">
+              <option value="">All Customers</option>
+              {% for item in filter_options.customers %}
+                <option value="{{ item }}" {% if filters.customer == item %}selected{% endif %}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="analytics-field">
+            <label>Source</label>
+            <select name="source">
+              <option value="">All Sources</option>
+              {% for item in filter_options.sources %}
+                <option value="{{ item }}" {% if filters.source == item %}selected{% endif %}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="analytics-field">
+            <label>U/M</label>
+            <select name="um">
+              <option value="">All</option>
+              <option value="LB" {% if filters.um == "LB" %}selected{% endif %}>LB</option>
+              <option value="GAL" {% if filters.um == "GAL" %}selected{% endif %}>GAL</option>
+              <option value="EACH" {% if filters.um == "EACH" %}selected{% endif %}>EACH</option>
+            </select>
+          </div>
+
+          <div class="analytics-field">
+            <label>Start Date</label>
+            <input type="date" name="start_date" value="{{ filters.start_date }}">
+          </div>
+
+          <div class="analytics-field">
+            <label>End Date</label>
+            <input type="date" name="end_date" value="{{ filters.end_date }}">
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px;">
+          <a href="{{ url_for('analytics_page') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+          <button type="submit" class="btn btn-primary btn-sm">Apply Filters</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="analytics-card">
+    <div class="card-body">
+      <div class="analytics-summary">
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Records</div>
+          <div class="analytics-stat-value">{{ summary.count }}</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Avg Margin %</div>
+          <div class="analytics-stat-value">{{ '%.2f'|format(summary.avg_margin_pct or 0) }}%</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Avg Cost</div>
+          <div class="analytics-stat-value">{{ '%.4f'|format(summary.avg_cost or 0) }}</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Avg Final Price</div>
+          <div class="analytics-stat-value">{{ '%.4f'|format(summary.avg_final_price or 0) }}</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Best Margin %</div>
+          <div class="analytics-stat-value">
+            {% if summary.best_margin_pct is not none %}{{ '%.2f'|format(summary.best_margin_pct) }}%{% else %}-{% endif %}
+          </div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Latest Date</div>
+          <div class="analytics-stat-value">{{ summary.latest_pricing_date or "-" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="analytics-card">
+    <div class="card-body">
+      <div style="font-size:18px; font-weight:700; margin-bottom:12px;">Product Rollup</div>
+      <div class="analytics-table-wrap">
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Entries</th>
+              <th>Avg Margin %</th>
+              <th>Avg Cost</th>
+              <th>Avg Final Price</th>
+              <th>Latest Pricing Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in product_rollup %}
+            <tr>
+              <td>{{ row.product }}</td>
+              <td>{{ row.count }}</td>
+              <td>{{ '%.2f'|format(row.avg_margin_pct or 0) }}%</td>
+              <td>{{ '%.4f'|format(row.avg_cost or 0) }}</td>
+              <td>{{ '%.4f'|format(row.avg_final_price or 0) }}</td>
+              <td>{{ row.latest_pricing_date or '-' }}</td>
+            </tr>
+            {% endfor %}
+            {% if not product_rollup %}
+            <tr>
+              <td colspan="6">No analytics data found.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="analytics-card">
+    <div class="card-body">
+      <div style="font-size:18px; font-weight:700; margin-bottom:12px;">Saved Margin History</div>
+      <div class="analytics-table-wrap">
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Customer Name</th>
+              <th>U/M</th>
+              <th>Product</th>
+              <th>Source</th>
+              <th>Cost</th>
+              <th>Final Price</th>
+              <th>Margin %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in records|reverse %}
+            <tr>
+              <td>{{ row.pricing_date or '-' }}</td>
+              <td>{{ row.customer or '-' }}</td>
+              <td>{{ row.um or '-' }}</td>
+              <td>{{ row.product or '-' }}</td>
+              <td>{{ row.source or '-' }}</td>
+              <td>{{ '%.4f'|format(row.cost or 0) }}</td>
+              <td>{{ '%.4f'|format(row.final_price or 0) }}</td>
+              <td>{{ '%.2f'|format(row.margin_pct or 0) }}%</td>
+            </tr>
+            {% endfor %}
+            {% if not records %}
+            <tr>
+              <td colspan="8">No saved margin history yet.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

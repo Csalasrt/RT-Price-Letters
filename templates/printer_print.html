@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set rows = quote_rows or quote.get("rows") or [] %}
+
+<style>
+  .print-preview-shell {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .print-preview-frame {
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    background: #fff;
+  }
+  .print-description-input{
+    width:100%;
+    border:none;
+    outline:none;
+    background:transparent;
+    padding:4px 6px;
+    text-align:center;
+    font-size:14px;
+    box-sizing:border-box;
+  }
+
+  .print-description-input:focus{
+    background:#fff;
+    border:1px solid #d0d5dd;
+    border-radius:6px;
+  }
+</style>
+
+<div class="text-muted-small" style="margin-bottom:12px;">
+  Customer: <strong>{{ quote.get("customer_name","") }}</strong> •
+  Month: <strong>{{ quote.get("month_key","") }}</strong>
+</div>
+
+<div class="card section-card shadow-sm">
+  <div class="card-body" style="background:white; padding:0;">
+    <div class="print-preview-shell">
+      <div class="print-preview-frame" id="price-letter-preview">
+
+        <div style="padding:28px 34px 18px 34px;">
+
+          <div style="
+              display:grid;
+              grid-template-columns: 1fr auto 1fr;
+              align-items:start;
+              gap:20px;
+              border-bottom:2px solid #222;
+              padding-bottom:14px;
+              margin-bottom:0;
+          ">
+
+            <div style="
+                text-align:left;
+                font-size:16px;
+                line-height:1.35;
+                max-width:260px;
+            ">
+              {% if sales_person and sales_person.name %}
+                <div style="font-weight:700; font-size:22px;">
+                  {{ sales_person.name }}
+                </div>
+              {% endif %}
+
+              {% if sales_person and sales_person.phone %}
+                <div style="margin-top:2px; font-size:20px; font-weight:700;">
+                  {{ sales_person.phone }}
+                </div>
+              {% endif %}
+
+              {% if sales_person and sales_person.email %}
+                <div style="margin-top:2px; font-size:18px;">
+                  {{ sales_person.email }}
+                </div>
+              {% endif %}
+            </div>
+
+            <div style="text-align:center; min-width:220px; margin-top:-10px;">
+              {% if company_info.logo_path %}
+                <div style="margin-bottom:10px;">
+                  <img
+                    src="{{ url_for('static', filename=company_info.logo_path) }}"
+                    alt="Company Logo"
+                    style="max-height:115px; max-width:210px; object-fit:contain; margin-top:-25px;"
+                  >
+                </div>
+              {% endif %}
+
+              <div style="margin-top:6px; font-size:20px; font-weight:700;">
+                {{ display_date }}
+              </div>
+            </div>
+
+            <div style="
+                text-align:right;
+                font-size:18px;
+                font-weight:700;
+                line-height:1.35;
+                max-width:260px;
+                margin-left:auto;
+                word-break:break-word;
+            ">
+              {% if company_info.address %}
+                {% for line in company_info.address.split('\n') %}
+                  <div>{{ line }}</div>
+                {% endfor %}
+              {% endif %}
+
+              {% if company_info.website_url %}
+                <div style="margin-top:4px; font-weight:600;">
+                  <a href="{{ company_info.website_url }}" target="_blank">
+                    {{ company_info.website_url }}
+                  </a>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if rows and rows|length > 0 %}
+            <div class="table-responsive">
+              <table class="table table-sm align-middle"
+                     style="table-layout:fixed; width:100%; border-collapse:collapse;">
+
+                <thead>
+                  <tr>
+                    <th style="width:30%; text-align:center;">Product</th>
+                    <th style="width:23%; text-align:center;">Package</th>
+                    <th style="width:23%; text-align:center;">Delivered Price</th>
+                    <th style="width:24%; text-align:center;">Description</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for r in rows %}
+                  <tr>
+                    <td style="text-align:center; padding-left:14px; font-weight:800;">
+                      {{ r.get("product","") }}
+                    </td>
+
+                    <td style="text-align:center;">
+                      {% if r.get("package_type") == "330gal Tote" %}
+                        330 GAL Tote
+                      {% elif r.get("package_type") == "275gal Tote" %}
+                        275 GAL Tote
+                      {% else %}
+                        {{ r.get("package_type","") or "-" }}
+                      {% endif %}
+                    </td>
+
+                    <td style="text-align:center; font-weight:700;">
+                      ${{ '%.4f'|format(r.get("final_price",0) or 0) }}
+                      {% if r.get("um") %} / {{ r.get("um")|upper }}{% endif %}
+                    </td>
+
+                    <td style="text-align:center;">
+                      <input
+                        type="text"
+                        name="row_description"
+                        value="{{ r.get('description', r.get('product','')) }}"
+                        class="print-description-input"
+                      >
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+
+              </table>
+            </div>
+          {% else %}
+            <div class="text-muted" style="padding-top:16px;">No rows found.</div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<br>
+
+<div style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+  <div class="text-muted-small">
+    Customer: <strong>{{ quote.get("customer_name","") }}</strong> •
+    Month: <strong>{{ quote.get("month_key","") }}</strong>
+  </div>
+
+  {% if from_history %}
+    <a href="{{ url_for('history_page') }}" class="btn btn-outline-secondary btn-sm">
+      ← Back to History
+    </a>
+  {% endif %}
+
+  <select id="export-format" class="form-control form-control-sm" style="max-width:140px;">
+    <option value="pdf">PDF</option>
+    <option value="png">PNG</option>
+  </select>
+
+  <button type="button" class="btn btn-primary btn-sm" id="download-letter-btn">
+    Download Price Letter
+  </button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+<script>
+  async function exportPriceLetter() {
+    const preview = document.getElementById("price-letter-preview");
+    const format = document.getElementById("export-format").value;
+
+    if (!preview) return;
+
+    const button = document.getElementById("download-letter-btn");
+    const oldText = button.innerText;
+    button.disabled = true;
+    button.innerText = "Preparing...";
+
+    try {
+      const canvas = await html2canvas(preview, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff"
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+
+      const customerName = `{{ quote.get("customer_name", "") }}`;
+      const displayDate = `{{ display_date }}`;
+      const safeCustomer = customerName.replace(/[^\w\s-]/g, "").trim() || "PriceLetter";
+      const safeDate = displayDate.replace(/\//g, "-") || "date";
+      const fileBase = `${safeCustomer}-${safeDate}`;
+
+      if (format === "png") {
+        const link = document.createElement("a");
+        link.href = imgData;
+        link.download = `${fileBase}.png`;
+        link.click();
+      } else {
+        const { jsPDF } = window.jspdf;
+
+        const pdf = new jsPDF({
+          orientation: "landscape",
+          unit: "px",
+          format: [canvas.width, canvas.height]
+        });
+
+        pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+        pdf.save(`${fileBase}.pdf`);
+      }
+
+      const resp = await fetch("{{ url_for('printer_mark_printed') }}", {
+        method: "POST",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+
+      if (!resp.ok) {
+        console.error("Could not clear printed quote. Status:", resp.status);
+      }
+
+      window.location.href = "{{ url_for('printer_page') }}";
+
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Export failed. Please try again.");
+      button.disabled = false;
+      button.innerText = oldText;
+    }
+  }
+
+  document.getElementById("download-letter-btn")?.addEventListener("click", exportPriceLetter);
+</script>
+
+{% endblock %}

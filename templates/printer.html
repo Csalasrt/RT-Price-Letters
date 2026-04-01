@@ -1,0 +1,1333 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .printer-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 260px;
+    max-width: 420px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+    font-weight: 600;
+    font-size: 14px;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .printer-toast-success {
+    background: #ecfdf3;
+    color: #067647;
+    border: 1px solid #abefc6;
+  }
+
+  .build-toolbar-card .card-body {
+    padding: 14px 16px;
+  }
+
+  .build-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .toolbar-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #667085;
+    margin-bottom: 6px;
+  }
+
+  .toolbar-field select,
+  .toolbar-field input,
+  .product-trigger {
+    width: 100%;
+    height: 38px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px 10px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .product-picker {
+    position: relative;
+  }
+
+  .product-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+
+  .price-list-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .price-list-table th,
+  .price-list-table td {
+    vertical-align: middle;
+    padding: 8px 10px;
+  }
+
+  .price-list-table thead th,
+  #quote-table thead th {
+    text-align: center !important;
+    vertical-align: middle;
+  }
+
+  #quote-table tbody td {
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  #quote-table .form-control {
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .product-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.10);
+    z-index: 2000;
+    padding: 6px 0;
+  }
+
+  .product-panel.hidden {
+    display: none;
+  }
+
+  .product-search-wrap {
+    padding: 0 8px 6px 8px;
+    border-bottom: 1px solid #eaecf0;
+  }
+
+  .product-search {
+    width: 100%;
+    height: 30px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .product-options {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .product-option {
+    display: block;
+    padding: 4px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .product-option:hover {
+    background: #f9fafb;
+  }
+
+  .product-option input[type="checkbox"] {
+    margin-right: 6px;
+    width: 12px;
+    height: 12px;
+    vertical-align: middle;
+  }
+
+  .product-option-name {
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  .toolbar-helper {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #667085;
+  }
+
+  .compact-toolbar-btn {
+    height: 30px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .delete-row-check {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+
+  .duplicate-btn {
+    height: 30px;
+    width: 30px;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .duplicate-btn:hover {
+    background: #f2f4f7;
+  }
+
+  @media (max-width: 1100px) {
+    .build-toolbar {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .build-toolbar {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="text-muted-small" style="margin-bottom:12px;">
+  Selected pricing period: <strong>{{ month_key }}</strong>
+</div>
+
+{% if errors %}
+  <ul class="errors" id="error-box">
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+{% endif %}
+
+{% set messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+  {% set last = messages[-1] %}
+  {% if last[0] == "download_success" %}
+    <div id="flash-toast" class="printer-toast printer-toast-success">
+      {{ last[1] }}
+    </div>
+  {% endif %}
+{% endif %}
+
+{% set ns = namespace(selected_count=0) %}
+{% if products %}
+  {% for p in products %}
+    {% set row_match = namespace(found=false) %}
+    {% for r in quote_rows or [] %}
+      {% if r.product == p.product %}
+        {% set row_match.found = true %}
+      {% endif %}
+    {% endfor %}
+    {% if row_match.found %}
+      {% set ns.selected_count = ns.selected_count + 1 %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+<div class="card section-card shadow-sm build-toolbar-card">
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('printer_page') }}" id="printer-form">
+      <input type="hidden" name="action" id="printer-action" value="build">
+
+      <div id="existing-row-state"></div>
+
+      <div class="build-toolbar">
+        <div class="toolbar-field">
+          <label>Period *</label>
+          <select name="pricing_period" id="pricing_period" onchange="submitCustomerDefaults('period')" required>
+            {% if available_periods and available_periods|length > 0 %}
+              {% for p in available_periods %}
+                <option value="{{ p.value }}" {% if selected_pricing_period == p.value %}selected{% endif %}>
+                  {{ p.label }}
+                </option>
+              {% endfor %}
+            {% else %}
+              <option value="{{ month_key }}" selected>{{ month_key }}</option>
+            {% endif %}
+          </select>
+        </div>
+
+        <div class="toolbar-field">
+          <label>Customer *</label>
+          <select name="customer_id" id="customer_id" onchange="submitCustomerDefaults('customer')" required>
+            <option value="">— Select Customer —</option>
+            {% for c in customers %}
+              <option value="{{ c.id }}" {% if form.customer_id == (c.id|string) %}selected{% endif %}>
+                {{ c.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="toolbar-field">
+          <label>Salesperson *</label>
+          <select name="sales_person_id" id="sales_person_id" required>
+            <option value="">— Select Salesperson —</option>
+            {% for s in sales_people %}
+              <option value="{{ s.id }}" {% if form.sales_person_id == (s.id|string) %}selected{% endif %}>
+                {{ s.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="toolbar-field">
+          <label>Products</label>
+
+          <div class="product-picker" id="product-picker">
+            <div class="product-trigger" id="product-trigger" onclick="toggleProductPanel(event)">
+              <div class="product-trigger-text">
+                {% if ns.selected_count > 0 %}
+                  {{ ns.selected_count }} product{% if ns.selected_count != 1 %}s{% endif %} on list
+                {% else %}
+                  Select products...
+                {% endif %}
+              </div>
+              <div class="product-trigger-arrow">▾</div>
+            </div>
+
+            <div class="product-panel hidden" id="product-panel">
+              <div class="product-search-wrap">
+                <input
+                  type="text"
+                  id="product-search"
+                  class="product-search"
+                  placeholder="Search products..."
+                  oninput="filterProductOptions()"
+                >
+              </div>
+
+              <div class="product-options" id="product-options">
+                {% if products and products|length > 0 %}
+                  {% for p in products %}
+                    {% set row_match = namespace(found=false) %}
+                    {% for r in quote_rows or [] %}
+                      {% if r.product == p.product %}
+                        {% set row_match.found = true %}
+                      {% endif %}
+                    {% endfor %}
+
+                    <label class="product-option" data-product-name="{{ p.product|lower }}">
+                      <input
+                        type="checkbox"
+                        name="product_key"
+                        value="{{ p.key }}"
+                        onchange="handleProductToggle(this)"
+                        {% if row_match.found %}checked{% endif %}
+                      >
+                      <span class="product-option-name">{{ p.product }}</span>
+                    </label>
+                  {% endfor %}
+                {% else %}
+                  <div class="text-muted" style="padding:10px 12px;">
+                    No products found for this month yet. Upload pricing first.
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-helper">
+        Products already on the list show a checked box. Click products to add or remove them.
+      </div>
+
+      <div style="height:1px; background:#e5e7eb; margin:14px 0;"></div>
+
+      <div class="row-form" style="margin-bottom:0; align-items:end;">
+        <div style="display:flex; gap:10px; align-items:end; justify-content:space-between; flex-wrap:wrap; width:100%;">
+          <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+            <button class="btn btn-outline-secondary btn-sm compact-toolbar-btn" type="submit" onclick="setPrinterAction('clear')">
+              Clear List
+            </button>
+
+            <button class="btn btn-outline-secondary btn-sm compact-toolbar-btn" type="submit" onclick="setPrinterAction('new')">
+              New List
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if quote_rows and quote_rows|length > 0 %}
+  <div class="card section-card shadow-sm" style="margin-top:12px;">
+    <div class="card-body">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="font-weight:700;">Price List</div>
+        <div class="text-muted-small">Lines: {{ quote_rows|length }}</div>
+      </div>
+
+      <form method="POST" action="{{ url_for('printer_page') }}" id="price-list-form" style="margin:0;">
+        <input type="hidden" name="customer_name" value="{{ customer_name }}">
+        <input type="hidden" name="customer_id" value="{{ form.customer_id }}">
+        <input type="hidden" name="sales_person_id" id="price-list-salesperson" value="{{ form.sales_person_id }}">
+        <input type="hidden" name="default_margin" value="{{ form.default_margin }}">
+        <input type="hidden" name="pricing_period" value="{{ month_key }}">
+
+        <div class="table-responsive" style="margin-top:10px;">
+          <table class="table table-sm align-middle" id="quote-table">
+            <thead>
+              <tr>
+                <th style="width:52px; min-width:52px; text-align:center;">
+                  <input type="checkbox" id="select-all-delete">
+                </th>
+                <th style="min-width:220px;">Product</th>
+                <th class="text-end" style="min-width:120px;">Our Cost</th>
+                <th style="min-width:90px;">UM</th>
+                <th style="min-width:160px;">Package Type</th>
+                <th class="text-end" style="min-width:120px;">Price</th>
+                <th class="text-end" style="min-width:120px;">Shipping</th>
+                <th class="text-end" style="min-width:120px;">Packaging</th>
+                <th class="text-end" style="min-width:130px;">Final Price</th>
+                <th class="text-end" style="min-width:110px;">Margin %</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for r in quote_rows %}
+                <tr
+                  data-source-cost="{{ '%.4f'|format(r.get('source_cost', r.get('cost', 0)) or 0) }}"
+                  data-source-price="{{ '%.4f'|format(r.get('source_price', r.get('price', 0)) or 0) }}"
+                  data-source-um="{{ (r.get('source_um', r.get('um', '')))|upper }}"
+                  data-weight="{{ r.get('weight', '') }}"
+                >
+                  <td>
+                    <div class="row-actions">
+                      <input
+                        type="checkbox"
+                        name="delete_row"
+                        value="{{ loop.index0 }}"
+                        class="delete-row-check"
+                      >
+
+                      <button
+                        type="submit"
+                        name="duplicate_row"
+                        value="{{ loop.index0 }}"
+                        class="duplicate-btn"
+                        title="Duplicate row"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </td>
+
+                  <td style="font-weight:700;">
+                    {{ r.product }}
+                    <input type="hidden" name="row_product" value="{{ r.product }}">
+                  </td>
+
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end cost"
+                      name="row_cost"
+                      value="{{ '%.4f'|format(r.cost or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td>
+                    <select class="form-control form-control-sm um-select" name="row_um">
+                      <option value="LB" {% if (r.um or '')|upper == "LB" %}selected{% endif %}>LB</option>
+                      <option value="GAL" {% if (r.um or '')|upper == "GAL" %}selected{% endif %}>GAL</option>
+                      <option value="EACH" {% if (r.um or '')|upper == "EACH" %}selected{% endif %}>EACH</option>
+                    </select>
+                  </td>
+
+                  <td>
+                    <select class="form-control form-control-sm package-type" name="row_package_type">
+                      <option value="">Select package type</option>
+                      <option value="Drum" {% if r.package_type == "Drum" %}selected{% endif %}>☐ Drum</option>
+                      <option value="330gal Tote" {% if r.package_type == "330gal Tote" %}selected{% endif %}>☐ 330 GAL Tote</option>
+                      <option value="275gal Tote" {% if r.package_type == "275gal Tote" %}selected{% endif %}>☐ 275 GAL Tote</option>
+                      <option value="Pail" {% if r.package_type == "Pail" %}selected{% endif %}>☐ Pail</option>
+                      <option value="Bulk" {% if r.package_type == "Bulk" %}selected{% endif %}>☐ Bulk</option>
+                      <option value="Bag" {% if r.package_type == "Bag" %}selected{% endif %}>☐ Bag</option>
+                    </select>
+                  </td>
+
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end price"
+                      name="row_price"
+                      value="{{ '%.4f'|format(r.price or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end shipping"
+                      name="row_shipping"
+                      value="{{ '%.4f'|format(r.shipping or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end packaging"
+                      name="row_packaging"
+                      value="{{ '%.4f'|format(r.packaging or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end final"
+                      name="row_final"
+                      value="{{ '%.4f'|format(r.final_price or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end margin"
+                      name="row_margin"
+                      value="{{ '%.2f'|format(r.margin or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="text-muted-small" style="margin-top:8px;">
+          Tip: Edit cost, margin, price, shipping, packaging, final price, or U/M. If you edit final price, price and margin will auto update.
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
+          <button class="btn btn-outline-secondary btn-sm" type="submit" name="action" value="delete_selected">
+            Delete Selected
+          </button>
+          <button class="btn btn-primary btn-sm" type="submit" name="action" value="print" onclick="setPrinterAction('print')">
+            Go to Print
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <script>
+    function toNum(v) {
+      if (v === null || v === undefined) return 0;
+      const s = String(v).replace(/\$/g, "").replace(/,/g, "").trim();
+      if (s === "" || s === "." || s === "-" || s === "-.") return 0;
+      const n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+    }
+
+    function fmt4(n) {
+      return (Math.round((Number(n) || 0) * 10000) / 10000).toFixed(4);
+    }
+
+    function fmt2(n) {
+      return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
+    }
+
+    function normalizeUM(v) {
+      return String(v || "").trim().toUpperCase();
+    }
+
+    function isCalcInput(el) {
+      return !!(
+        el &&
+        (
+          el.classList.contains("cost") ||
+          el.classList.contains("margin") ||
+          el.classList.contains("price") ||
+          el.classList.contains("shipping") ||
+          el.classList.contains("packaging") ||
+          el.classList.contains("final")
+        )
+      );
+    }
+
+    function clearZeroOnFocus(e) {
+      const el = e.target;
+      if (!isCalcInput(el)) return;
+
+      const raw = String(el.value || "").trim();
+      const n = toNum(raw);
+
+      const isEffectivelyEmpty =
+        raw === "" ||
+        raw === "." ||
+        raw === "-" ||
+        raw === "-." ||
+        n === 0;
+
+      if (isEffectivelyEmpty) {
+        el.value = "";
+      }
+    }
+
+    function restoreZeroOnBlur(e) {
+      const el = e.target;
+      if (!isCalcInput(el)) return;
+
+      const raw = String(el.value || "").trim();
+
+      if (raw === "" || raw === "." || raw === "-" || raw === "-.") {
+        if (el.classList.contains("margin")) {
+          el.value = "0.00";
+        } else {
+          el.value = "0.0000";
+        }
+        return;
+      }
+
+      const n = toNum(raw);
+
+      if (el.classList.contains("margin")) {
+        el.value = fmt2(n);
+      } else {
+        el.value = fmt4(n);
+      }
+    }
+
+    function convertValueFromSource(sourceValue, sourceUM, targetUM, weight) {
+      const fromUM = normalizeUM(sourceUM);
+      const toUM = normalizeUM(targetUM);
+      const wt = toNum(weight);
+      const srcValue = toNum(sourceValue);
+
+      if (!fromUM || !toUM) return null;
+      if (fromUM === toUM) return srcValue;
+      if (fromUM === "EACH" || toUM === "EACH") return null;
+      if (!wt || wt <= 0) return null;
+
+      if (fromUM === "GAL" && toUM === "LB") {
+        return srcValue / wt;
+      }
+
+      if (fromUM === "LB" && toUM === "GAL") {
+        return srcValue * wt;
+      }
+
+      return null;
+    }
+
+    function applyUMConversion(tr) {
+      const umEl = tr.querySelector(".um-select");
+      const costEl = tr.querySelector(".cost");
+      const priceEl = tr.querySelector(".price");
+      const marginEl = tr.querySelector(".margin");
+      const shipEl = tr.querySelector(".shipping");
+      const packEl = tr.querySelector(".packaging");
+      const finalEl = tr.querySelector(".final");
+
+      if (!umEl || !costEl || !priceEl || !marginEl || !shipEl || !packEl || !finalEl) return false;
+
+      const sourceCost = tr.dataset.sourceCost;
+      const sourcePrice = tr.dataset.sourcePrice;
+      const sourceUM = tr.dataset.sourceUm;
+      const weight = tr.dataset.weight;
+      const targetUM = umEl.value;
+      const margin = toNum(marginEl.value);
+      const ship = toNum(shipEl.value);
+      const pack = toNum(packEl.value);
+
+      const convertedCost = convertValueFromSource(sourceCost, sourceUM, targetUM, weight);
+      const convertedPrice = convertValueFromSource(sourcePrice, sourceUM, targetUM, weight);
+
+      if (convertedCost === null && convertedPrice === null) {
+        return false;
+      }
+
+      let price = 0;
+
+      if (convertedCost !== null) {
+        costEl.value = fmt4(convertedCost);
+      }
+
+      if (convertedPrice !== null) {
+        price = convertedPrice;
+        priceEl.value = fmt4(price);
+      } else if (convertedCost !== null) {
+        price = convertedCost * (1 + (margin / 100));
+        priceEl.value = fmt4(price);
+      } else {
+        price = toNum(priceEl.value);
+      }
+
+      finalEl.value = fmt4(price + ship + pack);
+      return true;
+    }
+
+    function updateRow(tr, changed, liveEdit = false) {
+      const costEl = tr.querySelector(".cost");
+      const marginEl = tr.querySelector(".margin");
+      const priceEl = tr.querySelector(".price");
+      const shipEl = tr.querySelector(".shipping");
+      const packEl = tr.querySelector(".packaging");
+      const finalEl = tr.querySelector(".final");
+
+      if (!costEl || !marginEl || !priceEl || !shipEl || !packEl || !finalEl) return;
+
+      let cost = toNum(costEl.value);
+      let margin = toNum(marginEl.value);
+      let price = toNum(priceEl.value);
+      let ship = toNum(shipEl.value);
+      let pack = toNum(packEl.value);
+      let finalP = toNum(finalEl.value);
+
+      if (changed === "um") {
+        const didConvert = applyUMConversion(tr);
+
+        cost = toNum(costEl.value);
+        margin = toNum(marginEl.value);
+        price = toNum(priceEl.value);
+        ship = toNum(shipEl.value);
+        pack = toNum(packEl.value);
+
+        if (!didConvert) {
+          price = cost * (1 + margin / 100);
+          priceEl.value = fmt4(price);
+          finalEl.value = fmt4(price + ship + pack);
+        }
+        return;
+      }
+
+      if (changed === "cost") {
+        price = cost * (1 + margin / 100);
+        finalP = price + ship + pack;
+
+        if (!liveEdit) costEl.value = fmt4(cost);
+        priceEl.value = fmt4(price);
+        finalEl.value = fmt4(finalP);
+        return;
+      }
+
+      if (changed === "margin") {
+        price = cost * (1 + margin / 100);
+        finalP = price + ship + pack;
+
+        if (!liveEdit) marginEl.value = fmt2(margin);
+        priceEl.value = fmt4(price);
+        finalEl.value = fmt4(finalP);
+        return;
+      }
+
+      if (changed === "price") {
+        if (cost > 0) {
+          margin = ((price - cost) / cost) * 100;
+        } else {
+          margin = 0;
+        }
+
+        finalP = price + ship + pack;
+
+        if (!liveEdit) priceEl.value = fmt4(price);
+        marginEl.value = fmt2(margin);
+        finalEl.value = fmt4(finalP);
+        return;
+      }
+
+      if (changed === "shipping") {
+        finalP = price + ship + pack;
+
+        if (!liveEdit) shipEl.value = fmt4(ship);
+        finalEl.value = fmt4(finalP);
+        return;
+      }
+
+      if (changed === "packaging") {
+        finalP = price + ship + pack;
+
+        if (!liveEdit) packEl.value = fmt4(pack);
+        finalEl.value = fmt4(finalP);
+        return;
+      }
+
+      if (changed === "final") {
+        price = finalP - ship - pack;
+        if (price < 0) price = 0;
+
+        if (cost > 0) {
+          margin = ((price - cost) / cost) * 100;
+        } else {
+          margin = 0;
+        }
+
+        if (!liveEdit) finalEl.value = fmt4(finalP);
+        priceEl.value = fmt4(price);
+        marginEl.value = fmt2(margin);
+        return;
+      }
+    }
+
+    function focusAndSelect(el) {
+      if (!el) return;
+      el.focus();
+      try {
+        el.select();
+      } catch (err) {}
+    }
+
+    function getEditableInputsInRow(tr) {
+      if (!tr) return [];
+      return Array.from(
+        tr.querySelectorAll(".cost, .margin, .price, .shipping, .packaging, .final")
+      );
+    }
+
+    function focusSameColumnNextRow(currentInput) {
+      const tr = currentInput.closest("tr");
+      if (!tr) return;
+
+      const nextTr = tr.nextElementSibling;
+      if (!nextTr) return;
+
+      const classes = ["cost", "margin", "price", "shipping", "packaging", "final"];
+      const colClass = classes.find(cls => currentInput.classList.contains(cls));
+      if (!colClass) return;
+
+      const nextInput = nextTr.querySelector("." + colClass);
+      if (!nextInput) return;
+
+      focusAndSelect(nextInput);
+    }
+
+    function focusSameColumnPrevRow(currentInput) {
+      const tr = currentInput.closest("tr");
+      if (!tr) return;
+
+      const prevTr = tr.previousElementSibling;
+      if (!prevTr) return;
+
+      const classes = ["cost", "margin", "price", "shipping", "packaging", "final"];
+      const colClass = classes.find(cls => currentInput.classList.contains(cls));
+      if (!colClass) return;
+
+      const prevInput = prevTr.querySelector("." + colClass);
+      if (!prevInput) return;
+
+      focusAndSelect(prevInput);
+    }
+
+    function focusNextEditableCell(currentInput) {
+      const tr = currentInput.closest("tr");
+      if (!tr) return;
+
+      const rowInputs = getEditableInputsInRow(tr);
+      const idx = rowInputs.indexOf(currentInput);
+
+      if (idx >= 0 && idx < rowInputs.length - 1) {
+        focusAndSelect(rowInputs[idx + 1]);
+        return;
+      }
+
+      const nextTr = tr.nextElementSibling;
+      if (!nextTr) return;
+
+      const nextRowInputs = getEditableInputsInRow(nextTr);
+      if (nextRowInputs.length > 0) {
+        focusAndSelect(nextRowInputs[0]);
+      }
+    }
+
+    function focusPrevEditableCell(currentInput) {
+      const tr = currentInput.closest("tr");
+      if (!tr) return;
+
+      const rowInputs = getEditableInputsInRow(tr);
+      const idx = rowInputs.indexOf(currentInput);
+
+      if (idx > 0) {
+        focusAndSelect(rowInputs[idx - 1]);
+        return;
+      }
+
+      const prevTr = tr.previousElementSibling;
+      if (!prevTr) return;
+
+      const prevRowInputs = getEditableInputsInRow(prevTr);
+      if (prevRowInputs.length > 0) {
+        focusAndSelect(prevRowInputs[prevRowInputs.length - 1]);
+      }
+    }
+
+    function updateRowFromElement(tr, el, liveEdit = false) {
+      if (!tr || !el) return;
+
+      if (el.classList.contains("cost")) updateRow(tr, "cost", liveEdit);
+      else if (el.classList.contains("margin")) updateRow(tr, "margin", liveEdit);
+      else if (el.classList.contains("price")) updateRow(tr, "price", liveEdit);
+      else if (el.classList.contains("shipping")) updateRow(tr, "shipping", liveEdit);
+      else if (el.classList.contains("packaging")) updateRow(tr, "packaging", liveEdit);
+      else if (el.classList.contains("final")) updateRow(tr, "final", liveEdit);
+    }
+
+    const table = document.getElementById("quote-table");
+    if (table) {
+      table.addEventListener("focusin", function(e) {
+        clearZeroOnFocus(e);
+      });
+
+      table.addEventListener("focusout", function(e) {
+        const tr = e.target.closest("tr");
+        restoreZeroOnBlur(e);
+        if (!tr) return;
+        updateRowFromElement(tr, e.target, false);
+      });
+
+      table.addEventListener("input", function(e) {
+        const tr = e.target.closest("tr");
+        if (!tr) return;
+        updateRowFromElement(tr, e.target, true);
+      });
+
+      table.addEventListener("change", function(e) {
+        const tr = e.target.closest("tr");
+        if (!tr) return;
+
+        if (e.target.classList.contains("um-select")) {
+          updateRow(tr, "um", false);
+        }
+      });
+
+      table.addEventListener("keydown", function(e) {
+        const el = e.target;
+        const tr = el ? el.closest("tr") : null;
+        if (!el || !tr || !getEditableInputsInRow(tr).includes(el)) return;
+
+        if (e.key === "Enter") {
+          e.preventDefault();
+          restoreZeroOnBlur({ target: el });
+          updateRowFromElement(tr, el, false);
+          focusSameColumnNextRow(el);
+          return;
+        }
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          restoreZeroOnBlur({ target: el });
+          updateRowFromElement(tr, el, false);
+          focusSameColumnNextRow(el);
+          return;
+        }
+
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          restoreZeroOnBlur({ target: el });
+          updateRowFromElement(tr, el, false);
+          focusSameColumnPrevRow(el);
+          return;
+        }
+
+        if (e.key === "ArrowRight") {
+          const start = el.selectionStart;
+          const end = el.selectionEnd;
+          const len = el.value.length;
+
+          if (start === len && end === len) {
+            e.preventDefault();
+            focusNextEditableCell(el);
+            return;
+          }
+        }
+
+        if (e.key === "ArrowLeft") {
+          const start = el.selectionStart;
+          const end = el.selectionEnd;
+
+          if (start === 0 && end === 0) {
+            e.preventDefault();
+            focusPrevEditableCell(el);
+            return;
+          }
+        }
+      });
+
+      table.querySelectorAll("tbody tr").forEach(function(tr) {
+        updateRow(tr, "margin", false);
+      });
+    }
+
+    const selectAllDelete = document.getElementById("select-all-delete");
+    if (selectAllDelete) {
+      selectAllDelete.addEventListener("change", function() {
+        document.querySelectorAll(".delete-row-check").forEach(function(cb) {
+          cb.checked = selectAllDelete.checked;
+        });
+      });
+    }
+  </script>
+{% endif %}
+
+<script>
+  function setPrinterAction(actionValue) {
+    const actionInput = document.getElementById("printer-action");
+    if (actionInput) {
+      actionInput.value = actionValue;
+    }
+
+    /*
+      Only destructive actions are allowed to wipe the draft.
+    */
+    if (actionValue === "clear" || actionValue === "new") {
+      sessionStorage.removeItem("printer_draft_state");
+    }
+  }
+
+  function appendHidden(container, name, value) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value == null ? "" : value;
+    container.appendChild(input);
+  }
+
+  function syncCurrentRowsToToolbarForm() {
+    const holder = document.getElementById("existing-row-state");
+    const table = document.getElementById("quote-table");
+
+    if (!holder) return;
+    holder.innerHTML = "";
+
+    if (!table) return;
+
+    const rows = table.querySelectorAll("tbody tr");
+    rows.forEach(function(tr) {
+      const productInput = tr.querySelector('input[name="row_product"]');
+      const umInput = tr.querySelector('select[name="row_um"]');
+      const packageInput = tr.querySelector('select[name="row_package_type"]');
+      const costInput = tr.querySelector('input[name="row_cost"]');
+      const marginInput = tr.querySelector('input[name="row_margin"]');
+      const priceInput = tr.querySelector('input[name="row_price"]');
+      const shippingInput = tr.querySelector('input[name="row_shipping"]');
+      const packagingInput = tr.querySelector('input[name="row_packaging"]');
+      const finalInput = tr.querySelector('input[name="row_final"]');
+
+      appendHidden(holder, "row_product", productInput ? productInput.value : "");
+      appendHidden(holder, "row_um", umInput ? umInput.value : "");
+      appendHidden(holder, "row_package_type", packageInput ? packageInput.value : "");
+      appendHidden(holder, "row_cost", costInput ? costInput.value : "0");
+      appendHidden(holder, "row_margin", marginInput ? marginInput.value : "0");
+      appendHidden(holder, "row_price", priceInput ? priceInput.value : "0");
+      appendHidden(holder, "row_shipping", shippingInput ? shippingInput.value : "0");
+      appendHidden(holder, "row_packaging", packagingInput ? packagingInput.value : "0");
+      appendHidden(holder, "row_final", finalInput ? finalInput.value : "0");
+    });
+  }
+
+  function submitCustomerDefaults(source) {
+    const actionInput = document.getElementById("printer-action");
+    if (actionInput) {
+      actionInput.value = "select_customer";
+    }
+
+    syncCurrentRowsToToolbarForm();
+    savePrinterDraftState();
+
+    const form = document.getElementById("printer-form");
+    if (form) {
+      form.submit();
+    }
+  }
+
+  function toggleProductPanel(event) {
+    event.stopPropagation();
+    const panel = document.getElementById("product-panel");
+    if (panel) {
+      panel.classList.toggle("hidden");
+    }
+
+    const search = document.getElementById("product-search");
+    if (search && panel && !panel.classList.contains("hidden")) {
+      setTimeout(() => search.focus(), 0);
+    }
+  }
+
+  function closeProductPanel() {
+    const panel = document.getElementById("product-panel");
+    if (panel) {
+      panel.classList.add("hidden");
+    }
+  }
+
+  function filterProductOptions() {
+    const input = document.getElementById("product-search");
+    const filter = (input ? input.value : "").toLowerCase().trim();
+    const options = document.querySelectorAll(".product-option");
+
+    options.forEach(function(option) {
+      const name = option.getAttribute("data-product-name") || "";
+      option.style.display = name.includes(filter) ? "" : "none";
+    });
+  }
+
+  function handleProductToggle() {
+    const actionInput = document.getElementById("printer-action");
+    const form = document.getElementById("printer-form");
+
+    if (!form) return;
+
+    if (actionInput) {
+      actionInput.value = "build";
+    }
+
+    syncCurrentRowsToToolbarForm();
+    savePrinterDraftState();
+
+    sessionStorage.setItem("keep_product_panel_open", "1");
+    form.submit();
+  }
+
+  document.addEventListener("click", function(e) {
+    const picker = document.getElementById("product-picker");
+    if (!picker) return;
+
+    if (!picker.contains(e.target)) {
+      closeProductPanel();
+    }
+  });
+
+  window.addEventListener("load", () => {
+    if (sessionStorage.getItem("keep_product_panel_open") === "1") {
+      const panel = document.getElementById("product-panel");
+      if (panel) {
+        panel.classList.remove("hidden");
+      }
+      sessionStorage.removeItem("keep_product_panel_open");
+    }
+  });
+</script>
+
+<script>
+  const flash = document.getElementById("flash-toast");
+
+  if (flash) {
+    setTimeout(() => {
+      flash.style.transition = "opacity 0.35s ease, transform 0.35s ease";
+      flash.style.opacity = "0";
+      flash.style.transform = "translateY(-8px)";
+
+      setTimeout(() => {
+        flash.remove();
+      }, 350);
+    }, 2500);
+  }
+</script>
+
+<script>
+  document.querySelectorAll("form").forEach(form => {
+    form.addEventListener("submit", () => {
+      sessionStorage.setItem("printer_scroll", window.scrollY);
+    });
+  });
+
+  window.addEventListener("load", () => {
+    const scrollPos = sessionStorage.getItem("printer_scroll");
+
+    if (scrollPos) {
+      window.scrollTo(0, parseInt(scrollPos, 10));
+      sessionStorage.removeItem("printer_scroll");
+    }
+  });
+</script>
+
+<script>
+  function getToolbarFieldValue(id) {
+    const el = document.getElementById(id);
+    return el ? el.value : "";
+  }
+
+  function setToolbarFieldValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = value == null ? "" : value;
+    }
+  }
+
+  function getCurrentQuoteRows() {
+    const table = document.getElementById("quote-table");
+    if (!table) return [];
+
+    return Array.from(table.querySelectorAll("tbody tr")).map(function(tr) {
+      const productInput = tr.querySelector('input[name="row_product"]');
+      const umInput = tr.querySelector('select[name="row_um"]');
+      const packageInput = tr.querySelector('select[name="row_package_type"]');
+      const costInput = tr.querySelector('input[name="row_cost"]');
+      const marginInput = tr.querySelector('input[name="row_margin"]');
+      const priceInput = tr.querySelector('input[name="row_price"]');
+      const shippingInput = tr.querySelector('input[name="row_shipping"]');
+      const packagingInput = tr.querySelector('input[name="row_packaging"]');
+      const finalInput = tr.querySelector('input[name="row_final"]');
+
+      return {
+        product: productInput ? productInput.value : "",
+        um: umInput ? umInput.value : "",
+        package_type: packageInput ? packageInput.value : "",
+        cost: costInput ? costInput.value : "0",
+        margin: marginInput ? marginInput.value : "0",
+        price: priceInput ? priceInput.value : "0",
+        shipping: shippingInput ? shippingInput.value : "0",
+        packaging: packagingInput ? packagingInput.value : "0",
+        final: finalInput ? finalInput.value : "0"
+      };
+    });
+  }
+
+  function savePrinterDraftState() {
+    const state = {
+      pricing_period: getToolbarFieldValue("pricing_period"),
+      customer_id: getToolbarFieldValue("customer_id"),
+      sales_person_id: getToolbarFieldValue("sales_person_id"),
+      rows: getCurrentQuoteRows()
+    };
+
+    sessionStorage.setItem("printer_draft_state", JSON.stringify(state));
+  }
+
+  function rebuildRowsFromDraft(state) {
+    const holder = document.getElementById("existing-row-state");
+    if (!holder || !state || !Array.isArray(state.rows) || !state.rows.length) return;
+
+    holder.innerHTML = "";
+
+    state.rows.forEach(function(row) {
+      appendHidden(holder, "row_product", row.product || "");
+      appendHidden(holder, "row_um", row.um || "");
+      appendHidden(holder, "row_package_type", row.package_type || "");
+      appendHidden(holder, "row_cost", row.cost || "0");
+      appendHidden(holder, "row_margin", row.margin || "0");
+      appendHidden(holder, "row_price", row.price || "0");
+      appendHidden(holder, "row_shipping", row.shipping || "0");
+      appendHidden(holder, "row_packaging", row.packaging || "0");
+      appendHidden(holder, "row_final", row.final || "0");
+    });
+  }
+
+  function restorePrinterDraftStateIfNeeded() {
+    const raw = sessionStorage.getItem("printer_draft_state");
+    if (!raw) return;
+
+    let state = null;
+    try {
+      state = JSON.parse(raw);
+    } catch (err) {
+      sessionStorage.removeItem("printer_draft_state");
+      return;
+    }
+
+    /*
+      Never restore after destructive actions:
+      clear / new
+      Those are the only times we want data gone.
+    */
+    const currentActionEl = document.getElementById("printer-action");
+    const currentAction = currentActionEl ? currentActionEl.value : "";
+
+    if (currentAction === "clear" || currentAction === "new") {
+      sessionStorage.removeItem("printer_draft_state");
+      return;
+    }
+
+    /*
+      Restore toolbar selections if they are blank.
+    */
+    if (!getToolbarFieldValue("pricing_period") && state.pricing_period) {
+      setToolbarFieldValue("pricing_period", state.pricing_period);
+    }
+
+    if (!getToolbarFieldValue("customer_id") && state.customer_id) {
+      setToolbarFieldValue("customer_id", state.customer_id);
+    }
+
+    if (!getToolbarFieldValue("sales_person_id") && state.sales_person_id) {
+      setToolbarFieldValue("sales_person_id", state.sales_person_id);
+    }
+
+    /*
+      If the page came back with no quote table rendered,
+      rebuild hidden rows so the next submit carries them forward.
+    */
+    const table = document.getElementById("quote-table");
+    if (!table && state.rows && state.rows.length) {
+      rebuildRowsFromDraft(state);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    restorePrinterDraftStateIfNeeded();
+
+    const priceListForm = document.getElementById("price-list-form");
+    if (priceListForm) {
+      priceListForm.addEventListener("submit", function() {
+        savePrinterDraftState();
+      });
+    }
+  });
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    restorePrinterDraftStateIfNeeded();
+
+    const priceListForm = document.getElementById("price-list-form");
+    if (priceListForm) {
+      priceListForm.addEventListener("submit", function() {
+        const toolbarSalesperson = document.getElementById("sales_person_id");
+        const hiddenSalesperson = document.getElementById("price-list-salesperson");
+
+        if (toolbarSalesperson && hiddenSalesperson) {
+          hiddenSalesperson.value = toolbarSalesperson.value || "";
+        }
+
+        savePrinterDraftState();
+      });
+    }
+  });
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const errorBox = document.getElementById("error-box");
+
+    if (errorBox) {
+      setTimeout(() => {
+        errorBox.style.transition = "opacity 0.4s ease";
+        errorBox.style.opacity = "0";
+
+        setTimeout(() => {
+          errorBox.remove();
+        }, 400);
+      }, 5000); // 5 seconds
+    }
+  });
+</script>
+
+{% endblock %}

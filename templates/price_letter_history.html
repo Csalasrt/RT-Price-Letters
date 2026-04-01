@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;">
+  <h2 style="margin:0;">Price Letter History</h2>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('printer_page') }}">Back</a>
+</div>
+
+<div class="card section-card shadow-sm">
+  <div class="card-body">
+
+    {% if not history %}
+      <div class="text-muted">No saved price letters yet.</div>
+    {% else %}
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Month</th>
+            <th>File</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in history %}
+          <tr>
+            <td>{{ item.customer_name }}</td>
+            <td>{{ item.month_key }}</td>
+            <td>{{ item.file_name }}</td>
+            <td>{{ item.created_at }}</td>
+            <td style="white-space:nowrap;">
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('open_saved_price_letter', letter_id=item.id) }}">Open</a>
+              <a class="btn btn-sm btn-primary" href="{{ url_for('download_saved_price_letter', letter_id=item.id) }}">Download</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

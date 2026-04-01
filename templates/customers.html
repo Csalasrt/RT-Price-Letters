@@ -1,0 +1,688 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .customers-wrap {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0 24px;
+  }
+
+  .toolbar-field label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #667085;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .toolbar-field input,
+  .toolbar-field textarea {
+    width: 100%;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+
+  .customer-name-save-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .todo-checkbox-row {
+    margin-top: 12px;
+    margin-bottom: 2px;
+  }
+
+  .todo-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #344054;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .todo-checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .default-letter-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .default-letter-table th {
+    text-align: center;
+    vertical-align: middle;
+    font-size: 12px;
+    font-weight: 700;
+    color: #667085;
+    padding: 6px 4px;
+    border-bottom: 1px solid #eaecf0;
+  }
+
+  .default-letter-table td {
+    padding: 6px 4px;
+    border-bottom: 1px solid #f2f4f7;
+  }
+
+  .col-product { width: 220px; }
+  .col-um { width: 80px; }
+  .col-package { width: 140px; }
+  .col-margin { width: 85px; }
+  .col-ship { width: 85px; }
+  .col-pack { width: 85px; }
+  .col-actions { width: 70px; }
+
+  .default-letter-table input,
+  .default-letter-table select {
+    width: 100%;
+    height: 30px;
+    padding: 4px 6px;
+    font-size: 12px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    box-sizing: border-box;
+  }
+
+  .default-letter-table input[type="number"] {
+    text-align: right;
+  }
+
+  .product-input {
+    height: 30px;
+    font-size: 12px;
+    padding: 4px 6px;
+  }
+
+  .row-actions {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  .duplicate-btn,
+  .remove-row-btn {
+    height: 26px;
+    width: 26px;
+    font-size: 13px;
+    border-radius: 6px;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .duplicate-btn {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+  }
+
+  .duplicate-btn:hover {
+    background: #f2f4f7;
+  }
+
+  .remove-row-btn {
+    border: 1px solid #fda29b;
+    background: #fff5f5;
+    color: #d92d20;
+  }
+
+  .remove-row-btn:hover {
+    background: #ffe4e4;
+  }
+
+  .floating-product-panel {
+    position: fixed;
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    box-shadow: 0 12px 24px rgba(16, 24, 40, 0.18);
+    z-index: 999999;
+    padding: 6px 0;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .floating-product-panel.hidden {
+    display: none;
+  }
+
+  .floating-product-option {
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .floating-product-option:hover,
+  .floating-product-option.active {
+    background: #f9fafb;
+  }
+
+  .floating-product-empty {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #667085;
+  }
+
+  /* CUSTOMER LIST TABLE FIX */
+  .customer-list-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .customer-list-table thead th {
+    text-align: center;
+    vertical-align: middle;
+    font-size: 16px;
+    font-weight: 700;
+    color: #344054;
+    padding: 12px 8px;
+    border-bottom: 1px solid #eaecf0;
+  }
+
+  .customer-list-table tbody td {
+    text-align: center;
+    vertical-align: middle;
+    padding: 12px 8px;
+    border-bottom: 1px solid #f2f4f7;
+    font-size: 15px;
+  }
+
+  .customer-list-col-name {
+    width: 50%;
+  }
+
+  .customer-list-col-products {
+    width: 25%;
+  }
+
+  .customer-list-col-added {
+    width: 25%;
+  }
+
+  .customer-link {
+    display: inline-block;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .customer-added-date {
+    color: #667085;
+    white-space: nowrap;
+  }
+</style>
+
+<div class="customers-wrap">
+
+  {% if errors %}
+    <ul class="errors">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <div class="card section-card shadow-sm">
+    <div class="card-body">
+
+      <div style="font-weight:700; margin-bottom:8px;">Add Customer</div>
+
+      <form method="POST" action="{{ url_for('customers_page') }}">
+        <input type="hidden" name="action" value="add">
+
+        <div class="customer-name-save-row">
+          <div class="toolbar-field">
+            <label>Customer Name *</label>
+            <input
+              name="customer_name"
+              type="text"
+              value="{{ form.get('customer_name','') }}"
+              placeholder="e.g., Delek, Valero, ABC Logistics"
+              required
+            >
+          </div>
+        </div>
+
+        <div class="todo-checkbox-row">
+          <label class="todo-checkbox-label">
+            <input
+              type="checkbox"
+              name="add_to_recurring_todo"
+              value="1"
+              {% if form.get("add_to_recurring_todo") == "1" %}checked{% endif %}
+            >
+            Add this customer to the recurring monthly to-do list
+          </label>
+        </div>
+
+        <div style="height:1px; background:#e5e7eb; margin:14px 0;"></div>
+
+        <label style="font-size:12px; font-weight:700;">Default Price Letter</label>
+
+        <table class="table table-sm default-letter-table">
+          <thead>
+            <tr>
+              <th class="col-product">Product</th>
+              <th class="col-um">UM</th>
+              <th class="col-package">Package</th>
+              <th class="col-margin">Margin</th>
+              <th class="col-ship">Ship</th>
+              <th class="col-pack">Pack</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="default-letter-rows"></tbody>
+        </table>
+
+        <div style="margin-top:10px; text-align:right;">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="add-default-letter-row-btn">
+            Add Product
+          </button>
+          <button class="btn btn-primary btn-sm" type="submit">
+            Add Customer
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <div class="card section-card shadow-sm" style="margin-top:12px;">
+    <div class="card-body">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div style="font-weight:700;">Customer List</div>
+        <div class="text-muted-small">Showing {{ customers|length }} customer(s)</div>
+      </div>
+
+      <div class="table-responsive" style="margin-top:10px;">
+        <table class="table table-sm align-middle customer-list-table">
+          <thead>
+            <tr>
+              <th class="customer-list-col-name">Customer</th>
+              <th class="customer-list-col-products">Default Products</th>
+              <th class="customer-list-col-added">Added</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if customers and customers|length > 0 %}
+              {% for c in customers %}
+                <tr>
+                  <td>
+                    <a
+                      href="{{ url_for('customer_profile_page', customer_id=c.id) }}"
+                      class="customer-link"
+                    >
+                      {{ c.name }}
+                    </a>
+                  </td>
+                  <td>
+                    {{ (c.default_letter_rows|length) if c.default_letter_rows else ((c.default_products|length) if c.default_products else 0) }}
+                  </td>
+                  <td class="customer-added-date">
+                    {{ (c.created_at[5:7] ~ "/" ~ c.created_at[8:10] ~ "/" ~ c.created_at[2:4]) if c.created_at else "—" }}
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="3" class="text-center text-muted">No customers yet.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div id="global-product-panel" class="floating-product-panel hidden"></div>
+
+<script>
+  const RAW_COMPANY_PRODUCTS = {{ company_products|tojson }};
+  const NEW_CUSTOMER_EXISTING_DEFAULT_ROWS = {{ form.get('default_letter_rows', [])|tojson }};
+  const table = document.getElementById("default-letter-rows");
+  const globalProductPanel = document.getElementById("global-product-panel");
+
+  let activePicker = null;
+  let activeOptions = [];
+  let activeIndex = -1;
+
+  function extractProductName(item) {
+    if (typeof item === "string") return item.trim();
+    if (!item || typeof item !== "object") return "";
+    return String(
+      item.product ||
+      item.name ||
+      item.label ||
+      item.title ||
+      item.value ||
+      ""
+    ).trim();
+  }
+
+  function normalizedProducts() {
+    const names = (Array.isArray(RAW_COMPANY_PRODUCTS) ? RAW_COMPANY_PRODUCTS : [])
+      .map(extractProductName)
+      .filter(Boolean);
+
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }
+
+  function createPackageTypeSelect(selectedValue = "") {
+    const select = document.createElement("select");
+    select.name = "default_row_package_type";
+
+    const options = [
+      { value: "", label: "Select" },
+      { value: "Bulk", label: "Bulk" },
+      { value: "Drum", label: "Drum" },
+      { value: "330gal Tote", label: "330gal Tote" },
+      { value: "275gal Tote", label: "275gal Tote" },
+      { value: "Pail", label: "Pail" },
+      { value: "Jug", label: "Jug" },
+      { value: "Bottle", label: "Bottle" },
+      { value: "Bag", label: "Bag" }
+    ];
+
+    options.forEach(opt => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if ((selectedValue || "") === opt.value) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+
+    return select;
+  }
+
+  function hideGlobalProductPanel() {
+    if (!globalProductPanel) return;
+    globalProductPanel.classList.add("hidden");
+    globalProductPanel.innerHTML = "";
+    activePicker = null;
+    activeOptions = [];
+    activeIndex = -1;
+  }
+
+  function positionGlobalPanel(inputEl) {
+    if (!globalProductPanel || !inputEl) return;
+    const rect = inputEl.getBoundingClientRect();
+    globalProductPanel.style.left = rect.left + "px";
+    globalProductPanel.style.top = (rect.bottom + 4) + "px";
+    globalProductPanel.style.width = rect.width + "px";
+  }
+
+  function setActiveOption(index) {
+    const optionEls = Array.from(globalProductPanel.querySelectorAll(".floating-product-option"));
+    optionEls.forEach(el => el.classList.remove("active"));
+
+    if (!optionEls.length) {
+      activeIndex = -1;
+      return;
+    }
+
+    if (index < 0) index = optionEls.length - 1;
+    if (index >= optionEls.length) index = 0;
+
+    activeIndex = index;
+    optionEls[activeIndex].classList.add("active");
+    optionEls[activeIndex].scrollIntoView({ block: "nearest" });
+  }
+
+  function selectProduct(product) {
+    if (!activePicker) return;
+    activePicker.hiddenInput.value = product;
+    activePicker.textInput.value = product;
+    hideGlobalProductPanel();
+  }
+
+  function renderGlobalProductPanel(filterText = "") {
+    if (!globalProductPanel) return;
+
+    const q = String(filterText || "").trim().toLowerCase();
+    const allProducts = normalizedProducts();
+
+    activeOptions = q
+      ? allProducts.filter(product => product.toLowerCase().includes(q))
+      : allProducts.slice();
+
+    globalProductPanel.innerHTML = "";
+    activeIndex = -1;
+
+    if (!activeOptions.length) {
+      const empty = document.createElement("div");
+      empty.className = "floating-product-empty";
+      empty.textContent = "No matching products";
+      globalProductPanel.appendChild(empty);
+      return;
+    }
+
+    activeOptions.forEach((product, idx) => {
+      const option = document.createElement("div");
+      option.className = "floating-product-option";
+      option.textContent = product;
+      option.dataset.index = String(idx);
+
+      option.addEventListener("mousedown", function(e) {
+        e.preventDefault();
+      });
+
+      option.addEventListener("click", function() {
+        selectProduct(product);
+      });
+
+      globalProductPanel.appendChild(option);
+    });
+  }
+
+  function openGlobalProductPanel(picker) {
+    activePicker = picker;
+    positionGlobalPanel(picker.textInput);
+    renderGlobalProductPanel(picker.textInput.value);
+    globalProductPanel.classList.remove("hidden");
+  }
+
+  function createProductPicker(selectedValue = "") {
+    const wrapper = document.createElement("div");
+    wrapper.className = "product-picker-wrap";
+
+    const hiddenInput = document.createElement("input");
+    hiddenInput.type = "hidden";
+    hiddenInput.name = "default_row_product";
+    hiddenInput.value = selectedValue || "";
+
+    const textInput = document.createElement("input");
+    textInput.type = "text";
+    textInput.className = "product-input";
+    textInput.placeholder = "Select...";
+    textInput.autocomplete = "off";
+    textInput.value = selectedValue || "";
+
+    const picker = { wrapper, hiddenInput, textInput };
+
+    textInput.addEventListener("focus", function() {
+      openGlobalProductPanel(picker);
+    });
+
+    textInput.addEventListener("click", function(e) {
+      e.stopPropagation();
+      openGlobalProductPanel(picker);
+    });
+
+    textInput.addEventListener("input", function() {
+      hiddenInput.value = textInput.value.trim();
+      openGlobalProductPanel(picker);
+    });
+
+    textInput.addEventListener("keydown", function(e) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (globalProductPanel.classList.contains("hidden")) {
+          openGlobalProductPanel(picker);
+        }
+        setActiveOption(activeIndex + 1);
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (globalProductPanel.classList.contains("hidden")) {
+          openGlobalProductPanel(picker);
+        }
+        setActiveOption(activeIndex - 1);
+        return;
+      }
+
+      if (e.key === "Enter") {
+        if (!globalProductPanel.classList.contains("hidden") && activeIndex >= 0 && activeOptions[activeIndex]) {
+          e.preventDefault();
+          selectProduct(activeOptions[activeIndex]);
+        }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        hideGlobalProductPanel();
+      }
+    });
+
+    wrapper.appendChild(hiddenInput);
+    wrapper.appendChild(textInput);
+
+    return picker;
+  }
+
+  function createRow(data = {}) {
+    const tr = document.createElement("tr");
+
+    const productTd = document.createElement("td");
+    const productPicker = createProductPicker(data.product || "");
+    productTd.appendChild(productPicker.wrapper);
+
+    const umTd = document.createElement("td");
+    const umSelect = document.createElement("select");
+    umSelect.name = "default_row_um";
+
+    ["LB", "GAL", "EACH"].forEach(um => {
+      const option = document.createElement("option");
+      option.value = um;
+      option.textContent = um;
+      if ((data.um || "").toUpperCase() === um) {
+        option.selected = true;
+      }
+      umSelect.appendChild(option);
+    });
+    umTd.appendChild(umSelect);
+
+    const packageTd = document.createElement("td");
+    packageTd.appendChild(createPackageTypeSelect(data.package_type || ""));
+
+    const marginTd = document.createElement("td");
+    const marginInput = document.createElement("input");
+    marginInput.type = "number";
+    marginInput.name = "default_row_margin";
+    marginInput.step = "0.0001";
+    marginInput.value = data.margin !== undefined && data.margin !== null ? data.margin : 15;
+    marginTd.appendChild(marginInput);
+
+    const shippingTd = document.createElement("td");
+    const shippingInput = document.createElement("input");
+    shippingInput.type = "number";
+    shippingInput.name = "default_row_shipping";
+    shippingInput.step = "0.0001";
+    shippingInput.value = data.shipping !== undefined && data.shipping !== null ? data.shipping : 0;
+    shippingTd.appendChild(shippingInput);
+
+    const packagingTd = document.createElement("td");
+    const packagingInput = document.createElement("input");
+    packagingInput.type = "number";
+    packagingInput.name = "default_row_packaging";
+    packagingInput.step = "0.0001";
+    packagingInput.value = data.packaging !== undefined && data.packaging !== null ? data.packaging : 0;
+    packagingTd.appendChild(packagingInput);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.innerHTML = `
+      <div class="row-actions">
+        <button type="button" class="duplicate-btn">+</button>
+        <button type="button" class="remove-row-btn">-</button>
+      </div>
+    `;
+
+    actionsTd.querySelector(".duplicate-btn").addEventListener("click", function() {
+      createRow({
+        product: productPicker.hiddenInput.value || productPicker.textInput.value || "",
+        um: umSelect.value || "GAL",
+        package_type: packageTd.querySelector("select").value || "",
+        margin: marginInput.value || 15,
+        shipping: shippingInput.value || 0,
+        packaging: packagingInput.value || 0
+      });
+    });
+
+    actionsTd.querySelector(".remove-row-btn").addEventListener("click", function() {
+      tr.remove();
+      if (!table.children.length) {
+        createRow({});
+      }
+    });
+
+    tr.appendChild(productTd);
+    tr.appendChild(umTd);
+    tr.appendChild(packageTd);
+    tr.appendChild(marginTd);
+    tr.appendChild(shippingTd);
+    tr.appendChild(packagingTd);
+    tr.appendChild(actionsTd);
+
+    table.appendChild(tr);
+  }
+
+  if (NEW_CUSTOMER_EXISTING_DEFAULT_ROWS && NEW_CUSTOMER_EXISTING_DEFAULT_ROWS.length) {
+    NEW_CUSTOMER_EXISTING_DEFAULT_ROWS.forEach(r => createRow(r));
+  } else {
+    createRow({});
+  }
+
+  document.getElementById("add-default-letter-row-btn").addEventListener("click", function() {
+    createRow({});
+  });
+
+  document.addEventListener("click", function(e) {
+    if (
+      activePicker &&
+      !activePicker.wrapper.contains(e.target) &&
+      !globalProductPanel.contains(e.target)
+    ) {
+      hideGlobalProductPanel();
+    }
+  });
+
+  window.addEventListener("resize", function() {
+    if (activePicker) {
+      positionGlobalPanel(activePicker.textInput);
+    }
+  });
+
+  window.addEventListener("scroll", function() {
+    if (activePicker) {
+      positionGlobalPanel(activePicker.textInput);
+    }
+  }, true);
+</script>
+
+{% endblock %}
