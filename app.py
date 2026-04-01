@@ -1802,7 +1802,7 @@ def add_sales_person(name, phone, email):
     now = datetime.now(timezone.utc).isoformat()
 
     row = {
-        "id": str(uuid.uuid4()),
+        "id": uuid.uuid4().hex[:10],
         "name": (name or "").strip(),
         "phone": normalize_phone(phone),
         "email": (email or "").strip(),
