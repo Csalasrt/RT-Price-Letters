@@ -12,31 +12,173 @@
 
   .print-preview-frame {
     width: 100%;
-    max-width: 1180px;
+    max-width: 850px;
     margin: 0 auto;
     background: #fff;
   }
-  .print-description-input{
-    width:100%;
-    border:none;
-    outline:none;
-    background:transparent;
-    padding:4px 6px;
-    text-align:center;
-    font-size:14px;
-    box-sizing:border-box;
+
+  .print-letter-inner {
+    padding: 28px 34px 18px 34px;
   }
 
-  .print-description-input:focus{
-    background:#fff;
-    border:1px solid #d0d5dd;
-    border-radius:6px;
+  .print-description-input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 4px 6px;
+    text-align: center;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .print-description-input:focus {
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+  }
+
+  .preview-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .preview-toolbar-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .preview-page-title {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .preview-toolbar-right {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .preview-btn,
+  .preview-select {
+    height: 38px;
+    min-width: 140px;
+    box-sizing: border-box;
+  }
+
+  .preview-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
+    white-space: nowrap;
+  }
+
+  .preview-select {
+    max-width: 140px;
+  }
+
+  .preview-save-form {
+    margin: 0;
+  }
+
+  @media print {
+    @page {
+      size: letter portrait;
+      margin: 0.5in;
+    }
+
+    html,
+    body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .print-hide {
+      display: none !important;
+    }
+
+    .card,
+    .card-body,
+    .section-card,
+    .print-preview-frame,
+    .print-preview-shell,
+    .table-responsive {
+      box-shadow: none !important;
+      border: none !important;
+      background: #fff !important;
+      overflow: visible !important;
+    }
+
+    #price-letter-preview {
+      width: 100% !important;
+      max-width: none !important;
+      margin: 0 !important;
+    }
+
+    .print-letter-inner {
+      padding: 0 !important;
+    }
+
+    table {
+      width: 100% !important;
+      table-layout: fixed !important;
+      border-collapse: collapse !important;
+    }
+
+    th,
+    td {
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+    }
+
+    a {
+      color: inherit !important;
+      text-decoration: none !important;
+    }
   }
 </style>
 
-<div class="text-muted-small" style="margin-bottom:12px;">
-  Customer: <strong>{{ quote.get("customer_name","") }}</strong> •
-  Month: <strong>{{ quote.get("month_key","") }}</strong>
+<div class="print-hide preview-toolbar">
+  <div class="preview-toolbar-left">
+    <div class="preview-page-title">Print Preview</div>
+    <div class="text-muted-small">
+      Customer: <strong>{{ quote.get("customer_name","") }}</strong> •
+      Month: <strong>{{ quote.get("month_key","") }}</strong>
+    </div>
+  </div>
+
+  <div class="preview-toolbar-right">
+    {% if from_history %}
+      <a href="{{ url_for('history_page') }}" class="btn btn-outline-secondary preview-btn">
+        ← Back to History
+      </a>
+    {% endif %}
+
+    <select id="export-format" class="form-control preview-select">
+      <option value="pdf">PDF</option>
+      <option value="png">PNG</option>
+    </select>
+
+    <button type="button" class="btn btn-primary preview-btn" id="download-letter-btn">
+      Download Price Letter
+    </button>
+
+    <button type="button" class="btn btn-primary preview-btn" id="save-letter-btn">
+      Save Letter
+    </button>
+  </div>
 </div>
 
 <div class="card section-card shadow-sm">
@@ -44,7 +186,7 @@
     <div class="print-preview-shell">
       <div class="print-preview-frame" id="price-letter-preview">
 
-        <div style="padding:28px 34px 18px 34px;">
+        <div class="print-letter-inner">
 
           <div style="
               display:grid;
@@ -129,10 +271,10 @@
 
                 <thead>
                   <tr>
-                    <th style="width:30%; text-align:center;">Product</th>
-                    <th style="width:23%; text-align:center;">Package</th>
-                    <th style="width:23%; text-align:center;">Delivered Price</th>
-                    <th style="width:24%; text-align:center;">Description</th>
+                    <th style="width:28%; text-align:center;">Product</th>
+                    <th style="width:20%; text-align:center;">Package</th>
+                    <th style="width:22%; text-align:center;">Delivered Price</th>
+                    <th style="width:30%; text-align:center;">Description</th>
                   </tr>
                 </thead>
 
@@ -162,7 +304,7 @@
                       <input
                         type="text"
                         name="row_description"
-                        value="{{ r.get('description', r.get('product','')) }}"
+                        value="{{ (r.get('description') or '').strip() or (r.get('print_description') or '').strip() or r.get('product','') }}"
                         class="print-description-input"
                       >
                     </td>
@@ -182,91 +324,85 @@
   </div>
 </div>
 
-<br>
-
-<div style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-  <div class="text-muted-small">
-    Customer: <strong>{{ quote.get("customer_name","") }}</strong> •
-    Month: <strong>{{ quote.get("month_key","") }}</strong>
-  </div>
-
-  {% if from_history %}
-    <a href="{{ url_for('history_page') }}" class="btn btn-outline-secondary btn-sm">
-      ← Back to History
-    </a>
-  {% endif %}
-
-  <select id="export-format" class="form-control form-control-sm" style="max-width:140px;">
-    <option value="pdf">PDF</option>
-    <option value="png">PNG</option>
-  </select>
-
-  <button type="button" class="btn btn-primary btn-sm" id="download-letter-btn">
-    Download Price Letter
-  </button>
-</div>
+<br class="print-hide">
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
-  async function exportPriceLetter() {
+  async function buildPriceLetterPdf() {
     const preview = document.getElementById("price-letter-preview");
-    const format = document.getElementById("export-format").value;
+    if (!preview) return null;
 
-    if (!preview) return;
+    const canvas = await html2canvas(preview, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff"
+    });
 
+    const imgData = canvas.toDataURL("image/png");
+
+    const customerName = `{{ quote.get("customer_name", "") }}`;
+    const displayDate = `{{ display_date }}`;
+    const safeCustomer = customerName.replace(/[^\w\s-]/g, "").trim() || "PriceLetter";
+    const safeDate = displayDate.replace(/\//g, "-") || "date";
+    const fileBase = `${safeCustomer}-${safeDate}`;
+
+    const { jsPDF } = window.jspdf;
+
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "pt",
+      format: "letter"
+    });
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 36;
+
+    const maxWidth = pageWidth - (margin * 2);
+    const maxHeight = pageHeight - (margin * 2);
+
+    let imgWidth = maxWidth;
+    let imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    if (imgHeight > maxHeight) {
+      imgHeight = maxHeight;
+      imgWidth = (canvas.width * imgHeight) / canvas.height;
+    }
+
+    const x = (pageWidth - imgWidth) / 2;
+    const y = margin;
+
+    pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
+
+    return {
+      pdf,
+      fileName: `${fileBase}.pdf`
+    };
+  }
+
+  async function exportPriceLetter() {
     const button = document.getElementById("download-letter-btn");
     const oldText = button.innerText;
+
     button.disabled = true;
     button.innerText = "Preparing...";
 
     try {
-      const canvas = await html2canvas(preview, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff"
-      });
+      const built = await buildPriceLetterPdf();
+      if (!built) return;
 
-      const imgData = canvas.toDataURL("image/png");
+      built.pdf.save(built.fileName);
 
-      const customerName = `{{ quote.get("customer_name", "") }}`;
-      const displayDate = `{{ display_date }}`;
-      const safeCustomer = customerName.replace(/[^\w\s-]/g, "").trim() || "PriceLetter";
-      const safeDate = displayDate.replace(/\//g, "-") || "date";
-      const fileBase = `${safeCustomer}-${safeDate}`;
-
-      if (format === "png") {
-        const link = document.createElement("a");
-        link.href = imgData;
-        link.download = `${fileBase}.png`;
-        link.click();
-      } else {
-        const { jsPDF } = window.jspdf;
-
-        const pdf = new jsPDF({
-          orientation: "landscape",
-          unit: "px",
-          format: [canvas.width, canvas.height]
-        });
-
-        pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
-        pdf.save(`${fileBase}.pdf`);
-      }
-
-      const resp = await fetch("{{ url_for('printer_mark_printed') }}", {
+      await fetch("{{ url_for('printer_mark_printed') }}", {
         method: "POST",
         headers: {
           "X-Requested-With": "XMLHttpRequest"
         }
       });
 
-      if (!resp.ok) {
-        console.error("Could not clear printed quote. Status:", resp.status);
-      }
-
       window.location.href = "{{ url_for('printer_page') }}";
-
     } catch (err) {
       console.error("Export failed:", err);
       alert("Export failed. Please try again.");
@@ -275,7 +411,51 @@
     }
   }
 
+  async function savePriceLetterPdf() {
+    const button = document.getElementById("save-letter-btn");
+    const oldText = button.innerText;
+
+    button.disabled = true;
+    button.innerText = "Saving...";
+
+    try {
+      const built = await buildPriceLetterPdf();
+      if (!built) return;
+
+      const pdfData = built.pdf.output("datauristring");
+
+      const resp = await fetch("{{ url_for('printer_save_pdf') }}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({
+          file_name: built.fileName,
+          pdf_data: pdfData
+        })
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok || !data.ok) {
+        throw new Error(data.error || "Save failed.");
+      }
+
+      sessionStorage.removeItem("printer_draft_state");
+      sessionStorage.removeItem("keep_product_panel_open");
+
+      window.location.href = data.redirect_url || "{{ url_for('printer_page') }}";
+    } catch (err) {
+      console.error("Save failed:", err);
+      alert("Save failed. Please try again.");
+      button.disabled = false;
+      button.innerText = oldText;
+    }
+  }
+
   document.getElementById("download-letter-btn")?.addEventListener("click", exportPriceLetter);
+  document.getElementById("save-letter-btn")?.addEventListener("click", savePriceLetterPdf);
 </script>
 
 {% endblock %}

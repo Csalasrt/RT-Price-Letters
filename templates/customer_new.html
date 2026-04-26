@@ -1,0 +1,814 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .customer-new-wrap {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0 24px;
+  }
+
+  .customer-new-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 2px 10px rgba(16, 24, 40, 0.04);
+  }
+
+  .customer-new-card-body {
+    padding: 20px;
+  }
+
+  .customer-new-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+
+  .customer-new-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #101828;
+    margin: 0;
+  }
+
+  .customer-new-subtitle {
+    font-size: 13px;
+    color: #667085;
+    margin: 4px 0 0 0;
+  }
+
+  .customer-errors {
+    margin: 0 0 16px 0;
+    padding: 12px 14px;
+    border: 1px solid #fda29b;
+    background: #fff5f5;
+    color: #b42318;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  .customer-errors li + li {
+    margin-top: 4px;
+  }
+
+  .top-entry-row {
+    display: grid;
+    grid-template-columns: minmax(280px, 420px) minmax(260px, 360px);
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 18px;
+  }
+
+  .field-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #667085;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .text-input,
+  .table-select,
+  .table-input {
+    width: 100%;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    box-sizing: border-box;
+  }
+
+  .text-input {
+    height: 40px;
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .section-divider {
+    height: 1px;
+    background: #eaecf0;
+    margin: 14px 0 16px 0;
+  }
+
+  .rows-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .rows-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #101828;
+    margin: 0;
+  }
+
+  .rows-helper {
+    font-size: 12px;
+    color: #667085;
+    margin: 0;
+  }
+
+  .customer-rows-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .customer-rows-table thead th {
+    text-align: center;
+    vertical-align: middle;
+    font-size: 12px;
+    font-weight: 700;
+    color: #475467;
+    padding: 10px 8px;
+    border-bottom: 1px solid #eaecf0;
+    background: #f9fafb;
+  }
+
+  .customer-rows-table tbody td {
+    text-align: center;
+    vertical-align: middle;
+    padding: 10px 8px;
+    border-bottom: 1px solid #f2f4f7;
+  }
+
+  .table-input,
+  .table-select {
+    height: 36px;
+    padding: 6px 8px;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .table-select {
+    text-align-last: center;
+  }
+
+  .readonly-product {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    width: 100%;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #f9fafb;
+    font-size: 13px;
+    font-weight: 600;
+    color: #344054;
+    padding: 6px 8px;
+    box-sizing: border-box;
+  }
+
+  .row-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .duplicate-btn,
+  .remove-row-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .duplicate-btn {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    color: #344054;
+  }
+
+  .duplicate-btn:hover {
+    background: #f2f4f7;
+  }
+
+  .remove-row-btn {
+    border: 1px solid #fda29b;
+    background: #fff5f5;
+    color: #d92d20;
+  }
+
+  .remove-row-btn:hover {
+    background: #ffe4e4;
+  }
+
+  .empty-state-row td {
+    padding: 26px 12px;
+    color: #667085;
+    font-size: 14px;
+    font-style: italic;
+    text-align: center;
+  }
+
+  .bottom-actions {
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .product-picker {
+    position: relative;
+  }
+
+  .product-trigger {
+    width: 100%;
+    height: 40px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px 12px;
+    font-size: 14px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    color: #101828;
+  }
+
+  .product-trigger.placeholder {
+    color: #667085;
+  }
+
+  .product-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.10);
+    z-index: 2000;
+    padding: 6px 0;
+  }
+
+  .product-panel.hidden {
+    display: none;
+  }
+
+  .product-search-wrap {
+    padding: 0 8px 6px 8px;
+    border-bottom: 1px solid #eaecf0;
+  }
+
+  .product-search {
+    width: 100%;
+    height: 30px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    box-sizing: border-box;
+  }
+
+  .product-options {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .product-option {
+    display: block;
+    padding: 4px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .product-option:hover {
+    background: #f9fafb;
+  }
+
+  .product-option input[type="checkbox"] {
+    margin-right: 6px;
+    width: 12px;
+    height: 12px;
+    vertical-align: middle;
+  }
+
+  .product-option-name {
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  .col-product { width: 24%; }
+  .col-um { width: 12%; }
+  .col-package { width: 18%; }
+  .col-description { width: 32%; }
+  .col-actions { width: 14%; }
+
+  @media (max-width: 1000px) {
+    .customer-new-wrap {
+      padding: 0 14px;
+    }
+
+    .top-entry-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="customer-new-wrap">
+  <div class="customer-new-card">
+    <div class="customer-new-card-body">
+
+      <div class="customer-new-header">
+        <div>
+          <h1 class="customer-new-title">Add New Customer</h1>
+          <div class="customer-new-subtitle">
+            Save products, U/M, package type, and description for a brand new customer.
+          </div>
+        </div>
+      </div>
+
+      {% if errors %}
+        <ul class="customer-errors" id="error-box">
+          {% for e in errors %}
+            <li>{{ e }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('customer_new_page') }}" id="customer-new-form">
+        <div class="top-entry-row">
+          <div>
+            <label class="field-label">Customer Name *</label>
+            <input
+              type="text"
+              name="customer_name"
+              class="text-input"
+              value="{{ customer_name if customer_name is defined else '' }}"
+              placeholder="Enter customer name"
+              required
+            >
+          </div>
+
+          <div>
+            <label class="field-label">Products</label>
+
+            <div class="product-picker" id="product-picker">
+              <div class="product-trigger placeholder" id="product-trigger" onclick="toggleProductPanel(event)">
+                <div class="product-trigger-text" id="product-trigger-text">Select products...</div>
+                <div class="product-trigger-arrow">▾</div>
+              </div>
+
+              <div class="product-panel hidden" id="product-panel">
+                <div class="product-search-wrap">
+                  <input
+                    type="text"
+                    id="product-search"
+                    class="product-search"
+                    placeholder="Search products..."
+                    oninput="filterProductOptions()"
+                  >
+                </div>
+
+                <div class="product-options" id="product-options"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="rows-header">
+          <div>
+            <div class="rows-title">Customer Products</div>
+            <div class="rows-helper">
+              Products already on the list show checked. Click the checkbox to add or remove a product group.
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle customer-rows-table">
+            <thead>
+              <tr>
+                <th class="col-product">Product</th>
+                <th class="col-um">U/M</th>
+                <th class="col-package">Package Type</th>
+                <th class="col-description">Description</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="customer-rows-body">
+              <tr class="empty-state-row" id="empty-state-row">
+                <td colspan="5">No products added yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="bottom-actions">
+          <a href="{{ url_for('customers_page') }}" class="btn btn-outline-secondary btn-sm">
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary btn-sm">
+            Save Customer
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  const RAW_COMPANY_PRODUCTS = {{ company_products|tojson if company_products is defined else '[]' }};
+  const EXISTING_ROWS = {{ form_rows|tojson if form_rows is defined else '[]' }};
+
+  const rowsBody = document.getElementById("customer-rows-body");
+  const emptyStateRow = document.getElementById("empty-state-row");
+
+  const productTrigger = document.getElementById("product-trigger");
+  const productTriggerText = document.getElementById("product-trigger-text");
+  const productPanel = document.getElementById("product-panel");
+  const productOptions = document.getElementById("product-options");
+  const productSearch = document.getElementById("product-search");
+
+  function extractProductName(item) {
+    if (typeof item === "string") return item.trim();
+    if (!item || typeof item !== "object") return "";
+    return String(
+      item.product ||
+      item.name ||
+      item.label ||
+      item.title ||
+      item.value ||
+      ""
+    ).trim();
+  }
+
+  function normalizedProducts() {
+    const names = (Array.isArray(RAW_COMPANY_PRODUCTS) ? RAW_COMPANY_PRODUCTS : [])
+      .map(extractProductName)
+      .filter(Boolean);
+
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }
+
+  function normalizeProductValue(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function getAllRows() {
+    return Array.from(rowsBody.querySelectorAll("tr.customer-product-row"));
+  }
+
+  function getRowProduct(tr) {
+    const hidden = tr.querySelector('input[name="row_product"]');
+    return hidden ? String(hidden.value || "").trim() : "";
+  }
+
+  function selectedProducts() {
+    return [...new Set(
+      getAllRows()
+        .map(getRowProduct)
+        .filter(Boolean)
+    )];
+  }
+
+  function isProductSelected(productName) {
+    const target = normalizeProductValue(productName);
+    return selectedProducts().some(p => normalizeProductValue(p) === target);
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function updateTriggerText() {
+    const count = selectedProducts().length;
+    if (count > 0) {
+      productTrigger.classList.remove("placeholder");
+      productTriggerText.textContent = `${count} product${count !== 1 ? "s" : ""} on list`;
+    } else {
+      productTrigger.classList.add("placeholder");
+      productTriggerText.textContent = "Select products...";
+    }
+  }
+
+  function toggleProductPanel(event) {
+    event.stopPropagation();
+    productPanel.classList.toggle("hidden");
+
+    if (!productPanel.classList.contains("hidden")) {
+      renderProductOptions();
+      setTimeout(() => productSearch.focus(), 0);
+    }
+  }
+
+  function closeProductPanel() {
+    productPanel.classList.add("hidden");
+  }
+
+  function filterProductOptions() {
+    const filter = (productSearch.value || "").toLowerCase().trim();
+    const options = document.querySelectorAll(".product-option");
+
+    options.forEach(function(option) {
+      const name = option.getAttribute("data-product-name") || "";
+      option.style.display = name.includes(filter) ? "" : "none";
+    });
+  }
+
+  function renderProductOptions() {
+    const products = normalizedProducts();
+
+    if (!products.length) {
+      productOptions.innerHTML = `
+        <div class="text-muted" style="padding:10px 12px;">
+          No products found.
+        </div>
+      `;
+      return;
+    }
+
+    productOptions.innerHTML = products.map(product => `
+      <label class="product-option" data-product-name="${escapeHtml(product.toLowerCase())}">
+        <input
+          type="checkbox"
+          value="${escapeHtml(product)}"
+          ${isProductSelected(product) ? "checked" : ""}
+        >
+        <span class="product-option-name">${escapeHtml(product)}</span>
+      </label>
+    `).join("");
+
+    productOptions.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+      cb.addEventListener("change", function() {
+        handleProductToggle(this);
+      });
+    });
+
+    filterProductOptions();
+  }
+
+  function updateEmptyState() {
+    const realRows = getAllRows();
+    if (realRows.length > 0) {
+      emptyStateRow.style.display = "none";
+    } else {
+      emptyStateRow.style.display = "";
+    }
+    updateTriggerText();
+  }
+
+  function createPackageTypeSelect(selectedValue = "") {
+    const select = document.createElement("select");
+    select.name = "row_package_type";
+    select.className = "table-select";
+
+    const options = [
+      { value: "", label: "Select" },
+      { value: "Bulk", label: "Bulk" },
+      { value: "Drum", label: "Drum" },
+      { value: "330gal Tote", label: "330gal Tote" },
+      { value: "275gal Tote", label: "275gal Tote" },
+      { value: "Pail", label: "Pail" },
+      { value: "Jug", label: "Jug" },
+      { value: "Bottle", label: "Bottle" },
+      { value: "Bag", label: "Bag" }
+    ];
+
+    options.forEach(opt => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if ((selectedValue || "") === opt.value) option.selected = true;
+      select.appendChild(option);
+    });
+
+    return select;
+  }
+
+  function createUmSelect(selectedValue = "") {
+    const select = document.createElement("select");
+    select.name = "row_um";
+    select.className = "table-select";
+
+    const options = [
+      { value: "", label: "Select" },
+      { value: "LB", label: "LB" },
+      { value: "GAL", label: "GAL" },
+      { value: "EACH", label: "EACH" }
+    ];
+
+    options.forEach(opt => {
+      const option = document.createElement("option");
+      option.value = opt.value;
+      option.textContent = opt.label;
+      if ((selectedValue || "").toUpperCase() === opt.value) option.selected = true;
+      select.appendChild(option);
+    });
+
+    return select;
+  }
+
+  function findLastRowForProduct(productName) {
+    const target = normalizeProductValue(productName);
+    const matching = getAllRows().filter(tr => normalizeProductValue(getRowProduct(tr)) === target);
+    return matching.length ? matching[matching.length - 1] : null;
+  }
+
+  function insertRowUnderProductGroup(tr, productName) {
+    const lastMatchingRow = findLastRowForProduct(productName);
+    if (lastMatchingRow) {
+      lastMatchingRow.insertAdjacentElement("afterend", tr);
+    } else {
+      rowsBody.appendChild(tr);
+    }
+  }
+
+  function buildRowElement(data = {}) {
+    const product = String(data.product || "").trim();
+    if (!product) return null;
+
+    const tr = document.createElement("tr");
+    tr.className = "customer-product-row";
+
+    const productTd = document.createElement("td");
+
+    const hiddenProduct = document.createElement("input");
+    hiddenProduct.type = "hidden";
+    hiddenProduct.name = "row_product";
+    hiddenProduct.value = product;
+
+    const productDisplay = document.createElement("div");
+    productDisplay.className = "readonly-product";
+    productDisplay.textContent = product;
+
+    productTd.appendChild(hiddenProduct);
+    productTd.appendChild(productDisplay);
+
+    const umTd = document.createElement("td");
+    umTd.appendChild(createUmSelect(data.um || ""));
+
+    const packageTd = document.createElement("td");
+    packageTd.appendChild(createPackageTypeSelect(data.package_type || ""));
+
+    const descriptionTd = document.createElement("td");
+    const descriptionInput = document.createElement("input");
+    descriptionInput.type = "text";
+    descriptionInput.name = "row_description";
+    descriptionInput.className = "table-input";
+    descriptionInput.value = data.description || "";
+    descriptionInput.placeholder = "Enter description";
+    descriptionTd.appendChild(descriptionInput);
+
+    const actionsTd = document.createElement("td");
+    actionsTd.innerHTML = `
+      <div class="row-actions">
+        <button type="button" class="duplicate-btn">+</button>
+        <button type="button" class="remove-row-btn">−</button>
+      </div>
+    `;
+
+    actionsTd.querySelector(".duplicate-btn").addEventListener("click", function() {
+      const umValue = tr.querySelector('[name="row_um"]') ? tr.querySelector('[name="row_um"]').value : "";
+      const packageValue = tr.querySelector('[name="row_package_type"]') ? tr.querySelector('[name="row_package_type"]').value : "";
+      const descriptionValue = tr.querySelector('[name="row_description"]') ? tr.querySelector('[name="row_description"]').value : "";
+
+      const newRow = buildRowElement({
+        product: product,
+        um: umValue,
+        package_type: packageValue,
+        description: descriptionValue
+      });
+
+      const lastMatchingRow = findLastRowForProduct(product) || tr;
+      lastMatchingRow.insertAdjacentElement("afterend", newRow);
+      updateEmptyState();
+      renderProductOptions();
+    });
+
+    actionsTd.querySelector(".remove-row-btn").addEventListener("click", function() {
+      tr.remove();
+      updateEmptyState();
+      renderProductOptions();
+    });
+
+    tr.appendChild(productTd);
+    tr.appendChild(umTd);
+    tr.appendChild(packageTd);
+    tr.appendChild(descriptionTd);
+    tr.appendChild(actionsTd);
+
+    return tr;
+  }
+
+  function addProductRow(productName) {
+    const tr = buildRowElement({
+      product: productName,
+      um: "",
+      package_type: "",
+      description: ""
+    });
+    if (!tr) return;
+    insertRowUnderProductGroup(tr, productName);
+    updateEmptyState();
+    renderProductOptions();
+  }
+
+  function removeAllRowsForProduct(productName) {
+    const target = normalizeProductValue(productName);
+    getAllRows().forEach(tr => {
+      if (normalizeProductValue(getRowProduct(tr)) === target) {
+        tr.remove();
+      }
+    });
+    updateEmptyState();
+    renderProductOptions();
+  }
+
+  function handleProductToggle(checkbox) {
+    const productName = checkbox.value || "";
+    if (!productName) return;
+
+    if (checkbox.checked) {
+      if (!isProductSelected(productName)) {
+        addProductRow(productName);
+      } else {
+        updateEmptyState();
+        renderProductOptions();
+      }
+    } else {
+      removeAllRowsForProduct(productName);
+    }
+  }
+
+  if (Array.isArray(EXISTING_ROWS) && EXISTING_ROWS.length) {
+    EXISTING_ROWS.forEach(row => {
+      const tr = buildRowElement({
+        product: row.product || "",
+        um: row.um || "",
+        package_type: row.package_type || "",
+        description: row.description || ""
+      });
+      if (tr) {
+        insertRowUnderProductGroup(tr, row.product || "");
+      }
+    });
+  }
+
+  updateEmptyState();
+  renderProductOptions();
+
+  document.addEventListener("click", function(e) {
+    if (!e.target.closest("#product-picker")) {
+      closeProductPanel();
+    }
+  });
+
+  document.getElementById("customer-new-form").addEventListener("keydown", function(e) {
+    const tag = (e.target.tagName || "").toLowerCase();
+    const type = (e.target.type || "").toLowerCase();
+    const isTextarea = tag === "textarea";
+    const isSubmitButton = tag === "button" || (tag === "input" && type === "submit");
+
+    if (e.key === "Enter" && !isTextarea && !isSubmitButton) {
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("DOMContentLoaded", function () {
+    const errorBox = document.getElementById("error-box");
+
+    if (errorBox) {
+      setTimeout(() => {
+        errorBox.style.transition = "opacity 0.4s ease";
+        errorBox.style.opacity = "0";
+
+        setTimeout(() => {
+          errorBox.remove();
+        }, 400);
+      }, 5000);
+    }
+  });
+</script>
+
+{% endblock %}

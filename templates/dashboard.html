@@ -43,38 +43,18 @@
 /* workflow layout */
 
 .workflow-grid{
-  display:grid;
-  grid-template-columns: 150px 120px 150px 120px 150px;
-  grid-template-rows: auto 70px auto;
+  display:flex;
   justify-content:center;
   align-items:center;
-  row-gap:16px;
+  gap:22px;
+  flex-wrap:wrap;
 }
 
-.workflow-line{
-  width:120px;
-  height:3px;
-  background:#cbd5e1;
-  justify-self:center;
-}
-
-.arrow-down{
-  width:3px;
-  height:70px;
-  background:#cbd5e1;
-  justify-self:center;
-  position:relative;
-}
-
-.arrow-down:after{
-  content:"";
-  position:absolute;
-  bottom:-10px;
-  left:50%;
-  transform:translateX(-50%);
-  border-left:8px solid transparent;
-  border-right:8px solid transparent;
-  border-top:12px solid #cbd5e1;
+.workflow-arrow{
+  font-size:34px;
+  font-weight:700;
+  color:#94a3b8;
+  line-height:1;
 }
 
 /* cards */
@@ -149,20 +129,9 @@
 
     <div class="section-label">PRICING WORKFLOW</div>
 
-    <div class="workflow-grid" style="grid-template-columns: 150px 120px 150px;">
+    <div class="workflow-grid">
 
-      <!-- TOP ROW -->
-      <a href="{{ url_for('printer_page') }}" class="card-link" style="grid-column:1; grid-row:1;">
-        <div class="workflow-card">
-          <img src="{{ url_for('static', filename='images/build_letter_icon.png') }}">
-          <div class="card-title">Build</div>
-          <div class="card-subtext">Create price letters</div>
-        </div>
-      </a>
-
-      <div class="workflow-line" style="grid-column:2; grid-row:1;"></div>
-
-      <a href="{{ url_for('customers_page') }}" class="card-link" style="grid-column:3; grid-row:1;">
+      <a href="{{ url_for('customers_page') }}" class="card-link">
         <div class="workflow-card">
           <img src="{{ url_for('static', filename='images/customers_icon.png') }}">
           <div class="card-title">Customers</div>
@@ -170,24 +139,23 @@
         </div>
       </a>
 
-      <!-- ARROWS -->
-      <div class="arrow-down" style="grid-column:1; grid-row:2;"></div>
-      <div class="arrow-down" style="grid-column:3; grid-row:2;"></div>
+      <div class="workflow-arrow">→</div>
 
-      <!-- BOTTOM ROW -->
-      <a href="{{ url_for('printer_print') }}" class="card-link" style="grid-column:1; grid-row:3;">
+      <a href="{{ url_for('printer_page') }}" class="card-link">
+        <div class="workflow-card">
+          <img src="{{ url_for('static', filename='images/build_letter_icon.png') }}">
+          <div class="card-title">Build</div>
+          <div class="card-subtext">Create price letters</div>
+        </div>
+      </a>
+
+      <div class="workflow-arrow">→</div>
+
+      <a href="{{ url_for('printer_print') }}" class="card-link">
         <div class="workflow-card">
           <img src="{{ url_for('static', filename='images/print_letter_icon.png') }}">
           <div class="card-title">Print Letter</div>
           <div class="card-subtext">Preview & export</div>
-        </div>
-      </a>
-
-      <a href="{{ url_for('todo_page') }}" class="card-link" style="grid-column:3; grid-row:3;">
-        <div class="workflow-card">
-          <img src="{{ url_for('static', filename='images/todos.png') }}">
-          <div class="card-title">To-Do List</div>
-          <div class="card-subtext">Track monthly letters</div>
         </div>
       </a>
 
@@ -207,6 +175,14 @@
           <img src="{{ url_for('static', filename='images/upload_prices_icon.png') }}">
           <div class="card-title">Prices</div>
           <div class="card-subtext">View & manage pricing</div>
+        </div>
+      </a>
+
+      <a href="{{ url_for('todo_page') }}" class="card-link">
+        <div class="tool-card">
+          <img src="{{ url_for('static', filename='images/todos.png') }}">
+          <div class="card-title">To-Do List</div>
+          <div class="card-subtext">Track monthly letters</div>
         </div>
       </a>
 

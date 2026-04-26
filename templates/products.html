@@ -5,7 +5,7 @@
   <div>
     <div style="font-weight:700; font-size:20px;">Products</div>
     <div class="text-muted-small" style="margin-top:4px;">
-      Store product names and LB/GAL values for use across the system.
+      Store product names, default descriptions, and LB/GAL values for use across the system.
     </div>
   </div>
 
@@ -48,6 +48,15 @@
             value="{{ single_product_name or '' }}"
             placeholder="e.g. Methanol"
             required
+          >
+        </div>
+
+        <div class="row-form">
+          <label>Description</label>
+          <input
+            name="description"
+            value="{{ single_description or '' }}"
+            placeholder="e.g. Methanol - Industrial Grade"
           >
         </div>
 
@@ -124,7 +133,8 @@
                 <th style="width:52px; min-width:52px; text-align:center;">
                   <input type="checkbox" id="select-all-products">
                 </th>
-                <th style="min-width:260px;">Product</th>
+                <th style="min-width:220px;">Product</th>
+                <th style="min-width:300px;">Description</th>
                 <th style="min-width:120px;" class="text-end">LB/GAL</th>
                 <th style="min-width:95px;">Added</th>
               </tr>
@@ -142,6 +152,15 @@
                       class="form-control form-control-sm editable-product-name"
                       name="row_product_name"
                       value="{{ p.product }}"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm"
+                      name="row_description"
+                      value="{{ p.description or '' }}"
+                      placeholder="Description"
                     >
                   </td>
 

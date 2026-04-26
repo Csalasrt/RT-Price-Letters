@@ -25,9 +25,20 @@
             {% for r in letter_history %}
                 <tr>
                     <td>
-                    <a href="{{ url_for('open_price_letter_history', entry_id=r.id) }}">
-                        {{ r.file_name }}
-                    </a>
+                      <a href="{{ url_for('open_price_letter_history', entry_id=r.id) }}">
+                        {{ r.customer_name }} 
+                        {% if r.month_key %}
+                          {% set parts = r.month_key.split('-') %}
+                          {% set year = parts[0] %}
+                          {% set mon = parts[1] %}
+                          {% set month_map = {
+                            'JAN':'January','FEB':'February','MAR':'March','APR':'April',
+                            'MAY':'May','JUN':'June','JUL':'July','AUG':'August',
+                            'SEP':'September','OCT':'October','NOV':'November','DEC':'December'
+                          } %}
+                          {{ month_map.get(mon, mon) }} {{ year }}
+                        {% endif %}
+                      </a>
                     </td>
                     <td>{{ r.customer_name }}</td>
                     <td>

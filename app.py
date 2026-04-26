@@ -4,6 +4,7 @@ from functools import wraps
 import json
 import uuid
 import re
+import base64
 from datetime import datetime, timezone, timedelta
 
 
@@ -17,7 +18,7 @@ from wtforms.validators import DataRequired
 from flask import flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, jsonify
 
 
 PRICING_STORE_PATH = os.path.join("data", "pricing_entries.json")
@@ -98,6 +99,7 @@ class CompanyProduct(db.Model):
 
     id = db.Column(db.String(32), primary_key=True, default=lambda: uuid.uuid4().hex[:10])
     product = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.String(500), default="")
     lb_per_gal = db.Column(db.Float, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -136,6 +138,7 @@ class CustomerDefaultRow(db.Model):
     sort_order = db.Column(db.Integer, nullable=False, default=0)
 
     product = db.Column(db.String(255), nullable=False, default="")
+    description = db.Column(db.Text, nullable=False, default="")
     package_type = db.Column(db.String(100), nullable=False, default="")
     um = db.Column(db.String(20), nullable=False, default="")
     margin = db.Column(db.Float, nullable=False, default=15.0)
@@ -392,6 +395,7 @@ def load_customers():
         for row in c.default_rows:
             row_dict = {
                 "product": row.product or "",
+                "description": row.description or "",
                 "package_type": row.package_type or "",
                 "um": row.um or "",
                 "margin": round(float(row.margin or 0.0), 4),
@@ -467,6 +471,7 @@ def save_customers(customers: list):
                 customer_id=customer.id,
                 sort_order=i,
                 product=(row.get("product") or "").strip(),
+                description=(row.get("description") or "").strip(),
                 package_type=(row.get("package_type") or "").strip(),
                 um=normalize_um(row.get("um", "")),
                 margin=to_float(row.get("margin", 15.0), 15.0),
@@ -1286,12 +1291,28 @@ def load_company_products():
         {
             "id": p.id,
             "product": p.product or "",
+            "description": p.description or "",
             "lb_per_gal": float(p.lb_per_gal or 0.0),
             "created_at": p.created_at.isoformat() if p.created_at else datetime.now(timezone.utc).isoformat()
         }
         for p in products
     ]
 
+def get_product_description_map():
+    products = load_company_products() or []
+    desc_map = {}
+
+    for p in products:
+        product_name = (p.get("product") or "").strip()
+        if not product_name:
+            continue
+
+        key = normalize_product_name(product_name)
+        description = (p.get("description") or "").strip()
+
+        desc_map[key] = description if description else product_name
+
+    return desc_map
 
 def save_company_products(products):
     CompanyProduct.query.delete()
@@ -1300,10 +1321,15 @@ def save_company_products(products):
     seen = set()
 
     for item in products or []:
+
+        # -------------------------
+        # CASE 1: string input
+        # -------------------------
         if isinstance(item, str):
             product_name = item.strip()
             if not product_name:
                 continue
+
             key = normalize_product_name(product_name)
             if key in seen:
                 continue
@@ -1313,13 +1339,17 @@ def save_company_products(products):
                 CompanyProduct(
                     id=uuid.uuid4().hex[:10],
                     product=product_name,
+                    description="",   # ✅ already good
                     lb_per_gal=0.0
                 )
             )
-            continue
+            continue  # 🔥 IMPORTANT
 
+        # -------------------------
+        # CASE 2: dict input (THIS IS WHERE YOU ADD IT)
+        # -------------------------
         if isinstance(item, dict):
-            product_name = (item.get("product") or item.get("name") or "").strip()
+            product_name = (item.get("product") or "").strip()
             if not product_name:
                 continue
 
@@ -1328,19 +1358,24 @@ def save_company_products(products):
                 continue
             seen.add(key)
 
-            try:
-                lb_per_gal = float(item.get("lb_per_gal") or 0.0)
-            except Exception:
-                lb_per_gal = 0.0
+            lb_per_gal = to_float(item.get("lb_per_gal", 0.0), 0.0)
 
+            # 🔥 ADD THIS LINE RIGHT HERE
+            description = (item.get("description") or "").strip()
+
+            # 🔥 AND THIS BLOCK RIGHT AFTER
             cleaned.append(
                 CompanyProduct(
                     id=item.get("id") or uuid.uuid4().hex[:10],
                     product=product_name,
+                    description=description,
                     lb_per_gal=lb_per_gal
                 )
             )
 
+    # -------------------------
+    # SAVE TO DB
+    # -------------------------
     for row in cleaned:
         db.session.add(row)
 
@@ -1360,6 +1395,7 @@ def find_customer_by_id(customer_id):
     for row in sorted(c.default_rows, key=lambda r: r.sort_order or 0):
         row_dict = {
             "product": row.product or "",
+            "description": row.description or "",
             "package_type": row.package_type or "",
             "um": row.um or "",
             "margin": round(float(row.margin or 0.0), 4),
@@ -1401,6 +1437,7 @@ def _clean_default_products(values):
 def _blank_default_letter_row():
     return {
         "product": "",
+        "description": "",
         "package_type": "",
         "um": "",
         "margin": 15.0,
@@ -1414,6 +1451,7 @@ def _normalize_default_letter_row(row):
 
     return {
         "product": (row.get("product") or "").strip(),
+        "description": (row.get("description") or "").strip(),
         "package_type": (row.get("package_type") or "").strip(),
         "um": normalize_um(row.get("um", "")),
         "margin": round(to_float(row.get("margin", 15.0), 15.0), 4),
@@ -1453,7 +1491,7 @@ def _find_customer_by_id(customers, customer_id):
     return None
 
 
-def _build_printer_row_from_product(product_name, priced_by_name, default_margin):
+def _build_printer_row_from_product(product_name, priced_by_name, default_margin, description=""):
     company_products = load_company_products() or []
     product_map = {
         normalize_product_name(x.get("product")): x
@@ -1468,6 +1506,8 @@ def _build_printer_row_from_product(product_name, priced_by_name, default_margin
         lb_per_gal = 0.0
 
     matches = priced_by_name.get(normalize_product_name(product_name), [])
+
+    clean_description = (description or "").strip()
 
     if matches:
         p = matches[0]
@@ -1485,6 +1525,7 @@ def _build_printer_row_from_product(product_name, priced_by_name, default_margin
 
         return {
             "product": p.get("product", product_name),
+            "description": clean_description,
             "um": p.get("um", ""),
             "lb_per_gal": lb_per_gal,
             "package_type": "",
@@ -1498,6 +1539,7 @@ def _build_printer_row_from_product(product_name, priced_by_name, default_margin
 
     return {
         "product": product_name,
+        "description": clean_description,
         "um": "",
         "lb_per_gal": lb_per_gal,
         "package_type": "",
@@ -1513,6 +1555,7 @@ def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fall
     default_row = _normalize_default_letter_row(default_row)
 
     product_name = default_row.get("product", "")
+    saved_description = (default_row.get("description") or "").strip()
     package_type = default_row.get("package_type", "")
     saved_um = normalize_um(default_row.get("um", ""))
     saved_margin = to_float(default_row.get("margin", fallback_margin), fallback_margin)
@@ -1534,14 +1577,17 @@ def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fall
     if matched:
         built = build_printer_row_from_priced_product(
             matched,
-            default_margin=saved_margin
+            default_margin=saved_margin,
+            description=saved_description
         )
     else:
         built = build_printer_row_from_name_only(
             product_name,
-            default_margin=saved_margin
+            default_margin=saved_margin,
+            description=saved_description
         )
 
+    built["description"] = saved_description
     built["package_type"] = package_type
     built["shipping"] = round(saved_shipping, 4)
     built["packaging"] = round(saved_packaging, 4)
@@ -1631,19 +1677,20 @@ def build_printer_row_from_pricing_entry(entry):
     }
 
 def normalize_printer_row(row):
-    """
-    Ensures every printer row has the fields needed for U/M conversion.
-    Also keeps older session rows from breaking.
-    """
     product_name = row.get("product", "")
 
     current_um = normalize_um(row.get("um", ""))
     source_um = normalize_um(row.get("source_um", current_um))
 
+    cost = round(to_float(row.get("cost", 0.0), 0.0), 4)
+    source_cost = round(to_float(row.get("source_cost", cost), cost), 4)
+
     price = round(to_float(row.get("price", 0.0), 0.0), 4)
     source_price = round(to_float(row.get("source_price", price), price), 4)
+
     shipping = round(to_float(row.get("shipping", 0.0), 0.0), 4)
     packaging = round(to_float(row.get("packaging", 0.0), 0.0), 4)
+
     final_price = round(
         to_float(row.get("final_price", price + shipping + packaging), price + shipping + packaging),
         4
@@ -1660,10 +1707,12 @@ def normalize_printer_row(row):
 
     return {
         "product": product_name,
+        "description": (row.get("description") or "").strip(),
         "um": current_um,
         "source_um": source_um,
         "package_type": row.get("package_type", ""),
-        "cost": round(to_float(row.get("cost", 0.0), 0.0), 4),
+        "cost": cost,
+        "source_cost": source_cost,
         "margin": round(to_float(row.get("margin", 0.0), 0.0), 4),
         "price": price,
         "source_price": source_price,
@@ -1673,7 +1722,7 @@ def normalize_printer_row(row):
         "weight": weight
     }
 
-def build_printer_row_from_priced_product(p, default_margin=0.0):
+def build_printer_row_from_priced_product(p, default_margin=0.0, description=""):
     product_name = p.get("product", "")
     source_um = normalize_um(p.get("um", ""))
     cost = to_float(p.get("cost"), 0.0)
@@ -1687,10 +1736,12 @@ def build_printer_row_from_priced_product(p, default_margin=0.0):
 
     return {
         "product": product_name,
+        "description": (description or "").strip(),
         "um": source_um,
         "source_um": source_um,
         "package_type": "",
         "cost": round(cost, 4),
+        "source_cost": round(cost, 4),
         "margin": round(margin, 4),
         "price": round(source_price, 4),
         "source_price": round(source_price, 4),
@@ -1701,9 +1752,10 @@ def build_printer_row_from_priced_product(p, default_margin=0.0):
     }
 
 
-def build_printer_row_from_name_only(product_name, default_margin=0.0):
+def build_printer_row_from_name_only(product_name, default_margin=0.0, description=""):
     return {
         "product": product_name,
+        "description": (description or "").strip(),
         "um": "",
         "source_um": "",
         "package_type": "",
@@ -2103,6 +2155,7 @@ def migrate_todo_config_json_to_db(default_user_id=None):
 
 def get_posted_printer_rows(form):
     posted_products = form.getlist("row_product")
+    posted_descriptions = form.getlist("row_description")
     posted_ums = form.getlist("row_um")
     posted_package_types = form.getlist("row_package_type")
     posted_costs = form.getlist("row_cost")
@@ -2111,26 +2164,38 @@ def get_posted_printer_rows(form):
     posted_shipping = form.getlist("row_shipping")
     posted_packaging = form.getlist("row_packaging")
     posted_finals = form.getlist("row_final")
+    posted_source_costs = form.getlist("row_source_cost")
+    posted_source_ums = form.getlist("row_source_um")
+    posted_source_prices = form.getlist("row_source_price")
+    posted_weights = form.getlist("row_weight")
 
     row_count = len(posted_products)
     rows = []
 
     for i in range(row_count):
         product = (posted_products[i] if i < len(posted_products) else "").strip()
+        description = (posted_descriptions[i] if i < len(posted_descriptions) else "").strip()
+
         if not product:
             continue
 
         row = {
             "product": product,
-            "um": posted_ums[i] if i < len(posted_ums) else "",
-            "package_type": posted_package_types[i] if i < len(posted_package_types) else "",
+            "description": description,
+            "um": (posted_ums[i] if i < len(posted_ums) else "").strip(),
+            "package_type": (posted_package_types[i] if i < len(posted_package_types) else "").strip(),
             "cost": posted_costs[i] if i < len(posted_costs) else "0",
             "margin": posted_margins[i] if i < len(posted_margins) else "0",
             "price": posted_prices[i] if i < len(posted_prices) else "0",
             "shipping": posted_shipping[i] if i < len(posted_shipping) else "0",
             "packaging": posted_packaging[i] if i < len(posted_packaging) else "0",
             "final_price": posted_finals[i] if i < len(posted_finals) else "0",
+            "source_cost": posted_source_costs[i] if i < len(posted_source_costs) else posted_costs[i],
+            "source_um": posted_source_ums[i] if i < len(posted_source_ums) else posted_ums[i],
+            "source_price": posted_source_prices[i] if i < len(posted_source_prices) else posted_prices[i],
+            "weight": posted_weights[i] if i < len(posted_weights) else "",
         }
+
         rows.append(normalize_printer_row(row))
 
     return rows
@@ -2739,6 +2804,482 @@ def normalize_margin_record_for_analytics(record):
 
     return r
 
+def parse_customer_default_rows_from_form(form):
+    row_products = form.getlist("default_row_product")
+    row_descriptions = form.getlist("default_row_description")
+    row_package_types = form.getlist("default_row_package_type")
+    row_ums = form.getlist("default_row_um")
+    row_margins = form.getlist("default_row_margin")
+    row_shippings = form.getlist("default_row_shipping")
+    row_packagings = form.getlist("default_row_packaging")
+
+    row_count = max(
+        len(row_products),
+        len(row_descriptions),
+        len(row_package_types),
+        len(row_ums),
+        len(row_margins),
+        len(row_shippings),
+        len(row_packagings),
+        0,
+    )
+
+    submitted_rows = []
+    for i in range(row_count):
+        submitted_rows.append({
+            "product": row_products[i] if i < len(row_products) else "",
+            "description": row_descriptions[i] if i < len(row_descriptions) else "",
+            "package_type": row_package_types[i] if i < len(row_package_types) else "",
+            "um": row_ums[i] if i < len(row_ums) else "",
+            "margin": row_margins[i] if i < len(row_margins) else "",
+            "shipping": row_shippings[i] if i < len(row_shippings) else "",
+            "packaging": row_packagings[i] if i < len(row_packagings) else "",
+        })
+
+    return submitted_rows
+
+
+def parse_customer_historical_rows_from_form(form):
+    row_products = form.getlist("historical_row_product")
+    row_descriptions = form.getlist("historical_row_description")
+    row_package_types = form.getlist("historical_row_package_type")
+    row_ums = form.getlist("historical_row_um")
+    row_shippings = form.getlist("historical_row_shipping")
+    row_packagings = form.getlist("historical_row_packaging")
+    row_final_prices = form.getlist("historical_row_final_price")
+
+    row_count = max(
+        len(row_products),
+        len(row_descriptions),
+        len(row_package_types),
+        len(row_ums),
+        len(row_shippings),
+        len(row_packagings),
+        len(row_final_prices),
+        0,
+    )
+
+    submitted_rows = []
+    for i in range(row_count):
+        submitted_rows.append({
+            "product": row_products[i] if i < len(row_products) else "",
+            "description": row_descriptions[i] if i < len(row_descriptions) else "",
+            "package_type": row_package_types[i] if i < len(row_package_types) else "",
+            "um": row_ums[i] if i < len(row_ums) else "",
+            "shipping": row_shippings[i] if i < len(row_shippings) else "",
+            "packaging": row_packagings[i] if i < len(row_packagings) else "",
+            "final_price": row_final_prices[i] if i < len(row_final_prices) else "",
+        })
+
+    cleaned = []
+    for row in submitted_rows:
+        product = (row.get("product") or "").strip()
+        description = (row.get("description") or "").strip()
+        package_type = (row.get("package_type") or "").strip()
+        um = normalize_um(row.get("um", ""))
+        shipping = to_float(row.get("shipping", 0.0), 0.0)
+        packaging = to_float(row.get("packaging", 0.0), 0.0)
+        final_price = to_float(row.get("final_price", 0.0), 0.0)
+
+        if not any([
+            product,
+            description,
+            package_type,
+            um,
+            abs(shipping) > 0,
+            abs(packaging) > 0,
+            abs(final_price) > 0,
+        ]):
+            continue
+
+        cleaned.append({
+            "product": product,
+            "description": description,
+            "package_type": package_type,
+            "um": um,
+            "shipping": shipping,
+            "packaging": packaging,
+            "final_price": final_price,
+        })
+
+    return cleaned
+
+def parse_customer_simple_rows_from_form(form):
+    row_products = form.getlist("row_product")
+    row_ums = form.getlist("row_um")
+    row_package_types = form.getlist("row_package_type")
+    row_descriptions = form.getlist("row_description")
+
+    row_count = max(
+        len(row_products),
+        len(row_ums),
+        len(row_package_types),
+        len(row_descriptions),
+        0,
+    )
+
+    submitted_rows = []
+    for i in range(row_count):
+        product = (row_products[i] if i < len(row_products) else "").strip()
+        um = normalize_um(row_ums[i] if i < len(row_ums) else "")
+        package_type = (row_package_types[i] if i < len(row_package_types) else "").strip()
+        description = (row_descriptions[i] if i < len(row_descriptions) else "").strip()
+
+        if not product:
+            continue
+
+        submitted_rows.append({
+            "product": product,
+            "description": description,
+            "package_type": package_type,
+            "um": um,
+            "margin": 0.0,
+            "shipping": 0.0,
+            "packaging": 0.0,
+        })
+
+    return submitted_rows
+
+def build_default_rows_from_historical(historical_rows, reference_month, reference_year):
+    output_rows = []
+    errors = []
+
+    for row in historical_rows or []:
+        product = (row.get("product") or "").strip()
+        description = (row.get("description") or "").strip()
+        package_type = (row.get("package_type") or "").strip()
+        um = normalize_um(row.get("um", ""))
+        shipping = to_float(row.get("shipping", 0.0), 0.0)
+        packaging = to_float(row.get("packaging", 0.0), 0.0)
+        final_price = to_float(row.get("final_price", 0.0), 0.0)
+
+        if not product:
+            continue
+
+        if not um:
+            errors.append(f"{product}: UM is required.")
+            continue
+
+        if final_price <= 0:
+            errors.append(f"{product}: Final price must be greater than 0.")
+            continue
+
+        cost, cost_error = get_historical_customer_row_cost(
+            reference_month=reference_month,
+            reference_year=reference_year,
+            product=product,
+            um=um
+        )
+
+        if cost_error:
+            errors.append(cost_error)
+            continue
+
+        if cost <= 0:
+            errors.append(f"{product}: historical cost must be greater than 0.")
+            continue
+
+        margin_pct = calculate_margin_percent(
+            cost=cost,
+            shipping=shipping,
+            packaging=packaging,
+            final_price=final_price
+        )
+
+        output_rows.append({
+            "product": product,
+            "description": description,
+            "package_type": package_type,
+            "um": um,
+            "margin": round(margin_pct, 4),
+            "shipping": round(shipping, 4),
+            "packaging": round(packaging, 4),
+        })
+
+    output_rows = _clean_default_letter_rows(output_rows)
+    return output_rows, errors
+
+
+def get_pricing_entry_for_month_product_um(month_key, product, um):
+    month_key = (month_key or "").strip().upper()
+    product_key = (product or "").strip().lower()
+    um_key = normalize_um(um).lower()
+
+    if not month_key or not product_key or not um_key:
+        return None
+
+    rows = PricingEntry.query.filter_by(month_key=month_key).order_by(PricingEntry.created_at.asc()).all()
+
+    exact = None
+    for r in rows:
+        r_product = (r.product or "").strip().lower()
+        r_um = (r.um or "").strip().lower()
+        if r_product == product_key and r_um == um_key:
+            exact = r
+
+    return exact
+
+
+def get_company_product_map():
+    items = load_company_products() or []
+    result = {}
+
+    for item in items:
+        if isinstance(item, dict):
+            name = (item.get("product") or item.get("name") or "").strip()
+            lb_per_gal = to_float(item.get("lb_per_gal", 0.0), 0.0)
+        else:
+            name = str(item or "").strip()
+            lb_per_gal = 0.0
+
+        if name:
+            result[name.lower()] = {
+                "product": name,
+                "lb_per_gal": lb_per_gal,
+            }
+
+    return result
+
+
+def convert_cost_value(cost, from_um, to_um, lb_per_gal=0.0):
+    cost = to_float(cost, 0.0)
+    from_um = normalize_um(from_um)
+    to_um = normalize_um(to_um)
+    lb_per_gal = to_float(lb_per_gal, 0.0)
+
+    if cost <= 0:
+        return 0.0
+
+    if from_um == to_um:
+        return cost
+
+    if not lb_per_gal or lb_per_gal <= 0:
+        return 0.0
+
+    if from_um == "GAL" and to_um == "LB":
+        return cost / lb_per_gal
+
+    if from_um == "LB" and to_um == "GAL":
+        return cost * lb_per_gal
+
+    return 0.0
+
+
+def get_historical_customer_row_cost(reference_month, reference_year, product, um):
+    month_key = month_key_from(reference_year, reference_month)
+    product = (product or "").strip()
+    um = normalize_um(um)
+
+    if not month_key or not product or not um:
+        return 0.0, f"Missing reference month/year or product/UM."
+
+    exact = get_pricing_entry_for_month_product_um(month_key, product, um)
+    if exact:
+        return float(exact.final_price or 0.0), ""
+
+    rows = PricingEntry.query.filter_by(month_key=month_key).order_by(PricingEntry.created_at.asc()).all()
+
+    fallback = None
+    for r in rows:
+        if (r.product or "").strip().lower() == product.lower():
+            fallback = r
+
+    if not fallback:
+        return 0.0, f"No pricing found for {product} in {month_key}."
+
+    company_product_map = get_company_product_map()
+    lb_per_gal = to_float(company_product_map.get(product.lower(), {}).get("lb_per_gal", 0.0), 0.0)
+
+    converted = convert_cost_value(
+        cost=float(fallback.final_price or 0.0),
+        from_um=(fallback.um or ""),
+        to_um=um,
+        lb_per_gal=lb_per_gal
+    )
+
+    if converted > 0:
+        return converted, ""
+
+    return 0.0, f"No exact pricing found for {product} / {um} in {month_key}, and UM conversion could not be completed."
+
+
+def calculate_margin_percent(cost, shipping, packaging, final_price):
+    cost = to_float(cost, 0.0)
+    shipping = to_float(shipping, 0.0)
+    packaging = to_float(packaging, 0.0)
+    final_price = to_float(final_price, 0.0)
+
+    if cost <= 0 or final_price <= 0:
+        return 0.0
+
+    return ((final_price - shipping - packaging - cost) / cost) * 100.0
+
+def render_customer_profile_with_posted_data(customer_id, errors):
+    real_customer = get_customer_by_id(customer_id)
+    if not real_customer:
+        flash("Customer not found.", "error")
+        return redirect(url_for("customers_page"))
+
+    posted_name = (request.form.get("customer_name") or "").strip()
+    posted_notes = (request.form.get("notes") or "").strip()
+    setup_mode = (request.form.get("customer_setup_mode") or "default").strip().lower()
+
+    posted_default_rows = parse_customer_default_rows_from_form(request.form)
+    posted_historical_rows = parse_customer_historical_rows_from_form(request.form)
+
+    posted_customer = dict(real_customer)
+    posted_customer["name"] = posted_name
+    posted_customer["notes"] = posted_notes
+    posted_customer["default_letter_rows"] = posted_default_rows
+    posted_customer["historical_letter_rows"] = posted_historical_rows
+    posted_customer["historical_reference_month"] = (request.form.get("historical_reference_month") or "").strip().upper()
+
+    hist_year_raw = (request.form.get("historical_reference_year") or "").strip()
+    try:
+        posted_customer["historical_reference_year"] = int(hist_year_raw) if hist_year_raw else ""
+    except Exception:
+        posted_customer["historical_reference_year"] = hist_year_raw
+
+    return render_template(
+        "customer_profile.html",
+        customer=posted_customer,
+        company_products=load_company_products(),
+        errors=errors,
+        active_setup_mode=setup_mode,
+        page="customers",
+        page_title=f"Customer Profile - {posted_customer['name'] or (real_customer.get('name') or '')}"
+    )
+
+def save_customer_template_from_quote(customer_id, rows):
+    customer_id = str(customer_id or "").strip()
+    if not customer_id:
+        return False
+
+    customer = db.session.get(Customer, customer_id)
+    if not customer:
+        return False
+
+    # clear existing template rows for this customer
+    CustomerDefaultRow.query.filter_by(customer_id=customer_id).delete()
+
+    cleaned_rows = []
+    for row in rows or []:
+        product = (row.get("product") or "").strip()
+        if not product:
+            continue
+
+        cleaned_rows.append({
+            "product": product,
+            "description": (row.get("description") or "").strip(),
+            "package_type": (row.get("package_type") or "").strip(),
+            "um": normalize_um(row.get("um", "")),
+            "margin": round(to_float(row.get("margin", 0.0), 0.0), 4),
+            "shipping": round(to_float(row.get("shipping", 0.0), 0.0), 4),
+            "packaging": round(to_float(row.get("packaging", 0.0), 0.0), 4),
+        })
+
+    for i, row in enumerate(cleaned_rows):
+        db.session.add(CustomerDefaultRow(
+            customer_id=customer_id,
+            sort_order=i,
+            product=row["product"],
+            description=row["description"],
+            package_type=row["package_type"],
+            um=row["um"],
+            margin=row["margin"],
+            shipping=row["shipping"],
+            packaging=row["packaging"],
+        ))
+
+    db.session.commit()
+    return True
+
+def finalize_price_letter(quote, user_row=None, save_file=True):
+    quote = dict(quote or {})
+    rows = quote.get("rows") or []
+
+    customer_id = str(quote.get("customer_id") or "").strip()
+    customer_name = str(quote.get("customer_name") or "").strip()
+    month_key = str(quote.get("month_key") or "").strip().upper()
+
+    if not customer_id or not customer_name or not month_key or not rows:
+        return None, "Missing required quote data."
+
+    user_data = _user_to_snapshot(user_row)
+
+    safe_customer = make_safe_filename_part(customer_name)
+    file_display_date = display_date_from_month_key(month_key)
+    safe_file_date = file_display_date.replace("/", "-")
+    created_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    file_name = f"{safe_customer}-{safe_file_date}-{created_stamp}.html"
+    file_path = os.path.join(PRICE_LETTER_FOLDER, file_name)
+
+    if save_file:
+        os.makedirs(PRICE_LETTER_FOLDER, exist_ok=True)
+
+        company_info = load_company_info()
+
+        sales_person = {
+            "name": str(quote.get("sales_person_name") or "").strip(),
+            "phone": str(quote.get("sales_person_phone") or "").strip(),
+            "email": str(quote.get("sales_person_email") or "").strip(),
+        }
+
+        html = render_template(
+            "printer_print.html",
+            quote=quote,
+            quote_rows=rows,
+            company_info=company_info,
+            sales_person=sales_person,
+            display_date=file_display_date,
+            from_history=True,
+            page="history",
+            page_title="Saved Price Letter"
+        )
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(html)
+
+    history_entry = {
+        "id": uuid.uuid4().hex,
+        "customer_name": customer_name,
+        "customer_id": customer_id,
+        "month_key": month_key,
+        "file_name": file_name,
+        "file_path": file_path,
+        "created_by": str(user_data.get("full_name") or "").strip(),
+        "created_by_email": str(user_data.get("email") or "").strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "sales_person_name": str(quote.get("sales_person_name") or "").strip(),
+        "sales_person_phone": str(quote.get("sales_person_phone") or "").strip(),
+        "sales_person_email": str(quote.get("sales_person_email") or "").strip(),
+        "rows": rows,
+        "quote": quote,
+    }
+
+    save_customer_template_from_quote(customer_id, rows)
+
+    saved_entry = add_price_letter_history(history_entry)
+
+    save_price_letter_rows_to_margin_history(quote, user_row=user_row)
+
+    mark_customer_todo_done(
+        user_id=session.get("user_id"),
+        month_key=month_key,
+        customer_id=customer_id,
+        history_id=saved_entry.get("id", ""),
+        file_name=saved_entry.get("file_name", "")
+    )
+
+    session["print_quote"] = {
+        **quote,
+        "id": saved_entry.get("id", ""),
+        "file_name": saved_entry.get("file_name", ""),
+        "file_path": saved_entry.get("file_path", ""),
+    }
+
+    return saved_entry, None
 
 # -------------------------
 # Forms
@@ -2888,6 +3429,7 @@ def pricing_page():
             row_prices = request.form.getlist("row_price")
             row_freights = request.form.getlist("row_freight_tax")
             row_finals = request.form.getlist("row_final_price")
+            row_descriptions = request.form.getlist("row_description")
 
             updated_rows = []
 
@@ -3267,6 +3809,10 @@ def customers_page():
     form["customer_name"] = ""
     form.setlist("default_products", [])
     form["default_letter_rows"] = []
+    form["historical_letter_rows"] = []
+    form["historical_reference_month"] = ""
+    form["historical_reference_year"] = ""
+    form["customer_setup_mode"] = "default"
     form["add_to_recurring_todo"] = ""
 
     if request.method == "POST":
@@ -3275,35 +3821,41 @@ def customers_page():
         if action == "add":
             name = (request.form.get("customer_name") or "").strip()
             add_to_recurring_todo = (request.form.get("add_to_recurring_todo") or "").strip() == "1"
+            setup_mode = (request.form.get("customer_setup_mode") or "default").strip().lower()
 
-            row_products = request.form.getlist("default_row_product")
-            row_package_types = request.form.getlist("default_row_package_type")
-            row_ums = request.form.getlist("default_row_um")
-            row_margins = request.form.getlist("default_row_margin")
-            row_shippings = request.form.getlist("default_row_shipping")
-            row_packagings = request.form.getlist("default_row_packaging")
+            historical_reference_month = (request.form.get("historical_reference_month") or "").strip().upper()
+            historical_reference_year = (request.form.get("historical_reference_year") or "").strip()
 
-            row_count = max(
-                len(row_products),
-                len(row_package_types),
-                len(row_ums),
-                len(row_margins),
-                len(row_shippings),
-                len(row_packagings),
-            )
+            default_submitted_rows = parse_customer_default_rows_from_form(request.form)
+            default_letter_rows = _clean_default_letter_rows(default_submitted_rows)
 
-            submitted_rows = []
-            for i in range(row_count):
-                submitted_rows.append({
-                    "product": row_products[i] if i < len(row_products) else "",
-                    "package_type": row_package_types[i] if i < len(row_package_types) else "",
-                    "um": row_ums[i] if i < len(row_ums) else "",
-                    "margin": row_margins[i] if i < len(row_margins) else "",
-                    "shipping": row_shippings[i] if i < len(row_shippings) else "",
-                    "packaging": row_packagings[i] if i < len(row_packagings) else "",
-                })
+            historical_rows = parse_customer_historical_rows_from_form(request.form)
 
-            default_letter_rows = _clean_default_letter_rows(submitted_rows)
+            form["customer_name"] = name
+            form["add_to_recurring_todo"] = "1" if add_to_recurring_todo else ""
+            form["customer_setup_mode"] = setup_mode
+            form["historical_reference_month"] = historical_reference_month
+            form["historical_reference_year"] = historical_reference_year
+            form["historical_letter_rows"] = historical_rows
+
+            if setup_mode == "historical":
+                if not historical_reference_month or not historical_reference_year:
+                    errors.append("Reference month and year are required for Add From Old Letter.")
+
+                built_rows, historical_errors = build_default_rows_from_historical(
+                    historical_rows=historical_rows,
+                    reference_month=historical_reference_month,
+                    reference_year=historical_reference_year,
+                )
+
+                default_letter_rows = built_rows
+                errors.extend(historical_errors)
+
+                if not default_letter_rows and not historical_errors:
+                    errors.append("Add at least one historical row before saving.")
+            else:
+                if not default_letter_rows:
+                    errors.append("Add at least one default price letter row before saving.")
 
             default_products = _clean_default_products([
                 (row.get("product") or "").strip()
@@ -3311,10 +3863,8 @@ def customers_page():
                 if (row.get("product") or "").strip()
             ])
 
-            form["customer_name"] = name
             form.setlist("default_products", default_products)
             form["default_letter_rows"] = default_letter_rows
-            form["add_to_recurring_todo"] = "1" if add_to_recurring_todo else ""
 
             if not name:
                 errors.append("Customer name is required.")
@@ -3364,44 +3914,65 @@ def customers_page():
         page_title="Customers"
     )
 
+
 @app.route("/customers/<customer_id>")
 @login_required
-def customer_profile_page(customer_id):
+def customer_profile(customer_id):
+    # --- Get customer ---
     customer = find_customer_by_id(customer_id)
     if not customer:
         flash("Customer not found.", "error")
         return redirect(url_for("customers_page"))
 
-    company_products = load_company_products()
+    # --- Get ALL history ---
+    all_history = load_price_letter_history(1000)
 
-    default_letter_rows = _clean_default_letter_rows(
-        customer.get("default_letter_rows") or []
+    # --- Filter history for this customer ---
+    customer_history = [
+        h for h in all_history
+        if str(h.get("customer_id")) == str(customer_id)
+        or (h.get("customer_name") or "").strip().lower() == customer["name"].strip().lower()
+    ]
+
+    # --- Sort newest first ---
+    customer_history.sort(
+        key=lambda x: x.get("created_at", ""),
+        reverse=True
     )
 
-    if not default_letter_rows:
-        fallback_products = _clean_default_products(customer.get("default_products") or [])
-        default_letter_rows = [
-            {
-                "product": p,
-                "package_type": "",
-                "um": "",
-                "margin": 15.0,
-                "shipping": 0.0,
-                "packaging": 0.0,
-            }
-            for p in fallback_products
-        ]
-
-    customer["default_letter_rows"] = default_letter_rows
+    # --- TEMPLATE = most recent letter ---
+    customer_template = None
+    if customer_history:
+        latest = customer_history[0]
+        customer_template = latest  # already contains rows inside quote_json
 
     return render_template(
         "customer_profile.html",
         customer=customer,
-        company_products=company_products,
-        page="customers_profile",
-        page_title="Customer Profile"
+        customer_history=customer_history,
+        customer_template=customer_template
     )
 
+@app.route("/customers/<customer_id>/template/save", methods=["POST"])
+@login_required
+def customer_template_save(customer_id):
+    customer = find_customer_by_id(customer_id)
+
+    if not customer:
+        flash("Customer not found.", "error")
+        return redirect(url_for("customers_page"))
+
+    submitted_rows = parse_customer_default_rows_from_form(request.form)
+    default_letter_rows = _clean_default_letter_rows(submitted_rows)
+
+    if not default_letter_rows:
+        flash("Add at least one template row before saving.", "error")
+        return redirect(url_for("customer_profile", customer_id=customer_id))
+
+    save_customer_template_from_quote(customer_id, default_letter_rows)
+
+    flash("Customer template updated.", "success")
+    return redirect(url_for("customer_profile", customer_id=customer_id))
 
 @app.route("/customers/<customer_id>/save", methods=["POST"])
 @login_required
@@ -3420,51 +3991,61 @@ def customer_profile_save(customer_id):
 
     name = (request.form.get("customer_name") or "").strip()
     notes = (request.form.get("notes") or "").strip()
+    setup_mode = (request.form.get("customer_setup_mode") or "default").strip().lower()
 
-    row_products = request.form.getlist("default_row_product")
-    row_package_types = request.form.getlist("default_row_package_type")
-    row_ums = request.form.getlist("default_row_um")
-    row_margins = request.form.getlist("default_row_margin")
-    row_shippings = request.form.getlist("default_row_shipping")
-    row_packagings = request.form.getlist("default_row_packaging")
+    historical_reference_month = (request.form.get("historical_reference_month") or "").strip().upper()
+    historical_reference_year = (request.form.get("historical_reference_year") or "").strip()
 
-    row_count = max(
-        len(row_products),
-        len(row_package_types),
-        len(row_ums),
-        len(row_margins),
-        len(row_shippings),
-        len(row_packagings),
-    )
-
-    submitted_rows = []
-    for i in range(row_count):
-        submitted_rows.append({
-            "product": row_products[i] if i < len(row_products) else "",
-            "package_type": row_package_types[i] if i < len(row_package_types) else "",
-            "um": row_ums[i] if i < len(row_ums) else "",
-            "margin": row_margins[i] if i < len(row_margins) else "",
-            "shipping": row_shippings[i] if i < len(row_shippings) else "",
-            "packaging": row_packagings[i] if i < len(row_packagings) else "",
-        })
-
-    default_letter_rows = _clean_default_letter_rows(submitted_rows)
-
-    submitted_products = [
-        p.strip()
-        for p in request.form.getlist("default_products")
-        if p.strip()
-    ]
-    default_products = _clean_default_products(submitted_products)
+    errors = []
 
     if not name:
-        flash("Customer name is required.", "error")
-        return redirect(url_for("customer_profile_page", customer_id=customer_id))
+        errors.append("Customer name is required.")
 
     for c in customers:
         if str(c.get("id")) != str(customer_id) and (c.get("name", "").strip().lower() == name.lower()):
-            flash("That customer already exists.", "error")
-            return redirect(url_for("customer_profile_page", customer_id=customer_id))
+            errors.append("That customer already exists.")
+            break
+
+    default_letter_rows = []
+
+    if setup_mode == "historical":
+        if not historical_reference_month or not historical_reference_year:
+            errors.append("Reference month and year are required for Add From Old Letter.")
+
+        historical_rows = parse_customer_historical_rows_from_form(request.form)
+
+        if not errors:
+            default_letter_rows, historical_errors = build_default_rows_from_historical(
+                historical_rows=historical_rows,
+                reference_month=historical_reference_month,
+                reference_year=historical_reference_year,
+            )
+
+            if historical_errors:
+                errors.extend(historical_errors)
+
+            if not historical_errors and not default_letter_rows:
+                errors.append("Add at least one historical row before saving.")
+    else:
+        submitted_rows = parse_customer_default_rows_from_form(request.form)
+        default_letter_rows = _clean_default_letter_rows(submitted_rows)
+
+        if not default_letter_rows:
+            errors.append("Add at least one default price letter row before saving.")
+
+    if errors:
+        return render_customer_profile_with_posted_data(
+            customer_id=customer_id,
+            customers=customers,
+            target=target,
+            errors=errors,
+        )
+
+    default_products = _clean_default_products([
+        (row.get("product") or "").strip()
+        for row in default_letter_rows
+        if (row.get("product") or "").strip()
+    ])
 
     target["name"] = name
     target["notes"] = notes
@@ -3473,7 +4054,7 @@ def customer_profile_save(customer_id):
 
     save_customers(customers)
     flash("Customer profile updated.", "success")
-    return redirect(url_for("customer_profile_page", customer_id=customer_id))
+    return redirect(url_for("customer_profile", customer_id=customer_id))
 
 @app.route("/printer", methods=["GET", "POST"])
 @login_required
@@ -3491,9 +4072,13 @@ def printer_page():
         else (request.args.get("pricing_period") or "").strip()
     )
 
+    # fresh=1 means New List was clicked.
+    # Do NOT reload old draft.
+    is_fresh_new = (request.args.get("fresh") or "").strip() == "1"
+
     draft = session.get("printer_draft") or {}
 
-    if not selected_period and draft.get("month_key") in available_values:
+    if not is_fresh_new and not selected_period and draft.get("month_key") in available_values:
         selected_period = draft.get("month_key")
 
     if not selected_period:
@@ -3559,7 +4144,7 @@ def printer_page():
             selected_customer = _find_customer_by_id(customers, form["customer_id"])
 
             if not selected_customer:
-                errors.append("Select a customer.")
+                # No visible error here. Only print should show required-field errors.
                 quote_rows = existing_rows
             else:
                 default_letter_rows = _clean_default_letter_rows(
@@ -3671,97 +4256,83 @@ def printer_page():
             else:
                 existing_rows = []
 
-            if not form["customer_id"]:
-                errors.append("Select a customer.")
-            if not form["sales_person_id"]:
-                errors.append("Select a salesperson.")
+            # No customer/salesperson validation here.
+            # Errors should only happen when action == "print".
 
-            selected_sales_person = None
-            if form["sales_person_id"]:
-                selected_sales_person = get_sales_person_by_id(form["sales_person_id"])
-                if not selected_sales_person:
-                    errors.append("Selected salesperson was not found.")
+            selected_product_names = []
+            selected_product_name_keys = set()
 
-            if not errors:
-                # Build an ordered list of selected product names from the picker.
-                selected_product_names = []
-                selected_product_name_keys = set()
+            for k in selected_keys:
+                product_name = ""
 
-                for k in selected_keys:
-                    product_name = ""
+                if k in prod_map:
+                    p = prod_map.get(k) or {}
+                    product_name = (p.get("product") or "").strip()
+                elif str(k).startswith("name::"):
+                    product_name = str(k)[6:].strip()
 
-                    if k in prod_map:
-                        p = prod_map.get(k) or {}
-                        product_name = (p.get("product") or "").strip()
-                    elif str(k).startswith("name::"):
-                        product_name = str(k)[6:].strip()
+                normalized_name = normalize_product_name(product_name)
+                if not normalized_name or normalized_name in selected_product_name_keys:
+                    continue
 
-                    normalized_name = normalize_product_name(product_name)
-                    if not normalized_name or normalized_name in selected_product_name_keys:
-                        continue
+                selected_product_name_keys.add(normalized_name)
+                selected_product_names.append(product_name)
 
-                    selected_product_name_keys.add(normalized_name)
-                    selected_product_names.append(product_name)
+            preserved_rows = []
+            preserved_product_keys = set()
 
-                # Preserve all existing rows for products that are still selected.
-                preserved_rows = []
-                preserved_product_keys = set()
+            for row in existing_rows:
+                normalized_row = normalize_printer_row(row)
+                product_key = normalize_product_name(normalized_row.get("product"))
 
-                for row in existing_rows:
-                    normalized_row = normalize_printer_row(row)
-                    product_key = normalize_product_name(normalized_row.get("product"))
-
-                    if product_key and product_key in selected_product_name_keys:
-                        preserved_rows.append(normalized_row)
-                        preserved_product_keys.add(product_key)
-
-                # Add only brand-new products that are selected but not already present.
-                added_rows = []
-
-                for product_name in selected_product_names:
-                    product_key = normalize_product_name(product_name)
-                    if not product_key or product_key in preserved_product_keys:
-                        continue
-
-                    built_row = _build_printer_row_from_product(
-                        product_name=product_name,
-                        priced_by_name=priced_by_name,
-                        default_margin=default_margin
-                    )
-                    built_row = normalize_printer_row(built_row)
-
-                    added_rows.append(built_row)
+                if product_key and product_key in selected_product_name_keys:
+                    preserved_rows.append(normalized_row)
                     preserved_product_keys.add(product_key)
 
-                rebuilt_rows = preserved_rows + added_rows
+            added_rows = []
 
-                kept_count = len(preserved_rows)
-                added_count = len(added_rows)
-                removed_count = max(len(existing_rows) - kept_count, 0)
+            for product_name in selected_product_names:
+                product_key = normalize_product_name(product_name)
+                if not product_key or product_key in preserved_product_keys:
+                    continue
 
-                quote_rows = rebuilt_rows
+                built_row = _build_printer_row_from_product(
+                    product_name=product_name,
+                    priced_by_name=priced_by_name,
+                    default_margin=default_margin
+                )
+                built_row = normalize_printer_row(built_row)
 
-                session["printer_draft"] = {
-                    "month_key": month_key,
-                    "customer_id": form["customer_id"],
-                    "sales_person_id": form["sales_person_id"],
-                    "default_margin": default_margin,
-                    "rows": quote_rows,
-                }
+                added_rows.append(built_row)
+                preserved_product_keys.add(product_key)
 
-                if added_count and removed_count:
-                    flash(
-                        f"Updated list: added {added_count} product(s) and removed {removed_count} product(s).",
-                        "success"
-                    )
-                elif added_count:
-                    flash(f"Added {added_count} product(s) to the list.", "success")
-                elif removed_count:
-                    flash(f"Removed {removed_count} product(s) from the list.", "success")
-                else:
-                    flash("List updated.", "info")
+            rebuilt_rows = preserved_rows + added_rows
+
+            kept_count = len(preserved_rows)
+            added_count = len(added_rows)
+            removed_count = max(len(existing_rows) - kept_count, 0)
+
+            quote_rows = rebuilt_rows
+
+            session["printer_draft"] = {
+                "month_key": month_key,
+                "customer_id": form["customer_id"],
+                "sales_person_id": form["sales_person_id"],
+                "default_margin": default_margin,
+                "rows": quote_rows,
+            }
+
+            if added_count and removed_count:
+                flash(
+                    f"Updated list: added {added_count} product(s) and removed {removed_count} product(s).",
+                    "success"
+                )
+            elif added_count:
+                flash(f"Added {added_count} product(s) to the list.", "success")
+            elif removed_count:
+                flash(f"Removed {removed_count} product(s) from the list.", "success")
             else:
-                quote_rows = existing_rows
+                flash("List updated.", "info")
 
         elif action == "delete_selected":
             draft = session.get("printer_draft") or {}
@@ -3822,8 +4393,32 @@ def printer_page():
                 rebuilt_rows = existing_rows[:]
 
             if idx is not None and 0 <= idx < len(rebuilt_rows):
-                row_copy = dict(rebuilt_rows[idx])
-                rebuilt_rows.insert(idx + 1, normalize_printer_row(row_copy))
+                original = normalize_printer_row(rebuilt_rows[idx])
+
+                cost = to_float(original.get("source_cost", original.get("cost", 0.0)), 0.0)
+                margin = to_float(original.get("margin", 0.0), 0.0)
+
+                fresh_duplicate = {
+                    "product": original.get("product", ""),
+                    "description": original.get("description", ""),
+
+                    "cost": round(cost, 4),
+                    "source_cost": round(cost, 4),
+                    "source_um": original.get("source_um", original.get("um", "")),
+                    "source_price": original.get("source_price", original.get("price", 0.0)),
+                    "weight": original.get("weight", ""),
+
+                    "margin": round(margin, 4),
+
+                    "um": "",
+                    "package_type": "",
+                    "price": 0.0,
+                    "shipping": 0.0,
+                    "packaging": 0.0,
+                    "final_price": 0.0,
+                }
+
+                rebuilt_rows.insert(idx + 1, normalize_printer_row(fresh_duplicate))
                 flash("Row duplicated.", "success")
             else:
                 flash("Could not duplicate that row.", "error")
@@ -3837,38 +4432,237 @@ def printer_page():
                 "default_margin": default_margin,
                 "rows": quote_rows,
             }
+        
+        elif action in ("history_prev", "history_next"):
+            history = load_price_letter_history(limit=500)
+
+            if not history:
+                flash("No saved price letters found.", "info")
+                quote_rows = existing_rows
+            else:
+                current_idx_raw = session.get("printer_history_index")
+
+                try:
+                    current_idx = int(current_idx_raw)
+                except Exception:
+                    current_idx = -1
+
+                if action == "history_prev":
+                    # From blank/new page, go to most recent saved letter.
+                    if current_idx < 0:
+                        next_idx = 0
+                    else:
+                        next_idx = min(current_idx + 1, len(history) - 1)
+
+                else:
+                    # Move toward newer letters.
+                    # If already on newest, right arrow returns to blank new list.
+                    if current_idx <= 0:
+                        session.pop("printer_history_index", None)
+                        session.pop("printer_draft", None)
+                        session.pop("print_quote", None)
+                        session.modified = True
+
+                        flash("Ready for a new list.", "download_success")
+
+                        return redirect(url_for(
+                            "printer_page",
+                            pricing_period=current_key,
+                            fresh="1"
+                        ))
+                    else:
+                        next_idx = current_idx - 1
+
+                entry = history[next_idx] or {}
+                entry_quote = entry.get("quote") or entry
+
+                history_rows = [
+                    normalize_printer_row(r)
+                    for r in (entry_quote.get("rows") or entry.get("rows") or [])
+                ]
+
+                history_customer_id = str(
+                    entry_quote.get("customer_id") or entry.get("customer_id") or ""
+                ).strip()
+
+                history_sales_person_id = str(entry_quote.get("sales_person_id") or "").strip()
+
+                if not history_sales_person_id:
+                    history_sales_name = str(
+                        entry_quote.get("sales_person_name") or entry.get("sales_person_name") or ""
+                    ).strip().lower()
+
+                    history_sales_email = str(
+                        entry_quote.get("sales_person_email") or entry.get("sales_person_email") or ""
+                    ).strip().lower()
+
+                    for s in sales_people:
+                        s_id = str(s.get("id") or "").strip()
+                        s_name = str(s.get("name") or "").strip().lower()
+                        s_email = str(s.get("email") or "").strip().lower()
+
+                        if history_sales_email and s_email == history_sales_email:
+                            history_sales_person_id = s_id
+                            break
+
+                        if history_sales_name and s_name == history_sales_name:
+                            history_sales_person_id = s_id
+                            break
+
+                history_month_key = str(
+                    entry_quote.get("month_key") or entry.get("month_key") or month_key
+                ).strip().upper()
+
+                session["printer_history_index"] = next_idx
+
+                session["printer_draft"] = {
+                    "month_key": history_month_key,
+                    "customer_id": history_customer_id,
+                    "sales_person_id": history_sales_person_id,
+                    "default_margin": default_margin,
+                    "rows": history_rows,
+                }
+
+                session["force_history_load"] = {
+                    "month_key": history_month_key,
+                    "customer_id": history_customer_id,
+                    "sales_person_id": history_sales_person_id,
+                }
+
+                session.modified = True
+
+                flash("Loaded saved price letter.", "success")
+
+                return redirect(url_for(
+                    "printer_page",
+                    pricing_period=history_month_key,
+                    history_load="1"
+                ))
 
         elif action == "clear":
+            # Clear List = wipe only rows. Keep customer, salesperson, and pricing period.
             session.pop("printer_draft", None)
             session.pop("print_quote", None)
+            session.modified = True
 
             form = {
                 "customer_id": form["customer_id"],
                 "sales_person_id": form["sales_person_id"],
-                "default_margin": "15",
+                "default_margin": str(default_margin),
                 "package_type": "",
                 "pricing_period": month_key,
             }
+
             quote_rows = []
+            flash("Price list cleared.", "success")
 
         elif action == "new":
+            session.pop("printer_history_index", None)
             session.pop("printer_draft", None)
             session.pop("print_quote", None)
+            session.modified = True
 
-            form = {
-                "customer_id": "",
-                "sales_person_id": "",
-                "default_margin": "15",
-                "package_type": "",
-                "pricing_period": month_key,
-            }
-            quote_rows = []
+            return redirect(url_for(
+                "printer_page",
+                pricing_period=current_key,
+                fresh="1"
+            ))
+
+        elif action == "save":
+            # Save List = save to history/template/analytics without needing salesperson
+            customer_id = (request.form.get("customer_id") or "").strip()
+            customer_name = (request.form.get("customer_name") or "").strip()
+
+            if not customer_name and customer_id:
+                c = next(
+                    (x for x in customers if str(x.get("id")) == str(customer_id)),
+                    None
+                )
+                if c:
+                    customer_name = c.get("name", "")
+
+            save_rows = get_posted_printer_rows(request.form)
+
+            form["customer_id"] = customer_id
+            form["sales_person_id"] = (request.form.get("sales_person_id") or "").strip()
+            form["pricing_period"] = month_key
+
+            posted_margin = (request.form.get("default_margin") or "").strip()
+            form["default_margin"] = posted_margin or form.get("default_margin", "15")
+
+            if not customer_id:
+                errors.append("Select a customer before saving.")
+            if not save_rows:
+                errors.append("Add at least one product row before saving.")
+
+            if errors:
+                quote_rows = save_rows
+
+                session["printer_draft"] = {
+                    "month_key": month_key,
+                    "customer_id": customer_id,
+                    "sales_person_id": form["sales_person_id"],
+                    "default_margin": form["default_margin"],
+                    "rows": quote_rows,
+                }
+
+            else:
+                quote_data = {
+                    "customer_name": customer_name,
+                    "customer_id": customer_id,
+                    "month_key": month_key,
+
+                    # Salesperson intentionally not required for Save List
+                    "sales_person_id": "",
+                    "sales_person_name": "",
+                    "sales_person_phone": "",
+                    "sales_person_email": "",
+
+                    "rows": save_rows,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+
+                user = find_user_by_id(session.get("user_id"))
+
+                saved_entry, error = finalize_price_letter(
+                    quote=quote_data,
+                    user_row=user,
+                    save_file=False
+                )
+
+                if error:
+                    errors.append(error)
+                    quote_rows = save_rows
+                else:
+                    session["printer_draft"] = {
+                        "month_key": month_key,
+                        "customer_id": customer_id,
+                        "sales_person_id": form["sales_person_id"],
+                        "default_margin": form["default_margin"],
+                        "rows": save_rows,
+                    }
+
+                    # CLEAR everything (same behavior as New List)
+                    session.pop("printer_draft", None)
+                    session.pop("print_quote", None)
+                    session.modified = True
+
+                    flash("Price letter saved. Ready for a new list.", "download_success")
+
+                    return redirect(url_for(
+                        "printer_page",
+                        pricing_period=current_month_key_central(),
+                        fresh="1"
+                    ))
 
         elif action == "print":
             customer_name = (request.form.get("customer_name") or "").strip()
             customer_id = (request.form.get("customer_id") or "").strip()
             sales_person_id = (request.form.get("sales_person_id") or "").strip()
             sales_person = get_sales_person_by_id(sales_person_id)
+
+            if not customer_id:
+                errors.append("Select a customer.")
 
             if not sales_person_id:
                 errors.append("Select a salesperson.")
@@ -3925,7 +4719,7 @@ def printer_page():
 
     prefill_customer_id = (request.args.get("customer_id") or "").strip()
 
-    if prefill_customer_id:
+    if prefill_customer_id and not is_fresh_new:
         form["customer_id"] = prefill_customer_id
         form["pricing_period"] = month_key
 
@@ -3965,7 +4759,7 @@ def printer_page():
 
     else:
         draft = session.get("printer_draft") or {}
-        if draft and draft.get("month_key") == month_key:
+        if not is_fresh_new and draft and draft.get("month_key") == month_key:
             form["customer_id"] = str(draft.get("customer_id") or "")
             form["sales_person_id"] = str(draft.get("sales_person_id") or "")
             form["default_margin"] = str(draft.get("default_margin") or "15")
@@ -3983,6 +4777,23 @@ def printer_page():
         )
         if c:
             customer_name = c.get("name", "")
+
+    force_history_load = session.pop("force_history_load", None)
+
+    if force_history_load:
+        forced_month_key = str(force_history_load.get("month_key") or "").strip().upper()
+        forced_customer_id = str(force_history_load.get("customer_id") or "").strip()
+        forced_sales_person_id = str(force_history_load.get("sales_person_id") or "").strip()
+
+        if forced_month_key:
+            month_key = forced_month_key
+            form["pricing_period"] = forced_month_key
+
+        if forced_customer_id:
+            form["customer_id"] = forced_customer_id
+
+        form["sales_person_id"] = forced_sales_person_id
+        session.modified = True
 
     quote_rows = sorted(
         quote_rows,
@@ -4332,41 +5143,88 @@ def admin_users_page():
         page_title="Admin"
     )
 
-@app.route("/printer/print")
+@app.route("/printer/print", methods=["GET", "POST"])
 @login_required
 def printer_print():
     stored = session.get("print_quote") or {}
     company_info = load_company_info()
     user = find_user_by_id(session.get("user_id"))
 
-    # unwrap the actual quote object
     if isinstance(stored.get("quote"), dict):
         quote = stored.get("quote") or {}
     else:
         quote = stored
 
-    # force rows onto the object the template reads
+    sales_person = {
+        "name": str(
+            quote.get("sales_person_name")
+            or stored.get("sales_person_name")
+            or ""
+        ).strip(),
+        "phone": str(
+            quote.get("sales_person_phone")
+            or stored.get("sales_person_phone")
+            or ""
+        ).strip(),
+        "email": str(
+            quote.get("sales_person_email")
+            or stored.get("sales_person_email")
+            or ""
+        ).strip(),
+    }
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip().lower()
+
+        if not quote:
+            flash("No quote is available to save.", "error")
+            return redirect(url_for("printer_page"))
+
+        if action == "save_letter":
+            saved_entry, error = finalize_price_letter(
+                quote=quote,
+                user_row=user,
+                save_file=True
+            )
+
+            if error:
+                flash(error, "error")
+            else:
+                flash("Letter saved to history and set as this customer's new template.", "success")
+
+            return redirect(url_for("printer_print"))
+
+        elif action == "download_letter":
+            saved_entry, error = finalize_price_letter(
+                quote=quote,
+                user_row=user,
+                save_file=True
+            )
+
+            if error:
+                flash(error, "error")
+                return redirect(url_for("printer_print"))
+
+            flash("Letter downloaded, saved to history, and set as this customer's new template.", "success")
+            return redirect(url_for("printer_print"))
+
     quote_rows = quote.get("rows") or []
+    description_map = get_product_description_map()
 
-    customer_id = (
-        quote.get("customer_id")
-        or stored.get("customer_id")
-        or ""
-    )
-    month_key = (
-        quote.get("month_key")
-        or stored.get("month_key")
-        or ""
-    )
+    for row in quote_rows:
+        product_name = (row.get("product") or "").strip()
+        custom_description = (row.get("description") or "").strip()
 
-    if customer_id and month_key:
-        mark_customer_todo_done(
-            user_id=session.get("user_id"),
-            month_key=str(month_key).strip().upper(),
-            customer_id=str(customer_id).strip(),
-            history_id=stored.get("id", ""),
-            file_name=stored.get("file_name", "")
+        effective_description = (
+            custom_description
+            if custom_description
+            else description_map.get(
+                normalize_product_name(product_name),
+                product_name
+            )
         )
+
+        row["print_description"] = effective_description
 
     display_date = ""
 
@@ -4391,32 +5249,83 @@ def printer_print():
                 "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
             }
 
-            selected_month_num = month_num_map.get(selected_mon)
-            if selected_month_num:
-                display_date = f"{selected_month_num}/1/{selected_year}"
+            month_num = month_num_map.get(selected_mon)
+            if month_num:
+                display_date = f"{month_num}/1/{selected_year}"
         except Exception:
             display_date = ""
-    else:
-        display_date = f"{today.month}/{today.day}/{today.year}"
 
-    sales_person = {
-        "name": quote.get("sales_person_name", "") or stored.get("sales_person_name", ""),
-        "phone": quote.get("sales_person_phone", "") or stored.get("sales_person_phone", ""),
-        "email": quote.get("sales_person_email", "") or stored.get("sales_person_email", ""),
-    }
+    if not display_date:
+        display_date = f"{today.month}/{today.day}/{today.year}"
 
     return render_template(
         "printer_print.html",
         quote=quote,
         quote_rows=quote_rows,
         company_info=company_info,
-        user=user,
         sales_person=sales_person,
         display_date=display_date,
         page="print",
-        page_title="Print Letter"
+        page_title="Print Preview"
     )
 
+@app.route("/printer/save-pdf", methods=["POST"])
+@login_required
+def printer_save_pdf():
+    user = find_user_by_id(session.get("user_id"))
+    quote = session.get("print_quote") or {}
+
+    if not quote:
+        return jsonify({"ok": False, "error": "No quote available."}), 400
+
+    data = request.get_json(silent=True) or {}
+    pdf_data = data.get("pdf_data", "")
+    file_name = data.get("file_name", "")
+
+    if not pdf_data or "," not in pdf_data:
+        return jsonify({"ok": False, "error": "Missing PDF data."}), 400
+
+    safe_name = secure_filename(file_name or f"price-letter-{uuid.uuid4().hex}.pdf")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name += ".pdf"
+
+    os.makedirs(PRICE_LETTER_FOLDER, exist_ok=True)
+    file_path = os.path.join(PRICE_LETTER_FOLDER, safe_name)
+
+    pdf_base64 = pdf_data.split(",", 1)[1]
+
+    with open(file_path, "wb") as f:
+        f.write(base64.b64decode(pdf_base64))
+
+    saved_entry, error = finalize_price_letter(
+        quote=quote,
+        user_row=user,
+        save_file=False
+    )
+
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+
+    row = db.session.get(PriceLetterHistory, saved_entry.get("id"))
+    if row:
+        row.file_name = safe_name
+        row.file_path = file_path
+        db.session.commit()
+
+    session.pop("printer_draft", None)
+    session.pop("print_quote", None)
+    session.modified = True
+
+    flash("Price letter saved. Ready for a new list.", "download_success")
+
+    return jsonify({
+        "ok": True,
+        "redirect_url": url_for(
+            "printer_page",
+            pricing_period=current_month_key_central(),
+            fresh="1"
+        )
+    })
 
 @app.route("/history/price-letter/<entry_id>")
 @login_required
@@ -4530,6 +5439,7 @@ def products_page():
     products = load_company_products()
 
     single_product_name = ""
+    single_description = ""
     single_lb_per_gal = ""
     mass_product_data = ""
 
@@ -4538,9 +5448,11 @@ def products_page():
 
         if action == "add_single_product":
             product_name = (request.form.get("product_name") or "").strip()
+            description = (request.form.get("description") or "").strip()
             lb_raw = (request.form.get("lb_per_gal") or "").strip()
 
             single_product_name = product_name
+            single_description = description
             single_lb_per_gal = lb_raw
 
             if not product_name:
@@ -4562,12 +5474,14 @@ def products_page():
 
                 if key in existing_map:
                     existing_map[key]["product"] = product_name
+                    existing_map[key]["description"] = description
                     existing_map[key]["lb_per_gal"] = lb_per_gal
                     flash("Product updated.", "success")
                 else:
                     products.append({
                         "id": uuid.uuid4().hex[:10],
                         "product": product_name,
+                        "description": description,
                         "lb_per_gal": lb_per_gal,
                         "created_at": datetime.now(timezone.utc).isoformat()
                     })
@@ -4617,17 +5531,17 @@ def products_page():
                     key = normalize_product_name(product_name)
                     if key in existing_map:
                         existing_map[key]["product"] = product_name
+                        existing_map[key]["description"] = existing_map[key].get("description", "")
                         existing_map[key]["lb_per_gal"] = lb_per_gal
                         updated_count += 1
                     else:
-                        row = {
+                        products.append({
                             "id": uuid.uuid4().hex[:10],
                             "product": product_name,
+                            "description": "",
                             "lb_per_gal": lb_per_gal,
                             "created_at": datetime.now(timezone.utc).isoformat()
-                        }
-                        products.append(row)
-                        existing_map[key] = row
+                        })
                         added_count += 1
 
                 if not errors:
@@ -4639,12 +5553,14 @@ def products_page():
         elif action == "save_products_table":
             product_ids = request.form.getlist("product_id")
             row_product_names = request.form.getlist("row_product_name")
+            row_descriptions = request.form.getlist("row_description")
             row_lb_values = request.form.getlist("row_lb_per_gal")
 
             updated_rows = []
 
             for i, product_id in enumerate(product_ids):
                 product_name = (row_product_names[i] if i < len(row_product_names) else "").strip()
+                description = (row_descriptions[i] if i < len(row_descriptions) else "").strip()
                 lb_raw = (row_lb_values[i] if i < len(row_lb_values) else "").strip()
 
                 if not product_name:
@@ -4661,6 +5577,7 @@ def products_page():
                 updated_rows.append({
                     "id": product_id,
                     "product": product_name,
+                    "description": description,
                     "lb_per_gal": lb_per_gal,
                     "created_at": existing.get("created_at") or datetime.now(timezone.utc).isoformat()
                 })
@@ -4690,6 +5607,7 @@ def products_page():
         products=products,
         errors=errors,
         single_product_name=single_product_name,
+        single_description=single_description,
         single_lb_per_gal=single_lb_per_gal,
         mass_product_data=mass_product_data,
         page="app",
@@ -4790,14 +5708,6 @@ def printer_mark_printed():
         user_row=user_snapshot
     )
 
-    if customer_id and month_key:
-        mark_customer_todo_done(
-            user_id=session.get("user_id"),
-            month_key=month_key,
-            customer_id=customer_id,
-            history_id=history_id,
-            file_name=file_name
-        )
 
     session.pop("print_quote", None)
     session.pop("printer_draft", None)
@@ -5158,6 +6068,99 @@ def margin_analytics_page():
 @app.route("/health")
 def health():
     return "ok", 200
+
+@app.route("/api/historical-customer-cost")
+@login_required
+def api_historical_customer_cost():
+    reference_month = (request.args.get("month") or "").strip().upper()
+    reference_year = (request.args.get("year") or "").strip()
+    product = (request.args.get("product") or "").strip()
+    um = normalize_um(request.args.get("um", ""))
+
+    if not reference_month or not reference_year or not product or not um:
+        return jsonify({
+            "ok": False,
+            "cost": "",
+            "error": ""
+        })
+
+    cost, cost_error = get_historical_customer_row_cost(
+        reference_month=reference_month,
+        reference_year=reference_year,
+        product=product,
+        um=um
+    )
+
+    if cost_error:
+        return jsonify({
+            "ok": False,
+            "cost": "",
+            "error": cost_error
+        })
+
+    return jsonify({
+        "ok": True,
+        "cost": round(float(cost or 0.0), 4),
+        "error": ""
+    })
+
+
+@app.route("/customers/new", methods=["GET", "POST"])
+@login_required
+def customer_new_page():
+    company_products = load_company_products()
+    errors = []
+
+    customer_name = ""
+    form_rows = []
+
+    if request.method == "POST":
+        customer_name = (request.form.get("customer_name") or "").strip()
+
+        form_rows = parse_customer_simple_rows_from_form(request.form)
+
+        if not customer_name:
+            errors.append("Customer name is required.")
+
+        if not form_rows:
+            errors.append("Add at least one product row.")
+
+        existing_customers = load_customers()
+        if customer_name:
+            for c in existing_customers:
+                if (c.get("name") or "").strip().lower() == customer_name.lower():
+                    errors.append("A customer with that name already exists.")
+                    break
+
+        if not errors:
+            default_letter_rows = _clean_default_letter_rows(form_rows)
+            default_products = _clean_default_products([
+                (row.get("product") or "").strip()
+                for row in default_letter_rows
+            ])
+
+            existing_customers.append({
+                "id": uuid.uuid4().hex[:10],
+                "name": customer_name,
+                "notes": "",
+                "default_products": default_products,
+                "default_letter_rows": default_letter_rows,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+            save_customers(existing_customers)
+            flash("Customer added successfully.", "success")
+            return redirect(url_for("customers_page"))
+
+    return render_template(
+        "customer_new.html",
+        company_products=company_products,
+        errors=errors,
+        customer_name=customer_name,
+        form_rows=form_rows,
+        page="app",
+        page_title="Add Customer",
+    )
 
 
 # -------------------------

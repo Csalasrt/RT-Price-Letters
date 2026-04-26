@@ -1,613 +1,285 @@
 {% extends "base.html" %}
 {% block content %}
 
-<style>
-  .customer-profile-wrap {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    padding: 0 24px;
-  }
+<div class="container-fluid">
 
-  .customer-profile-topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-  }
-
-  .customer-profile-card .card-body {
-    padding: 18px 20px;
-  }
-
-  .toolbar-field label {
-    font-size: 12px;
-    font-weight: 700;
-    color: #667085;
-    margin-bottom: 6px;
-    display: block;
-  }
-
-  .toolbar-field input,
-  .toolbar-field textarea {
-    width: 100%;
-    border: 1px solid #d0d5dd;
-    border-radius: 8px;
-    padding: 8px 10px;
-  }
-
-  .toolbar-field textarea {
-    min-height: 110px;
-    resize: vertical;
-  }
-
-  .customer-name-save-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-    align-items: end;
-  }
-
-  .section-label {
-    font-size: 12px;
-    font-weight: 700;
-    color: #344054;
-    margin-bottom: 8px;
-    display: block;
-  }
-
-  .default-letter-table {
-    width: 100%;
-    table-layout: fixed;
-    border-collapse: collapse;
-  }
-
-  .default-letter-table th {
-    text-align: center;
-    vertical-align: middle;
-    font-size: 13px;
-    font-weight: 700;
-    color: #667085;
-    padding: 8px 6px;
-    border-bottom: 1px solid #eaecf0;
-  }
-
-  .default-letter-table td {
-    padding: 8px 6px;
-    border-bottom: 1px solid #f2f4f7;
-    vertical-align: middle;
-    text-align: center;
-  }
-
-  .col-product { width: 32%; }
-  .col-um { width: 11%; }
-  .col-package { width: 20%; }
-  .col-margin { width: 11%; }
-  .col-ship { width: 11%; }
-  .col-pack { width: 11%; }
-  .col-actions { width: 4%; }
-
-  .default-letter-table input,
-  .default-letter-table select {
-    width: 100%;
-    height: 34px;
-    padding: 5px 8px;
-    font-size: 13px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    box-sizing: border-box;
-  }
-
-  .default-letter-table input[type="number"] {
-    text-align: center;
-  }
-
-  .product-picker-wrap {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-  }
-
-  .product-input {
-    height: 34px;
-    font-size: 13px;
-    padding: 5px 8px;
-    text-align: center;
-  }
-
-  .row-actions {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .duplicate-btn,
-  .remove-row-btn {
-    height: 26px;
-    width: 26px;
-    font-size: 13px;
-    line-height: 1;
-    border-radius: 6px;
-    padding: 0;
-    cursor: pointer;
-  }
-
-  .duplicate-btn {
-    border: 1px solid #d0d5dd;
-    background: #fff;
-  }
-
-  .duplicate-btn:hover {
-    background: #f2f4f7;
-  }
-
-  .remove-row-btn {
-    border: 1px solid #fda29b;
-    background: #fff5f5;
-    color: #d92d20;
-  }
-
-  .remove-row-btn:hover {
-    background: #ffe4e4;
-  }
-
-  .default-letter-actions {
-    margin-top: 12px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .floating-product-panel {
-    position: fixed;
-    background: #fff;
-    border: 1px solid #d0d5dd;
-    border-radius: 8px;
-    box-shadow: 0 12px 24px rgba(16, 24, 40, 0.18);
-    z-index: 999999;
-    padding: 6px 0;
-    max-height: 260px;
-    overflow-y: auto;
-  }
-
-  .floating-product-panel.hidden {
-    display: none;
-  }
-
-  .floating-product-option {
-    padding: 6px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .floating-product-option:hover,
-  .floating-product-option.active {
-    background: #f9fafb;
-  }
-
-  .floating-product-empty {
-    padding: 8px 10px;
-    font-size: 12px;
-    color: #667085;
-  }
-
-  @media (max-width: 900px) {
-    .customer-profile-wrap {
-      padding: 0 14px;
-    }
-
-    .customer-name-save-row {
-      grid-template-columns: 1fr;
-    }
-
-    .customer-profile-topbar {
-      align-items: flex-start;
-    }
-  }
-</style>
-
-<div class="customer-profile-wrap">
-  <div class="customer-profile-topbar">
-    <div class="text-muted-small" style="text-align:left;">
-      Customer profile settings and default price letter rows
-    </div>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('customers_page') }}">
-      ← Back to Customers
-    </a>
+  <!-- HEADER -->
+  <div style="margin-top:10px; margin-bottom:12px;">
+    <h3 style="font-weight:700;">
+      {{ customer.name }}
+    </h3>
   </div>
 
-  <div class="card section-card shadow-sm customer-profile-card">
+  <!-- TABS -->
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+    <button class="btn btn-primary btn-sm" id="tab-info-btn">Customer Info</button>
+    <button class="btn btn-outline-secondary btn-sm" id="tab-template-btn">Template</button>
+    <button class="btn btn-outline-secondary btn-sm" id="tab-history-btn">History</button>
+    <button class="btn btn-outline-secondary btn-sm" id="tab-analytics-btn">Analytics</button>
+  </div>
+
+  <!-- ========================= -->
+  <!-- CUSTOMER INFO TAB -->
+  <!-- ========================= -->
+  <div id="tab-info" class="card shadow-sm">
     <div class="card-body">
 
-      <form method="POST" action="{{ url_for('customer_profile_save', customer_id=customer.id) }}">
+      <div style="font-weight:700; margin-bottom:10px;">
+        Default Customer Setup
+      </div>
 
-        <div class="customer-name-save-row">
-          <div class="toolbar-field">
-            <label>Customer Name *</label>
-            <input name="customer_name" value="{{ customer.name }}" required>
-          </div>
+      {% if customer.default_letter_rows and customer.default_letter_rows|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle text-center">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Description</th>
+              <th>U/M</th>
+              <th>Package</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in customer.default_letter_rows %}
+            <tr>
+              <td>{{ row.product }}</td>
+              <td>{{ row.description }}</td>
+              <td>{{ row.um }}</td>
+              <td>{{ row.package_type }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="text-muted">No default products configured.</div>
+      {% endif %}
 
-          <button class="btn btn-primary btn-sm">Save</button>
-        </div>
-
-        <div class="toolbar-field" style="margin-top:12px;">
-          <label>Notes</label>
-          <textarea name="notes">{{ customer.notes }}</textarea>
-        </div>
-
-        <div style="height:1px; background:#e5e7eb; margin:14px 0;"></div>
-
-        <label class="section-label">Default Price Letter</label>
-
-        <div class="table-responsive">
-          <table class="table table-sm default-letter-table">
-            <thead>
-              <tr>
-                <th class="col-product">Product</th>
-                <th class="col-um">UM</th>
-                <th class="col-package">Package</th>
-                <th class="col-margin">Margin</th>
-                <th class="col-ship">Ship</th>
-                <th class="col-pack">Pack</th>
-                <th class="col-actions"></th>
-              </tr>
-            </thead>
-            <tbody id="default-letter-rows"></tbody>
-          </table>
-        </div>
-
-        <div class="default-letter-actions">
-          <button type="button" class="btn btn-outline-secondary btn-sm" id="add-default-letter-row-btn">
-            Add Product
-          </button>
-        </div>
-
-      </form>
     </div>
   </div>
+<!-- ========================= -->
+<!-- TEMPLATE TAB -->
+<!-- ========================= -->
+<div id="tab-template" class="card shadow-sm" style="display:none;">
+  <div class="card-body">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+      <div style="font-weight:700;">
+        Saved Template
+      </div>
+
+      <button type="submit" form="templateForm" class="btn btn-primary btn-sm">
+        Save Template
+      </button>
+    </div>
+
+    {% set template_rows = customer.default_letter_rows %}
+
+    {% if template_rows and template_rows|length > 0 %}
+    <form id="templateForm" method="POST" action="{{ url_for('customer_template_save', customer_id=customer.id) }}">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle text-center">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Description</th>
+              <th>U/M</th>
+              <th>Package</th>
+              <th>Margin %</th>
+              <th>Shipping</th>
+              <th>Packaging</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for row in template_rows %}
+            <tr>
+              <td>
+                <input
+                  type="text"
+                  name="default_row_product"
+                  class="form-control form-control-sm text-center"
+                  value="{{ row.product }}"
+                >
+              </td>
+
+              <td>
+                <input
+                  type="text"
+                  name="default_row_description"
+                  class="form-control form-control-sm text-center"
+                  value="{{ row.description }}"
+                >
+              </td>
+
+              <td>
+                <input
+                  type="text"
+                  name="default_row_um"
+                  class="form-control form-control-sm text-center"
+                  value="{{ row.um }}"
+                >
+              </td>
+
+              <td>
+                <input
+                  type="text"
+                  name="default_row_package_type"
+                  class="form-control form-control-sm text-center"
+                  value="{{ row.package_type }}"
+                >
+              </td>
+
+              <td>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="default_row_margin"
+                  class="form-control form-control-sm text-center"
+                  value="{{ row.margin }}"
+                >
+              </td>
+
+              <td>
+                <input
+                  type="number"
+                  step="0.0001"
+                  name="default_row_shipping"
+                  class="form-control form-control-sm text-center"
+                  value="{{ row.shipping }}"
+                >
+              </td>
+
+              <td>
+                <input
+                  type="number"
+                  step="0.0001"
+                  name="default_row_packaging"
+                  class="form-control form-control-sm text-center"
+                  value="{{ row.packaging }}"
+                >
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+    {% else %}
+      <div class="text-muted">
+        No template saved yet. Save or download a price letter to generate one.
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+  <!-- ========================= -->
+  <!-- HISTORY TAB -->
+  <!-- ========================= -->
+  <div id="tab-history" class="card shadow-sm" style="display:none;">
+    <div class="card-body">
+
+      <div style="font-weight:700; margin-bottom:10px;">
+        Customer Price Letter History
+      </div>
+
+      {% if customer_history and customer_history|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>File Name</th>
+              <th>Date</th>
+              <th>Created By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in customer_history %}
+            <tr>
+              <td>
+                <a href="{{ url_for('open_price_letter_history', entry_id=r.id) }}">
+                  {{ r.file_name }}
+                </a>
+              </td>
+
+              <td>
+                {% if r.created_at %}
+                  {% set y = r.created_at[0:4] %}
+                  {% set m = r.created_at[5:7] %}
+                  {% set d = r.created_at[8:10]|int %}
+                  {% set month_map = {
+                    '01':'Jan','02':'Feb','03':'Mar','04':'Apr',
+                    '05':'May','06':'Jun','07':'Jul','08':'Aug',
+                    '09':'Sep','10':'Oct','11':'Nov','12':'Dec'
+                  } %}
+                  {{ month_map.get(m, m) }} {{ d }}, {{ y }}
+                {% endif %}
+              </td>
+
+              <td>{{ r.created_by }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="text-muted">No history found for this customer.</div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- ========================= -->
+  <!-- ANALYTICS TAB -->
+  <!-- ========================= -->
+  <div id="tab-analytics" class="card shadow-sm" style="display:none;">
+    <div class="card-body">
+
+      <div style="font-weight:700; margin-bottom:10px;">
+        Customer Analytics
+      </div>
+
+      <div class="text-muted">
+        Analytics coming soon.
+      </div>
+
+    </div>
+  </div>
+
 </div>
 
-<div id="global-product-panel" class="floating-product-panel hidden"></div>
-
+<!-- ========================= -->
+<!-- TAB SCRIPT -->
+<!-- ========================= -->
 <script>
-  const RAW_COMPANY_PRODUCTS = {{ company_products|tojson }};
-  const PROFILE_EXISTING_DEFAULT_ROWS = {{ customer.default_letter_rows|tojson }};
-  const table = document.getElementById("default-letter-rows");
-  const globalProductPanel = document.getElementById("global-product-panel");
+  const tabs = {
+    info: document.getElementById("tab-info"),
+    template: document.getElementById("tab-template"),
+    history: document.getElementById("tab-history"),
+    analytics: document.getElementById("tab-analytics")
+  };
 
-  let activePicker = null;
-  let activeOptions = [];
-  let activeIndex = -1;
+  const buttons = {
+    info: document.getElementById("tab-info-btn"),
+    template: document.getElementById("tab-template-btn"),
+    history: document.getElementById("tab-history-btn"),
+    analytics: document.getElementById("tab-analytics-btn")
+  };
 
-  function extractProductName(item) {
-    if (typeof item === "string") return item.trim();
-    if (!item || typeof item !== "object") return "";
-    return String(
-      item.product ||
-      item.name ||
-      item.label ||
-      item.title ||
-      item.value ||
-      ""
-    ).trim();
-  }
-
-  function normalizedProducts() {
-    const names = (Array.isArray(RAW_COMPANY_PRODUCTS) ? RAW_COMPANY_PRODUCTS : [])
-      .map(extractProductName)
-      .filter(Boolean);
-
-    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
-  }
-
-  function createPackageTypeSelect(selectedValue = "") {
-    const select = document.createElement("select");
-    select.name = "default_row_package_type";
-
-    const options = [
-      { value: "", label: "Select" },
-      { value: "Bulk", label: "Bulk" },
-      { value: "Drum", label: "Drum" },
-      { value: "330gal Tote", label: "330gal Tote" },
-      { value: "275gal Tote", label: "275gal Tote" },
-      { value: "Pail", label: "Pail" },
-      { value: "Jug", label: "Jug" },
-      { value: "Bottle", label: "Bottle" },
-      { value: "Bag", label: "Bag" }
-    ];
-
-    options.forEach(opt => {
-      const option = document.createElement("option");
-      option.value = opt.value;
-      option.textContent = opt.label;
-      if ((selectedValue || "") === opt.value) {
-        option.selected = true;
-      }
-      select.appendChild(option);
-    });
-
-    return select;
-  }
-
-  function hideGlobalProductPanel() {
-    if (!globalProductPanel) return;
-    globalProductPanel.classList.add("hidden");
-    globalProductPanel.innerHTML = "";
-    activePicker = null;
-    activeOptions = [];
-    activeIndex = -1;
-  }
-
-  function positionGlobalPanel(inputEl) {
-    if (!globalProductPanel || !inputEl) return;
-    const rect = inputEl.getBoundingClientRect();
-    globalProductPanel.style.left = rect.left + "px";
-    globalProductPanel.style.top = (rect.bottom + 4) + "px";
-    globalProductPanel.style.width = rect.width + "px";
-  }
-
-  function setActiveOption(index) {
-    const optionEls = Array.from(globalProductPanel.querySelectorAll(".floating-product-option"));
-    optionEls.forEach(el => el.classList.remove("active"));
-
-    if (!optionEls.length) {
-      activeIndex = -1;
-      return;
-    }
-
-    if (index < 0) index = optionEls.length - 1;
-    if (index >= optionEls.length) index = 0;
-
-    activeIndex = index;
-    optionEls[activeIndex].classList.add("active");
-    optionEls[activeIndex].scrollIntoView({ block: "nearest" });
-  }
-
-  function selectProduct(product) {
-    if (!activePicker) return;
-    activePicker.hiddenInput.value = product;
-    activePicker.textInput.value = product;
-    hideGlobalProductPanel();
-  }
-
-  function renderGlobalProductPanel(filterText = "") {
-    if (!globalProductPanel) return;
-
-    const q = String(filterText || "").trim().toLowerCase();
-    const allProducts = normalizedProducts();
-
-    activeOptions = q
-      ? allProducts.filter(product => product.toLowerCase().includes(q))
-      : allProducts.slice();
-
-    globalProductPanel.innerHTML = "";
-    activeIndex = -1;
-
-    if (!activeOptions.length) {
-      const empty = document.createElement("div");
-      empty.className = "floating-product-empty";
-      empty.textContent = "No matching products";
-      globalProductPanel.appendChild(empty);
-      return;
-    }
-
-    activeOptions.forEach((product, idx) => {
-      const option = document.createElement("div");
-      option.className = "floating-product-option";
-      option.textContent = product;
-      option.dataset.index = String(idx);
-
-      option.addEventListener("mousedown", function(e) {
-        e.preventDefault();
-      });
-
-      option.addEventListener("click", function() {
-        selectProduct(product);
-      });
-
-      globalProductPanel.appendChild(option);
+  function switchTab(active) {
+    Object.keys(tabs).forEach(key => {
+      tabs[key].style.display = (key === active) ? "" : "none";
+      buttons[key].className =
+        key === active
+          ? "btn btn-primary btn-sm"
+          : "btn btn-outline-secondary btn-sm";
     });
   }
 
-  function openGlobalProductPanel(picker) {
-    activePicker = picker;
-    positionGlobalPanel(picker.textInput);
-    renderGlobalProductPanel(picker.textInput.value);
-    globalProductPanel.classList.remove("hidden");
-  }
-
-  function createProductPicker(selectedValue = "") {
-    const wrapper = document.createElement("div");
-    wrapper.className = "product-picker-wrap";
-
-    const hiddenInput = document.createElement("input");
-    hiddenInput.type = "hidden";
-    hiddenInput.name = "default_row_product";
-    hiddenInput.value = selectedValue || "";
-
-    const textInput = document.createElement("input");
-    textInput.type = "text";
-    textInput.className = "product-input";
-    textInput.placeholder = "Select...";
-    textInput.autocomplete = "off";
-    textInput.value = selectedValue || "";
-
-    const picker = { wrapper, hiddenInput, textInput };
-
-    textInput.addEventListener("focus", function() {
-      openGlobalProductPanel(picker);
-    });
-
-    textInput.addEventListener("click", function(e) {
-      e.stopPropagation();
-      openGlobalProductPanel(picker);
-    });
-
-    textInput.addEventListener("input", function() {
-      hiddenInput.value = textInput.value.trim();
-      openGlobalProductPanel(picker);
-    });
-
-    textInput.addEventListener("keydown", function(e) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        if (globalProductPanel.classList.contains("hidden")) {
-          openGlobalProductPanel(picker);
-        }
-        setActiveOption(activeIndex + 1);
-        return;
-      }
-
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        if (globalProductPanel.classList.contains("hidden")) {
-          openGlobalProductPanel(picker);
-        }
-        setActiveOption(activeIndex - 1);
-        return;
-      }
-
-      if (e.key === "Enter") {
-        if (!globalProductPanel.classList.contains("hidden") && activeIndex >= 0 && activeOptions[activeIndex]) {
-          e.preventDefault();
-          selectProduct(activeOptions[activeIndex]);
-        }
-        return;
-      }
-
-      if (e.key === "Escape") {
-        hideGlobalProductPanel();
-      }
-    });
-
-    wrapper.appendChild(hiddenInput);
-    wrapper.appendChild(textInput);
-
-    return picker;
-  }
-
-  function createRow(data = {}) {
-    const tr = document.createElement("tr");
-
-    const productTd = document.createElement("td");
-    const productPicker = createProductPicker(data.product || "");
-    productTd.appendChild(productPicker.wrapper);
-
-    const umTd = document.createElement("td");
-    const umSelect = document.createElement("select");
-    umSelect.name = "default_row_um";
-
-    ["LB", "GAL", "EACH"].forEach(um => {
-      const option = document.createElement("option");
-      option.value = um;
-      option.textContent = um;
-      if ((data.um || "").toUpperCase() === um) {
-        option.selected = true;
-      }
-      umSelect.appendChild(option);
-    });
-    umTd.appendChild(umSelect);
-
-    const packageTd = document.createElement("td");
-    packageTd.appendChild(createPackageTypeSelect(data.package_type || ""));
-
-    const marginTd = document.createElement("td");
-    const marginInput = document.createElement("input");
-    marginInput.type = "number";
-    marginInput.name = "default_row_margin";
-    marginInput.step = "0.0001";
-    marginInput.value = data.margin !== undefined && data.margin !== null ? data.margin : 15;
-    marginTd.appendChild(marginInput);
-
-    const shippingTd = document.createElement("td");
-    const shippingInput = document.createElement("input");
-    shippingInput.type = "number";
-    shippingInput.name = "default_row_shipping";
-    shippingInput.step = "0.0001";
-    shippingInput.value = data.shipping !== undefined && data.shipping !== null ? data.shipping : 0;
-    shippingTd.appendChild(shippingInput);
-
-    const packagingTd = document.createElement("td");
-    const packagingInput = document.createElement("input");
-    packagingInput.type = "number";
-    packagingInput.name = "default_row_packaging";
-    packagingInput.step = "0.0001";
-    packagingInput.value = data.packaging !== undefined && data.packaging !== null ? data.packaging : 0;
-    packagingTd.appendChild(packagingInput);
-
-    const actionsTd = document.createElement("td");
-    actionsTd.innerHTML = `
-      <div class="row-actions">
-        <button type="button" class="duplicate-btn">+</button>
-        <button type="button" class="remove-row-btn">-</button>
-      </div>
-    `;
-
-    actionsTd.querySelector(".duplicate-btn").addEventListener("click", function() {
-      createRow({
-        product: productPicker.hiddenInput.value || productPicker.textInput.value || "",
-        um: umSelect.value || "GAL",
-        package_type: packageTd.querySelector("select").value || "",
-        margin: marginInput.value || 15,
-        shipping: shippingInput.value || 0,
-        packaging: packagingInput.value || 0
-      });
-    });
-
-    actionsTd.querySelector(".remove-row-btn").addEventListener("click", function() {
-      tr.remove();
-      if (!table.children.length) {
-        createRow({});
-      }
-    });
-
-    tr.appendChild(productTd);
-    tr.appendChild(umTd);
-    tr.appendChild(packageTd);
-    tr.appendChild(marginTd);
-    tr.appendChild(shippingTd);
-    tr.appendChild(packagingTd);
-    tr.appendChild(actionsTd);
-
-    table.appendChild(tr);
-  }
-
-  if (PROFILE_EXISTING_DEFAULT_ROWS && PROFILE_EXISTING_DEFAULT_ROWS.length) {
-    PROFILE_EXISTING_DEFAULT_ROWS.forEach(r => createRow(r));
-  } else {
-    createRow({});
-  }
-
-  document.getElementById("add-default-letter-row-btn").addEventListener("click", function() {
-    createRow({});
-  });
-
-  document.addEventListener("click", function(e) {
-    if (
-      activePicker &&
-      !activePicker.wrapper.contains(e.target) &&
-      !globalProductPanel.contains(e.target)
-    ) {
-      hideGlobalProductPanel();
-    }
-  });
-
-  window.addEventListener("resize", function() {
-    if (activePicker) {
-      positionGlobalPanel(activePicker.textInput);
-    }
-  });
-
-  window.addEventListener("scroll", function() {
-    if (activePicker) {
-      positionGlobalPanel(activePicker.textInput);
-    }
-  }, true);
+  buttons.info.onclick = () => switchTab("info");
+  buttons.template.onclick = () => switchTab("template");
+  buttons.history.onclick = () => switchTab("history");
+  buttons.analytics.onclick = () => switchTab("analytics");
 </script>
 
 {% endblock %}

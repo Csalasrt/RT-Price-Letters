@@ -82,18 +82,38 @@
   .price-list-table thead th,
   #quote-table thead th {
     text-align: center !important;
-    vertical-align: middle;
+    vertical-align: middle !important;
   }
 
   #quote-table tbody td {
-    text-align: center;
-    vertical-align: middle;
+    text-align: center !important;
+    vertical-align: middle !important;
   }
 
-  #quote-table .form-control {
-    text-align: center;
+  #quote-table td,
+  #quote-table th {
+    overflow: hidden;
+  }
+
+  #quote-table .form-control,
+  #quote-table .form-select,
+  #quote-table select,
+  #quote-table input[type="text"],
+  #quote-table input[type="number"] {
+    text-align: center !important;
     margin-left: auto;
     margin-right: auto;
+  }
+
+  #quote-table select {
+    text-align-last: center;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  #quote-table td .form-control,
+  #quote-table td select {
+    width: 100%;
   }
 
   .product-panel {
@@ -169,29 +189,54 @@
     font-size: 12px;
   }
 
-  .row-actions {
+  .selection-header-cell,
+  .selection-cell {
+    width: 58px;
+    min-width: 58px;
+    padding-left: 1px !important;
+    padding-right: 6px !important;
+  }
+
+  .selection-header-wrap {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    width: 100%;
   }
 
-  .delete-row-check {
-    width: 16px;
-    height: 16px;
+  .row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding-left: 21.5px;
+    width: 100%;
+  }
+
+  .delete-row-check,
+  #select-all-delete,
+  .duplicate-btn {
+    width: 18px;
+    height: 18px;
     margin: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+    flex: 0 0 18px;
   }
 
   .duplicate-btn {
-    height: 30px;
-    width: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     border: 1px solid #d0d5dd;
     background: #fff;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
+    position: relative;
+    left: -1px;
   }
 
   .duplicate-btn:hover {
@@ -256,7 +301,7 @@
       <div class="build-toolbar">
         <div class="toolbar-field">
           <label>Period *</label>
-          <select name="pricing_period" id="pricing_period" onchange="submitCustomerDefaults('period')" required>
+          <select name="pricing_period" id="pricing_period" onchange="submitCustomerDefaults('period')">
             {% if available_periods and available_periods|length > 0 %}
               {% for p in available_periods %}
                 <option value="{{ p.value }}" {% if selected_pricing_period == p.value %}selected{% endif %}>
@@ -271,7 +316,7 @@
 
         <div class="toolbar-field">
           <label>Customer *</label>
-          <select name="customer_id" id="customer_id" onchange="submitCustomerDefaults('customer')" required>
+          <select name="customer_id" id="customer_id" onchange="submitCustomerDefaults('customer')">
             <option value="">— Select Customer —</option>
             {% for c in customers %}
               <option value="{{ c.id }}" {% if form.customer_id == (c.id|string) %}selected{% endif %}>
@@ -283,7 +328,7 @@
 
         <div class="toolbar-field">
           <label>Salesperson *</label>
-          <select name="sales_person_id" id="sales_person_id" required>
+          <select name="sales_person_id" id="sales_person_id">
             <option value="">— Select Salesperson —</option>
             {% for s in sales_people %}
               <option value="{{ s.id }}" {% if form.sales_person_id == (s.id|string) %}selected{% endif %}>
@@ -360,12 +405,36 @@
       <div class="row-form" style="margin-bottom:0; align-items:end;">
         <div style="display:flex; gap:10px; align-items:end; justify-content:space-between; flex-wrap:wrap; width:100%;">
           <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
-            <button class="btn btn-outline-secondary btn-sm compact-toolbar-btn" type="submit" onclick="setPrinterAction('clear')">
+            <button class="btn btn-outline-secondary btn-sm"
+                    type="submit"
+                    formnovalidate
+                    onclick="setPrinterAction('history_prev')">
+              ←
+            </button>
+
+            <button class="btn btn-outline-secondary btn-sm"
+                    type="submit"
+                    formnovalidate
+                    onclick="setPrinterAction('history_next')">
+              →
+            </button>
+
+            <button class="btn btn-outline-secondary btn-sm" type="submit" formnovalidate onclick="setPrinterAction('clear')">
               Clear List
             </button>
 
-            <button class="btn btn-outline-secondary btn-sm compact-toolbar-btn" type="submit" onclick="setPrinterAction('new')">
+            <button class="btn btn-outline-secondary btn-sm"
+                    type="submit"
+                    formnovalidate
+                    onclick="return startNewBlankList();">
               New List
+            </button>
+            <button class="btn btn-primary btn-sm compact-toolbar-btn"
+                    type="submit"
+                    form="price-list-form"
+                    name="action"
+                    value="save">
+              Save List
             </button>
           </div>
         </div>
@@ -394,18 +463,21 @@
           <table class="table table-sm align-middle" id="quote-table">
             <thead>
               <tr>
-                <th style="width:52px; min-width:52px; text-align:center;">
-                  <input type="checkbox" id="select-all-delete">
+                <th class="selection-header-cell">
+                  <div class="selection-header-wrap">
+                    <input type="checkbox" id="select-all-delete">
+                  </div>
                 </th>
                 <th style="min-width:220px;">Product</th>
-                <th class="text-end" style="min-width:120px;">Our Cost</th>
                 <th style="min-width:90px;">UM</th>
                 <th style="min-width:160px;">Package Type</th>
-                <th class="text-end" style="min-width:120px;">Price</th>
-                <th class="text-end" style="min-width:120px;">Shipping</th>
-                <th class="text-end" style="min-width:120px;">Packaging</th>
-                <th class="text-end" style="min-width:130px;">Final Price</th>
-                <th class="text-end" style="min-width:110px;">Margin %</th>
+                <th style="min-width:120px;">Our Cost</th>
+                <th style="min-width:110px;">Margin %</th>
+                <th style="min-width:120px;">Price</th>
+                <th style="min-width:120px;">Shipping</th>
+                <th style="min-width:120px;">Packaging</th>
+                <th style="min-width:130px;">Final Price</th>
+                
               </tr>
             </thead>
 
@@ -417,7 +489,7 @@
                   data-source-um="{{ (r.get('source_um', r.get('um', '')))|upper }}"
                   data-weight="{{ r.get('weight', '') }}"
                 >
-                  <td>
+                  <td class="selection-cell">
                     <div class="row-actions">
                       <input
                         type="checkbox"
@@ -438,18 +510,14 @@
                     </div>
                   </td>
 
-                  <td style="font-weight:700;">
+                  <td style="font-weight:700; text-align:center;">
                     {{ r.product }}
                     <input type="hidden" name="row_product" value="{{ r.product }}">
-                  </td>
-
-                  <td class="text-end">
-                    <input
-                      class="form-control form-control-sm text-end cost"
-                      name="row_cost"
-                      value="{{ '%.4f'|format(r.cost or 0) }}"
-                      inputmode="decimal"
-                    >
+                    <input type="hidden" name="row_description" value="{{ r.get('description', '') }}">
+                    <input type="hidden" name="row_source_cost" value="{{ '%.4f'|format(r.get('source_cost', r.get('cost', 0)) or 0) }}">
+                    <input type="hidden" name="row_source_um" value="{{ r.get('source_um', r.get('um', '')) }}">
+                    <input type="hidden" name="row_source_price" value="{{ '%.4f'|format(r.get('source_price', r.get('price', 0)) or 0) }}">
+                    <input type="hidden" name="row_weight" value="{{ r.get('weight', '') }}">
                   </td>
 
                   <td>
@@ -472,50 +540,61 @@
                     </select>
                   </td>
 
-                  <td class="text-end">
+                  <td>
                     <input
-                      class="form-control form-control-sm text-end price"
+                      class="form-control form-control-sm cost"
+                      name="row_cost"
+                      value="{{ '%.4f'|format(r.cost or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td>
+                    <input
+                      class="form-control form-control-sm margin"
+                      name="row_margin"
+                      value="{{ '%.2f'|format(r.margin or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+                 
+                  <td>
+                    <input
+                      class="form-control form-control-sm price"
                       name="row_price"
                       value="{{ '%.4f'|format(r.price or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
 
-                  <td class="text-end">
+                  <td>
                     <input
-                      class="form-control form-control-sm text-end shipping"
+                      class="form-control form-control-sm shipping"
                       name="row_shipping"
                       value="{{ '%.4f'|format(r.shipping or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
 
-                  <td class="text-end">
+                  <td>
                     <input
-                      class="form-control form-control-sm text-end packaging"
+                      class="form-control form-control-sm packaging"
                       name="row_packaging"
                       value="{{ '%.4f'|format(r.packaging or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
 
-                  <td class="text-end">
+                  <td>
                     <input
-                      class="form-control form-control-sm text-end final"
+                      class="form-control form-control-sm final"
                       name="row_final"
                       value="{{ '%.4f'|format(r.final_price or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
 
-                  <td class="text-end">
-                    <input
-                      class="form-control form-control-sm text-end margin"
-                      name="row_margin"
-                      value="{{ '%.2f'|format(r.margin or 0) }}"
-                      inputmode="decimal"
-                    >
-                  </td>
+                  
                 </tr>
               {% endfor %}
             </tbody>
@@ -994,11 +1073,14 @@
       actionInput.value = actionValue;
     }
 
-    /*
-      Only destructive actions are allowed to wipe the draft.
-    */
-    if (actionValue === "clear" || actionValue === "new") {
+    if (
+      actionValue === "clear" ||
+      actionValue === "new" ||
+      actionValue === "history_prev" ||
+      actionValue === "history_next"
+    ) {
       sessionStorage.removeItem("printer_draft_state");
+      sessionStorage.removeItem("keep_product_panel_open");
     }
   }
 
@@ -1022,6 +1104,7 @@
     const rows = table.querySelectorAll("tbody tr");
     rows.forEach(function(tr) {
       const productInput = tr.querySelector('input[name="row_product"]');
+      const descriptionInput = tr.querySelector('input[name="row_description"]');
       const umInput = tr.querySelector('select[name="row_um"]');
       const packageInput = tr.querySelector('select[name="row_package_type"]');
       const costInput = tr.querySelector('input[name="row_cost"]');
@@ -1032,6 +1115,7 @@
       const finalInput = tr.querySelector('input[name="row_final"]');
 
       appendHidden(holder, "row_product", productInput ? productInput.value : "");
+      appendHidden(holder, "row_description", descriptionInput ? descriptionInput.value : "");
       appendHidden(holder, "row_um", umInput ? umInput.value : "");
       appendHidden(holder, "row_package_type", packageInput ? packageInput.value : "");
       appendHidden(holder, "row_cost", costInput ? costInput.value : "0");
@@ -1178,6 +1262,7 @@
 
     return Array.from(table.querySelectorAll("tbody tr")).map(function(tr) {
       const productInput = tr.querySelector('input[name="row_product"]');
+      const descriptionInput = tr.querySelector('input[name="row_description"]');
       const umInput = tr.querySelector('select[name="row_um"]');
       const packageInput = tr.querySelector('select[name="row_package_type"]');
       const costInput = tr.querySelector('input[name="row_cost"]');
@@ -1189,6 +1274,7 @@
 
       return {
         product: productInput ? productInput.value : "",
+        description: descriptionInput ? descriptionInput.value : "",
         um: umInput ? umInput.value : "",
         package_type: packageInput ? packageInput.value : "",
         cost: costInput ? costInput.value : "0",
@@ -1220,6 +1306,7 @@
 
     state.rows.forEach(function(row) {
       appendHidden(holder, "row_product", row.product || "");
+      appendHidden(holder, "row_description", row.description || "");
       appendHidden(holder, "row_um", row.um || "");
       appendHidden(holder, "row_package_type", row.package_type || "");
       appendHidden(holder, "row_cost", row.cost || "0");
@@ -1243,11 +1330,6 @@
       return;
     }
 
-    /*
-      Never restore after destructive actions:
-      clear / new
-      Those are the only times we want data gone.
-    */
     const currentActionEl = document.getElementById("printer-action");
     const currentAction = currentActionEl ? currentActionEl.value : "";
 
@@ -1256,9 +1338,6 @@
       return;
     }
 
-    /*
-      Restore toolbar selections if they are blank.
-    */
     if (!getToolbarFieldValue("pricing_period") && state.pricing_period) {
       setToolbarFieldValue("pricing_period", state.pricing_period);
     }
@@ -1271,10 +1350,6 @@
       setToolbarFieldValue("sales_person_id", state.sales_person_id);
     }
 
-    /*
-      If the page came back with no quote table rendered,
-      rebuild hidden rows so the next submit carries them forward.
-    */
     const table = document.getElementById("quote-table");
     if (!table && state.rows && state.rows.length) {
       rebuildRowsFromDraft(state);
@@ -1325,9 +1400,147 @@
         setTimeout(() => {
           errorBox.remove();
         }, 400);
-      }, 5000); // 5 seconds
+      }, 5000);
     }
   });
+</script>
+
+<script>
+  function autoSavePrinterDraft() {
+    const state = {
+      pricing_period: document.getElementById("pricing_period")?.value || "",
+      customer_id: document.getElementById("customer_id")?.value || "",
+      sales_person_id: document.getElementById("sales_person_id")?.value || "",
+      rows: []
+    };
+
+    document.querySelectorAll("#quote-table tbody tr").forEach(function(tr) {
+      state.rows.push({
+        product: tr.querySelector('input[name="row_product"]')?.value || "",
+        description: tr.querySelector('input[name="row_description"]')?.value || "",
+        cost: tr.querySelector('input[name="row_cost"]')?.value || "",
+        um: tr.querySelector('select[name="row_um"]')?.value || "",
+        package_type: tr.querySelector('select[name="row_package_type"]')?.value || "",
+        price: tr.querySelector('input[name="row_price"]')?.value || "",
+        shipping: tr.querySelector('input[name="row_shipping"]')?.value || "",
+        packaging: tr.querySelector('input[name="row_packaging"]')?.value || "",
+        final: tr.querySelector('input[name="row_final"]')?.value || "",
+        margin: tr.querySelector('input[name="row_margin"]')?.value || ""
+      });
+    });
+
+    sessionStorage.setItem("printer_draft_state", JSON.stringify(state));
+  }
+
+  function restorePrinterDraft() {
+    const raw = sessionStorage.getItem("printer_draft_state");
+    if (!raw) return;
+
+    let state;
+    try {
+      state = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    if (state.pricing_period) {
+      const period = document.getElementById("pricing_period");
+      if (period) period.value = state.pricing_period;
+    }
+
+    if (state.customer_id) {
+      const customer = document.getElementById("customer_id");
+      if (customer) customer.value = state.customer_id;
+    }
+
+    if (state.sales_person_id) {
+      const salesperson = document.getElementById("sales_person_id");
+      if (salesperson) salesperson.value = state.sales_person_id;
+    }
+
+    const tableRows = document.querySelectorAll("#quote-table tbody tr");
+
+    state.rows.forEach(function(savedRow, index) {
+      const tr = tableRows[index];
+      if (!tr) return;
+
+      const currentProduct =
+        tr.querySelector('input[name="row_product"]')?.value || "";
+
+      const savedProduct = savedRow.product || "";
+
+      // IMPORTANT:
+      // Do not restore old row data into a different product row.
+      // This prevents duplicated rows from getting overwritten by the next row's old cost.
+      if (
+        currentProduct.trim().toLowerCase() !== savedProduct.trim().toLowerCase()
+      ) {
+        return;
+      }
+
+      const setVal = (selector, value) => {
+        const el = tr.querySelector(selector);
+        if (el) el.value = value || "";
+      };
+
+      setVal('input[name="row_cost"]', savedRow.cost);
+      setVal('select[name="row_um"]', savedRow.um);
+      setVal('select[name="row_package_type"]', savedRow.package_type);
+      setVal('input[name="row_price"]', savedRow.price);
+      setVal('input[name="row_shipping"]', savedRow.shipping);
+      setVal('input[name="row_packaging"]', savedRow.packaging);
+      setVal('input[name="row_final"]', savedRow.final);
+      setVal('input[name="row_margin"]', savedRow.margin);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("history_load") === "1") {
+      sessionStorage.removeItem("printer_draft_state");
+      sessionStorage.removeItem("keep_product_panel_open");
+      return;
+    }
+
+    restorePrinterDraft();
+
+    document.addEventListener("input", function(e) {
+      if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
+        autoSavePrinterDraft();
+      }
+    });
+
+    document.addEventListener("change", function(e) {
+      if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
+        autoSavePrinterDraft();
+      }
+    });
+
+    window.addEventListener("beforeunload", autoSavePrinterDraft);
+  });
+</script>
+
+<script>
+  function startNewBlankList() {
+    if (!confirm("Start a new blank list?")) {
+      return false;
+    }
+
+    sessionStorage.removeItem("printer_draft_state");
+    sessionStorage.removeItem("keep_product_panel_open");
+
+    const customerEl = document.getElementById("customer_id");
+    const salesEl = document.getElementById("sales_person_id");
+    const periodEl = document.getElementById("pricing_period");
+    const holder = document.getElementById("existing-row-state");
+
+    if (customerEl) customerEl.value = "";
+    if (salesEl) salesEl.value = "";
+    if (holder) holder.innerHTML = "";
+
+    setPrinterAction("new");
+    return true;
+  }
 </script>
 
 {% endblock %}
