@@ -128,6 +128,21 @@ class Customer(db.Model):
         lazy=True,
         order_by="CustomerDefaultRow.sort_order.asc()"
     )
+    locations = db.relationship(
+        "CustomerLocation",
+        backref="customer",
+        cascade="all, delete-orphan",
+        lazy=True,
+        order_by="CustomerLocation.location_name.asc()"
+    )
+
+class CustomerLocation(db.Model):
+    __tablename__ = "customer_locations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.String(32), db.ForeignKey("customers.id"), nullable=False, index=True)
+    location_name = db.Column(db.String(255), nullable=False, default="")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
 class CustomerDefaultRow(db.Model):
@@ -414,6 +429,7 @@ def load_customers():
             "id": c.id,
             "name": c.name or "",
             "notes": c.notes or "",
+            "locations": [loc.location_name for loc in c.locations],
             "default_products": default_products,
             "default_letter_rows": default_letter_rows,
             "created_at": c.created_at.isoformat() if c.created_at else datetime.now(timezone.utc).isoformat(),
@@ -423,6 +439,7 @@ def load_customers():
 
 
 def save_customers(customers: list):
+    CustomerLocation.query.delete()
     CustomerDefaultRow.query.delete()
     Customer.query.delete()
 
@@ -449,6 +466,13 @@ def save_customers(customers: list):
         )
         db.session.add(customer)
         db.session.flush()
+        for location_name in c.get("locations", []) or []:
+            clean_location = str(location_name or "").strip()
+            if clean_location:
+                db.session.add(CustomerLocation(
+                    customer_id=customer.id,
+                    location_name=clean_location
+                ))
 
         default_rows = _clean_default_letter_rows(c.get("default_letter_rows") or [])
 
@@ -1412,6 +1436,7 @@ def find_customer_by_id(customer_id):
         "id": c.id,
         "name": c.name or "",
         "notes": c.notes or "",
+            "locations": [loc.location_name for loc in c.locations],
         "default_products": _clean_default_products(default_products),
         "default_letter_rows": default_letter_rows,
         "created_at": c.created_at.isoformat() if c.created_at else datetime.now(timezone.utc).isoformat(),
@@ -1589,14 +1614,18 @@ def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fall
 
     built["description"] = saved_description
     built["package_type"] = package_type
-    built["shipping"] = round(saved_shipping, 4)
-    built["packaging"] = round(saved_packaging, 4)
+    built["pre_shipping"] = round(saved_shipping, 4)
+    built["pre_packaging"] = round(saved_packaging, 4)
+    built["add_shipping"] = 0.0
+    built["add_packaging"] = 0.0
     built["margin"] = round(saved_margin, 4)
 
     cost = to_float(built.get("cost", 0.0), 0.0)
-    price = cost * (1.0 + saved_margin / 100.0)
-    final_price = price + saved_shipping + saved_packaging
+    final_cost = cost + saved_shipping + saved_packaging
+    price = final_cost * (1.0 + saved_margin / 100.0)
+    final_price = price
 
+    built["final_cost"] = round(final_cost, 4)
     built["price"] = round(price, 4)
     built["source_price"] = round(price, 4)
     built["final_price"] = round(final_price, 4)
@@ -1685,16 +1714,38 @@ def normalize_printer_row(row):
     cost = round(to_float(row.get("cost", 0.0), 0.0), 4)
     source_cost = round(to_float(row.get("source_cost", cost), cost), 4)
 
-    price = round(to_float(row.get("price", 0.0), 0.0), 4)
-    source_price = round(to_float(row.get("source_price", price), price), 4)
+    pre_shipping = round(to_float(row.get("pre_shipping", 0.0), 0.0), 4)
+    pre_packaging = round(to_float(row.get("pre_packaging", 0.0), 0.0), 4)
 
-    shipping = round(to_float(row.get("shipping", 0.0), 0.0), 4)
-    packaging = round(to_float(row.get("packaging", 0.0), 0.0), 4)
-
-    final_price = round(
-        to_float(row.get("final_price", price + shipping + packaging), price + shipping + packaging),
+    final_cost = round(
+        to_float(row.get("final_cost", cost + pre_shipping + pre_packaging), cost + pre_shipping + pre_packaging),
         4
     )
+
+    margin = round(to_float(row.get("margin", 0.0), 0.0), 4)
+
+    price = round(
+        to_float(row.get("price", final_cost * (1.0 + margin / 100.0)), final_cost * (1.0 + margin / 100.0)),
+        4
+    )
+
+    source_price = round(to_float(row.get("source_price", price), price), 4)
+
+    add_shipping = round(to_float(row.get("add_shipping", 0.0), 0.0), 4)
+    add_packaging = round(to_float(row.get("add_packaging", 0.0), 0.0), 4)
+
+    posted_final = row.get("final_price")
+
+    if posted_final not in (None, ""):
+        final_price = round(
+            to_float(posted_final, price + add_shipping + add_packaging),
+            4
+        )
+    else:
+        final_price = round(
+            price + add_shipping + add_packaging,
+            4
+        )
 
     weight = row.get("weight")
     if weight in (None, ""):
@@ -1713,14 +1764,27 @@ def normalize_printer_row(row):
         "package_type": row.get("package_type", ""),
         "cost": cost,
         "source_cost": source_cost,
-        "margin": round(to_float(row.get("margin", 0.0), 0.0), 4),
+        "pre_shipping": pre_shipping,
+        "pre_packaging": pre_packaging,
+        "final_cost": final_cost,
+        "margin": margin,
         "price": price,
         "source_price": source_price,
-        "shipping": shipping,
-        "packaging": packaging,
+        "add_shipping": add_shipping,
+        "add_packaging": add_packaging,
         "final_price": final_price,
         "weight": weight
     }
+
+def save_printer_working_draft(month_key, customer_id, sales_person_id, default_margin, rows):
+    session["printer_draft"] = {
+        "month_key": month_key,
+        "customer_id": customer_id or "",
+        "sales_person_id": sales_person_id or "",
+        "default_margin": default_margin or "",
+        "rows": [normalize_printer_row(r) for r in (rows or [])],
+    }
+    session.modified = True
 
 def build_printer_row_from_priced_product(p, default_margin=0.0, description=""):
     product_name = p.get("product", "")
@@ -1728,10 +1792,13 @@ def build_printer_row_from_priced_product(p, default_margin=0.0, description="")
     cost = to_float(p.get("cost"), 0.0)
     margin = to_float(default_margin, 0.0)
 
-    source_price = cost * (1.0 + margin / 100.0)
-    shipping = 0.0
-    packaging = 0.0
-    final_price = source_price + shipping + packaging
+    pre_shipping = 0.0
+    pre_packaging = 0.0
+    final_cost = cost + pre_shipping + pre_packaging
+    source_price = final_cost * (1.0 + margin / 100.0)
+    add_shipping = 0.0
+    add_packaging = 0.0
+    final_price = source_price + add_shipping + add_packaging
     weight = get_product_weight(product_name)
 
     return {
@@ -1742,11 +1809,14 @@ def build_printer_row_from_priced_product(p, default_margin=0.0, description="")
         "package_type": "",
         "cost": round(cost, 4),
         "source_cost": round(cost, 4),
+        "pre_shipping": round(pre_shipping, 4),
+        "pre_packaging": round(pre_packaging, 4),
+        "final_cost": round(final_cost, 4),
         "margin": round(margin, 4),
         "price": round(source_price, 4),
         "source_price": round(source_price, 4),
-        "shipping": round(shipping, 4),
-        "packaging": round(packaging, 4),
+        "add_shipping": round(add_shipping, 4),
+        "add_packaging": round(add_packaging, 4),
         "final_price": round(final_price, 4),
         "weight": weight
     }
@@ -1760,11 +1830,15 @@ def build_printer_row_from_name_only(product_name, default_margin=0.0, descripti
         "source_um": "",
         "package_type": "",
         "cost": 0.0,
+        "source_cost": 0.0,
+        "pre_shipping": 0.0,
+        "pre_packaging": 0.0,
+        "final_cost": 0.0,
         "margin": round(to_float(default_margin, 0.0), 4),
         "price": 0.0,
         "source_price": 0.0,
-        "shipping": 0.0,
-        "packaging": 0.0,
+        "add_shipping": 0.0,
+        "add_packaging": 0.0,
         "final_price": 0.0,
         "weight": get_product_weight(product_name)
     }
@@ -2161,13 +2235,16 @@ def get_posted_printer_rows(form):
     posted_costs = form.getlist("row_cost")
     posted_margins = form.getlist("row_margin")
     posted_prices = form.getlist("row_price")
-    posted_shipping = form.getlist("row_shipping")
-    posted_packaging = form.getlist("row_packaging")
+    posted_pre_shipping = form.getlist("row_pre_shipping")
+    posted_pre_packaging = form.getlist("row_pre_packaging")
+    posted_add_shipping = form.getlist("row_add_shipping")
+    posted_add_packaging = form.getlist("row_add_packaging")
     posted_finals = form.getlist("row_final")
     posted_source_costs = form.getlist("row_source_cost")
     posted_source_ums = form.getlist("row_source_um")
     posted_source_prices = form.getlist("row_source_price")
     posted_weights = form.getlist("row_weight")
+    posted_final_costs = form.getlist("row_final_cost")
 
     row_count = len(posted_products)
     rows = []
@@ -2187,12 +2264,15 @@ def get_posted_printer_rows(form):
             "cost": posted_costs[i] if i < len(posted_costs) else "0",
             "margin": posted_margins[i] if i < len(posted_margins) else "0",
             "price": posted_prices[i] if i < len(posted_prices) else "0",
-            "shipping": posted_shipping[i] if i < len(posted_shipping) else "0",
-            "packaging": posted_packaging[i] if i < len(posted_packaging) else "0",
+            "pre_shipping": posted_pre_shipping[i] if i < len(posted_pre_shipping) else "0",
+            "pre_packaging": posted_pre_packaging[i] if i < len(posted_pre_packaging) else "0",
+            "final_cost": posted_final_costs[i] if i < len(posted_final_costs) else "0",
+            "add_shipping": posted_add_shipping[i] if i < len(posted_add_shipping) else "0",
+            "add_packaging": posted_add_packaging[i] if i < len(posted_add_packaging) else "0",
             "final_price": posted_finals[i] if i < len(posted_finals) else "0",
             "source_cost": posted_source_costs[i] if i < len(posted_source_costs) else posted_costs[i],
             "source_um": posted_source_ums[i] if i < len(posted_source_ums) else posted_ums[i],
-            "source_price": posted_source_prices[i] if i < len(posted_source_prices) else posted_prices[i],
+            "source_price": posted_source_prices[i] if i < len(posted_source_prices) else (posted_prices[i] if i < len(posted_prices) else 0),
             "weight": posted_weights[i] if i < len(posted_weights) else "",
         }
 
@@ -3281,6 +3361,244 @@ def finalize_price_letter(quote, user_row=None, save_file=True):
 
     return saved_entry, None
 
+def refresh_printer_rows_for_month(rows, priced_by_name):
+    refreshed = []
+
+    for old in rows or []:
+        product = (old.get("product") or "").strip()
+        if not product:
+            continue
+
+        margin = to_float(old.get("margin", 0.0), 0.0)
+        pre_shipping = to_float(old.get("pre_shipping", 0.0), 0.0)
+        pre_packaging = to_float(old.get("pre_packaging", 0.0), 0.0)
+        add_shipping = to_float(old.get("add_shipping", 0.0), 0.0)
+        add_packaging = to_float(old.get("add_packaging", 0.0), 0.0)
+        desired_um = normalize_um(old.get("um", ""))
+
+        matches = priced_by_name.get(normalize_product_name(product), []) or []
+
+        matched = None
+
+        if desired_um:
+            for p in matches:
+                if normalize_um(p.get("um", "")) == desired_um:
+                    matched = p
+                    break
+
+        if matched is None and matches:
+            matched = matches[0]
+
+        if matched:
+            new_row = build_printer_row_from_priced_product(
+                matched,
+                default_margin=margin,
+                description=old.get("description", "")
+            )
+
+            new_row["package_type"] = old.get("package_type", "")
+            new_row["pre_shipping"] = round(pre_shipping, 4)
+            new_row["pre_packaging"] = round(pre_packaging, 4)
+            new_row["add_shipping"] = round(add_shipping, 4)
+            new_row["add_packaging"] = round(add_packaging, 4)
+            new_row["margin"] = round(margin, 4)
+
+            cost = to_float(new_row.get("cost", 0.0), 0.0)
+            final_cost = cost + pre_shipping + pre_packaging
+            price = final_cost * (1.0 + margin / 100.0)
+            final_price = price + add_shipping + add_packaging
+
+            new_row["final_cost"] = round(final_cost, 4)
+            new_row["price"] = round(price, 4)
+            new_row["source_price"] = round(price, 4)
+            new_row["final_price"] = round(final_price, 4)
+
+            refreshed.append(normalize_printer_row(new_row))
+
+        else:
+            # No pricing found for this product in selected month.
+            # Keep product/settings, but cost becomes 0 so user sees it is missing.
+            new_row = dict(old)
+            new_row["cost"] = 0.0
+            new_row["source_cost"] = 0.0
+            new_row["price"] = 0.0
+            new_row["source_price"] = 0.0
+            new_row["pre_shipping"] = 0.0
+            new_row["pre_packaging"] = 0.0
+            new_row["final_cost"] = 0.0
+            new_row["add_shipping"] = round(add_shipping, 4)
+            new_row["add_packaging"] = round(add_packaging, 4)
+            new_row["final_price"] = round(add_shipping + add_packaging, 4)
+            refreshed.append(normalize_printer_row(new_row))
+
+    return refreshed
+
+def recost_existing_printer_rows(rows, priced_by_name):
+    recosted = []
+
+    for old in rows or []:
+        old = normalize_printer_row(old)
+
+        product = (old.get("product") or "").strip()
+        if not product:
+            continue
+
+        margin = to_float(old.get("margin"), 0.0)
+        pre_shipping = to_float(old.get("pre_shipping"), 0.0)
+        pre_packaging = to_float(old.get("pre_packaging"), 0.0)
+        add_shipping = to_float(old.get("add_shipping"), 0.0)
+        add_packaging = to_float(old.get("add_packaging"), 0.0)
+        preferred_um = normalize_um(old.get("um", ""))
+
+        matches = priced_by_name.get(normalize_product_name(product), []) or []
+
+        matched = None
+
+        if preferred_um:
+            for p in matches:
+                if normalize_um(p.get("um", "")) == preferred_um:
+                    matched = p
+                    break
+
+        if matched is None and matches:
+            matched = matches[0]
+
+        if not matched:
+            old["cost"] = 0.0
+            old["source_cost"] = 0.0
+            old["pre_shipping"] = round(pre_shipping, 4)
+            old["pre_packaging"] = round(pre_packaging, 4)
+            old["final_cost"] = 0.0
+            old["price"] = 0.0
+            old["source_price"] = 0.0
+            old["add_shipping"] = round(add_shipping, 4)
+            old["add_packaging"] = round(add_packaging, 4)
+            old["final_price"] = round(add_shipping + add_packaging, 4)
+            recosted.append(normalize_printer_row(old))
+            continue
+
+        new_cost = to_float(matched.get("cost"), 0.0)
+        new_um = normalize_um(matched.get("um", preferred_um))
+        new_final_cost = new_cost + pre_shipping + pre_packaging
+        new_price = new_final_cost * (1.0 + margin / 100.0)
+        new_final = new_price + add_shipping + add_packaging
+
+        old["cost"] = round(new_cost, 4)
+        old["source_cost"] = round(new_cost, 4)
+        old["um"] = new_um or preferred_um
+        old["source_um"] = new_um or preferred_um
+        old["pre_shipping"] = round(pre_shipping, 4)
+        old["pre_packaging"] = round(pre_packaging, 4)
+        old["final_cost"] = round(new_final_cost, 4)
+        old["price"] = round(new_price, 4)
+        old["source_price"] = round(new_price, 4)
+        old["add_shipping"] = round(add_shipping, 4)
+        old["add_packaging"] = round(add_packaging, 4)
+        old["final_price"] = round(new_final, 4)
+        old["weight"] = get_product_weight(product)
+
+        recosted.append(normalize_printer_row(old))
+
+    return recosted
+
+def convert_printer_cost_between_ums(cost, from_um, to_um, product_name):
+    cost = to_float(cost, 0.0)
+    from_um = normalize_um(from_um)
+    to_um = normalize_um(to_um)
+
+    if not from_um or not to_um or from_um == to_um:
+        return cost
+
+    if from_um == "EACH" or to_um == "EACH":
+        return None
+
+    weight = get_product_weight(product_name)
+    if not weight or weight <= 0:
+        return None
+
+    if from_um == "GAL" and to_um == "LB":
+        return cost / weight
+
+    if from_um == "LB" and to_um == "GAL":
+        return cost * weight
+
+    return None
+
+
+def force_period_costs_on_rows(rows, priced_by_name):
+    fixed_rows = []
+
+    for old in rows or []:
+        old = normalize_printer_row(old)
+
+        product = (old.get("product") or "").strip()
+        if not product:
+            continue
+
+        margin = to_float(old.get("margin"), 0.0)
+        shipping = to_float(old.get("shipping"), 0.0)
+        packaging = to_float(old.get("packaging"), 0.0)
+        desired_um = normalize_um(old.get("um", ""))
+
+        matches = priced_by_name.get(normalize_product_name(product), []) or []
+
+        matched = None
+
+        if desired_um:
+            for p in matches:
+                if normalize_um(p.get("um", "")) == desired_um:
+                    matched = p
+                    break
+
+        if matched is None and matches:
+            matched = matches[0]
+
+        if not matched:
+            old["cost"] = 0.0
+            old["source_cost"] = 0.0
+            old["price"] = 0.0
+            old["source_price"] = 0.0
+            old["final_price"] = round(shipping + packaging, 4)
+            fixed_rows.append(normalize_printer_row(old))
+            continue
+
+        source_cost = to_float(matched.get("cost"), 0.0)
+        source_um = normalize_um(matched.get("um", ""))
+        display_um = desired_um or source_um
+
+        display_cost = source_cost
+
+        if display_um != source_um:
+            converted = convert_printer_cost_between_ums(
+                source_cost,
+                source_um,
+                display_um,
+                product
+            )
+
+            if converted is None:
+                display_um = source_um
+                display_cost = source_cost
+            else:
+                display_cost = converted
+
+        price = display_cost * (1.0 + margin / 100.0)
+        final_price = price + shipping + packaging
+
+        old["um"] = display_um
+        old["source_um"] = source_um
+        old["cost"] = round(display_cost, 4)
+        old["source_cost"] = round(source_cost, 4)
+        old["price"] = round(price, 4)
+        old["source_price"] = round(price, 4)
+        old["final_price"] = round(final_price, 4)
+        old["weight"] = get_product_weight(product)
+
+        fixed_rows.append(normalize_printer_row(old))
+
+    return fixed_rows
+
+
 # -------------------------
 # Forms
 # -------------------------
@@ -3953,6 +4271,43 @@ def customer_profile(customer_id):
         customer_template=customer_template
     )
 
+@app.route("/customers/<customer_id>/locations/save", methods=["POST"])
+@login_required
+def customer_locations_save(customer_id):
+    customer = db.session.get(Customer, str(customer_id))
+
+    if not customer:
+        flash("Customer not found.", "error")
+        return redirect(url_for("customers_page"))
+
+    location_names = [
+        x.strip()
+        for x in request.form.getlist("customer_locations[]")
+        if x.strip()
+    ]
+
+    # Remove duplicates while keeping order
+    cleaned_locations = []
+    seen = set()
+    for name in location_names:
+        key = name.lower()
+        if key not in seen:
+            seen.add(key)
+            cleaned_locations.append(name)
+
+    CustomerLocation.query.filter_by(customer_id=customer.id).delete()
+
+    for name in cleaned_locations:
+        db.session.add(CustomerLocation(
+            customer_id=customer.id,
+            location_name=name
+        ))
+
+    db.session.commit()
+
+    flash("Customer locations updated.", "success")
+    return redirect(url_for("customer_profile", customer_id=customer_id))
+
 @app.route("/customers/<customer_id>/template/save", methods=["POST"])
 @login_required
 def customer_template_save(customer_id):
@@ -4062,6 +4417,7 @@ def printer_page():
     customers = load_customers()
     sales_people = load_sales_people()
     available_periods = get_available_pricing_periods()
+    action = request.form.get("action") if request.method == "POST" else request.args.get("action", "")
 
     current_key = current_month_key_central()
     available_values = [p["value"] for p in available_periods]
@@ -4132,15 +4488,54 @@ def printer_page():
 
         existing_draft = session.get("printer_draft") or {}
 
-        if existing_draft and existing_draft.get("month_key") == month_key:
-            existing_rows = [
-                normalize_printer_row(r)
-                for r in (existing_draft.get("rows") or [])
-            ]
+        existing_draft = session.get("printer_draft") or {}
+
+        draft_month_key = str(existing_draft.get("month_key") or "").strip().upper()
+
+        draft_rows_any_month = [
+            normalize_printer_row(r)
+            for r in (existing_draft.get("rows") or [])
+        ]
+
+        if existing_draft and draft_month_key == month_key:
+            existing_rows = draft_rows_any_month
         else:
             existing_rows = []
 
-        if action == "select_customer":
+        # If user changed the pricing period while a list already exists,
+        # force the backend to recost existing products from the new month.
+        posted_rows_for_period_check = get_posted_printer_rows(request.form)
+        period_changed_with_rows = (
+            request.method == "POST"
+            and draft_month_key
+            and draft_month_key != month_key
+            and (posted_rows_for_period_check or draft_rows_any_month)
+        )
+
+        if period_changed_with_rows:
+            action = "refresh_period_costs"
+        if action == "refresh_period_costs":
+            posted_rows = get_posted_printer_rows(request.form)
+
+            if not posted_rows:
+                posted_rows = draft_rows_any_month
+
+            quote_rows = recost_existing_printer_rows(
+                posted_rows,
+                priced_by_name
+            )
+
+            session["printer_draft"] = {
+                "month_key": month_key,
+                "customer_id": form["customer_id"],
+                "sales_person_id": form["sales_person_id"],
+                "default_margin": form["default_margin"],
+                "rows": quote_rows,
+            }
+
+            session.modified = True
+
+        elif action == "select_customer":
             selected_customer = _find_customer_by_id(customers, form["customer_id"])
 
             if not selected_customer:
@@ -4581,7 +4976,10 @@ def printer_page():
                 if c:
                     customer_name = c.get("name", "")
 
-            save_rows = get_posted_printer_rows(request.form)
+            save_rows = force_period_costs_on_rows(
+                get_posted_printer_rows(request.form),
+                priced_by_name
+            )
 
             form["customer_id"] = customer_id
             form["sales_person_id"] = (request.form.get("sales_person_id") or "").strip()
@@ -4643,17 +5041,20 @@ def printer_page():
                     }
 
                     # CLEAR everything (same behavior as New List)
-                    session.pop("printer_draft", None)
+                    quote_rows = save_rows
+
+                    session["printer_draft"] = {
+                        "month_key": month_key,
+                        "customer_id": customer_id,
+                        "sales_person_id": form["sales_person_id"],
+                        "default_margin": form["default_margin"],
+                        "rows": save_rows,
+                    }
+
                     session.pop("print_quote", None)
                     session.modified = True
 
-                    flash("Price letter saved. Ready for a new list.", "download_success")
-
-                    return redirect(url_for(
-                        "printer_page",
-                        pricing_period=current_month_key_central(),
-                        fresh="1"
-                    ))
+                    flash("Price letter saved to history.", "download_success")
 
         elif action == "print":
             customer_name = (request.form.get("customer_name") or "").strip()
@@ -4670,6 +5071,14 @@ def printer_page():
                 errors.append("Selected salesperson was not found.")
 
             print_rows = get_posted_printer_rows(request.form)
+
+            save_printer_working_draft(
+                month_key=month_key,
+                customer_id=customer_id,
+                sales_person_id=sales_person_id,
+                default_margin=form["default_margin"],
+                rows=print_rows
+            )
 
             form["customer_id"] = customer_id
             form["sales_person_id"] = sales_person_id
@@ -4799,6 +5208,19 @@ def printer_page():
         quote_rows,
         key=lambda x: (x.get("product") or "").lower()
     )
+
+    if action in ("refresh_period_costs",):
+        quote_rows = force_period_costs_on_rows(quote_rows, priced_by_name)
+
+    if quote_rows:
+        session["printer_draft"] = {
+            "month_key": month_key,
+            "customer_id": form.get("customer_id", ""),
+            "sales_person_id": form.get("sales_person_id", ""),
+            "default_margin": form.get("default_margin", "0"),
+            "rows": quote_rows,
+        }
+        session.modified = True
 
     return render_template(
         "printer.html",
@@ -6113,9 +6535,15 @@ def customer_new_page():
 
     customer_name = ""
     form_rows = []
+    locations = []
 
     if request.method == "POST":
         customer_name = (request.form.get("customer_name") or "").strip()
+        locations = [
+            x.strip()
+            for x in request.form.getlist("locations[]")
+            if x.strip()
+        ]
 
         form_rows = parse_customer_simple_rows_from_form(request.form)
 
@@ -6143,6 +6571,7 @@ def customer_new_page():
                 "id": uuid.uuid4().hex[:10],
                 "name": customer_name,
                 "notes": "",
+                "locations": locations,
                 "default_products": default_products,
                 "default_letter_rows": default_letter_rows,
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -6158,6 +6587,7 @@ def customer_new_page():
         errors=errors,
         customer_name=customer_name,
         form_rows=form_rows,
+        locations=locations,
         page="app",
         page_title="Add Customer",
     )

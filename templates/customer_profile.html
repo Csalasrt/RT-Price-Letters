@@ -24,6 +24,59 @@
   <div id="tab-info" class="card shadow-sm">
     <div class="card-body">
 
+      <!-- LOCATIONS SECTION -->
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+        <div style="font-weight:700;">
+          Customer Locations
+        </div>
+
+        <button type="submit" form="locationsForm" class="btn btn-primary btn-sm">
+          Save Locations
+        </button>
+      </div>
+
+      <form id="locationsForm" method="POST" action="{{ url_for('customer_locations_save', customer_id=customer.id) }}">
+        <div id="locationsList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+
+          {% if customer.locations and customer.locations|length > 0 %}
+            {% for loc in customer.locations %}
+            <div class="location-row" style="display:flex; gap:8px; align-items:center;">
+              <input
+                type="text"
+                name="customer_locations[]"
+                class="form-control form-control-sm"
+                value="{{ loc }}"
+                placeholder="Location name"
+              >
+              <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">
+                Remove
+              </button>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="location-row" style="display:flex; gap:8px; align-items:center;">
+              <input
+                type="text"
+                name="customer_locations[]"
+                class="form-control form-control-sm"
+                value=""
+                placeholder="Location name"
+              >
+              <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">
+                Remove
+              </button>
+            </div>
+          {% endif %}
+
+        </div>
+
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addLocationRow()">
+          + Add Location
+        </button>
+      </form>
+
+      <hr>
+
       <div style="font-weight:700; margin-bottom:10px;">
         Default Customer Setup
       </div>
@@ -57,122 +110,86 @@
 
     </div>
   </div>
-<!-- ========================= -->
-<!-- TEMPLATE TAB -->
-<!-- ========================= -->
-<div id="tab-template" class="card shadow-sm" style="display:none;">
-  <div class="card-body">
 
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
-      <div style="font-weight:700;">
-        Saved Template
+  <!-- ========================= -->
+  <!-- TEMPLATE TAB -->
+  <!-- ========================= -->
+  <div id="tab-template" class="card shadow-sm" style="display:none;">
+    <div class="card-body">
+
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+        <div style="font-weight:700;">
+          Saved Template
+        </div>
+
+        <button type="submit" form="templateForm" class="btn btn-primary btn-sm">
+          Save Template
+        </button>
       </div>
 
-      <button type="submit" form="templateForm" class="btn btn-primary btn-sm">
-        Save Template
-      </button>
+      {% set template_rows = customer.default_letter_rows %}
+
+      {% if template_rows and template_rows|length > 0 %}
+      <form id="templateForm" method="POST" action="{{ url_for('customer_template_save', customer_id=customer.id) }}">
+        <div class="table-responsive">
+          <table class="table table-sm align-middle text-center">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Description</th>
+                <th>U/M</th>
+                <th>Package</th>
+                <th>Margin %</th>
+                <th>Shipping</th>
+                <th>Packaging</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for row in template_rows %}
+              <tr>
+                <td>
+                  <input type="text" name="default_row_product" class="form-control form-control-sm text-center" value="{{ row.product }}">
+                </td>
+
+                <td>
+                  <input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}">
+                </td>
+
+                <td>
+                  <input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="{{ row.um }}">
+                </td>
+
+                <td>
+                  <input type="text" name="default_row_package_type" class="form-control form-control-sm text-center" value="{{ row.package_type }}">
+                </td>
+
+                <td>
+                  <input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}">
+                </td>
+
+                <td>
+                  <input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}">
+                </td>
+
+                <td>
+                  <input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}">
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </form>
+      {% else %}
+        <div class="text-muted">
+          No template saved yet. Save or download a price letter to generate one.
+        </div>
+      {% endif %}
+
     </div>
-
-    {% set template_rows = customer.default_letter_rows %}
-
-    {% if template_rows and template_rows|length > 0 %}
-    <form id="templateForm" method="POST" action="{{ url_for('customer_template_save', customer_id=customer.id) }}">
-      <div class="table-responsive">
-        <table class="table table-sm align-middle text-center">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Description</th>
-              <th>U/M</th>
-              <th>Package</th>
-              <th>Margin %</th>
-              <th>Shipping</th>
-              <th>Packaging</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {% for row in template_rows %}
-            <tr>
-              <td>
-                <input
-                  type="text"
-                  name="default_row_product"
-                  class="form-control form-control-sm text-center"
-                  value="{{ row.product }}"
-                >
-              </td>
-
-              <td>
-                <input
-                  type="text"
-                  name="default_row_description"
-                  class="form-control form-control-sm text-center"
-                  value="{{ row.description }}"
-                >
-              </td>
-
-              <td>
-                <input
-                  type="text"
-                  name="default_row_um"
-                  class="form-control form-control-sm text-center"
-                  value="{{ row.um }}"
-                >
-              </td>
-
-              <td>
-                <input
-                  type="text"
-                  name="default_row_package_type"
-                  class="form-control form-control-sm text-center"
-                  value="{{ row.package_type }}"
-                >
-              </td>
-
-              <td>
-                <input
-                  type="number"
-                  step="0.01"
-                  name="default_row_margin"
-                  class="form-control form-control-sm text-center"
-                  value="{{ row.margin }}"
-                >
-              </td>
-
-              <td>
-                <input
-                  type="number"
-                  step="0.0001"
-                  name="default_row_shipping"
-                  class="form-control form-control-sm text-center"
-                  value="{{ row.shipping }}"
-                >
-              </td>
-
-              <td>
-                <input
-                  type="number"
-                  step="0.0001"
-                  name="default_row_packaging"
-                  class="form-control form-control-sm text-center"
-                  value="{{ row.packaging }}"
-                >
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </form>
-    {% else %}
-      <div class="text-muted">
-        No template saved yet. Save or download a price letter to generate one.
-      </div>
-    {% endif %}
-
   </div>
-</div>
+
   <!-- ========================= -->
   <!-- HISTORY TAB -->
   <!-- ========================= -->
@@ -249,7 +266,7 @@
 </div>
 
 <!-- ========================= -->
-<!-- TAB SCRIPT -->
+<!-- SCRIPT -->
 <!-- ========================= -->
 <script>
   const tabs = {
@@ -280,6 +297,43 @@
   buttons.template.onclick = () => switchTab("template");
   buttons.history.onclick = () => switchTab("history");
   buttons.analytics.onclick = () => switchTab("analytics");
+
+  function addLocationRow() {
+    const list = document.getElementById("locationsList");
+
+    const row = document.createElement("div");
+    row.className = "location-row";
+    row.style.display = "flex";
+    row.style.gap = "8px";
+    row.style.alignItems = "center";
+
+    row.innerHTML = `
+      <input
+        type="text"
+        name="customer_locations[]"
+        class="form-control form-control-sm"
+        value=""
+        placeholder="Location name"
+      >
+      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">
+        Remove
+      </button>
+    `;
+
+    list.appendChild(row);
+  }
+
+  function removeLocationRow(button) {
+    const row = button.closest(".location-row");
+    if (row) {
+      row.remove();
+    }
+
+    const list = document.getElementById("locationsList");
+    if (list.children.length === 0) {
+      addLocationRow();
+    }
+  }
 </script>
 
 {% endblock %}

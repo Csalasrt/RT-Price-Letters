@@ -116,6 +116,15 @@
     width: 100%;
   }
 
+
+  /* Readonly / computed cells */
+  #quote-table input.computed {
+    background: #f9fafb;
+    color: #344054;
+    font-weight: 600;
+    cursor: default;
+  }
+
   .product-panel {
     position: absolute;
     top: calc(100% + 6px);
@@ -253,6 +262,30 @@
     .build-toolbar {
       grid-template-columns: 1fr;
     }
+  }
+
+  /* LIGHT pricing section */
+  #quote-table th.price-section,
+  #quote-table td.price-section {
+    background: #f1f5f9 !important;
+  }
+
+  /* DARKER final price section */
+  #quote-table th.final-price-section,
+  #quote-table td.final-price-section {
+    background: #dbe3ee !important;
+  }
+
+  /* LEFT divider */
+  #quote-table th.section-divider-left,
+  #quote-table td.section-divider-left {
+    border-left: 3px solid #98a2b3 !important;
+  }
+
+  /* RIGHT divider */
+  #quote-table th.section-divider-right,
+  #quote-table td.section-divider-right {
+    border-right: 3px solid #98a2b3 !important;
   }
 </style>
 
@@ -472,12 +505,16 @@
                 <th style="min-width:90px;">UM</th>
                 <th style="min-width:160px;">Package Type</th>
                 <th style="min-width:120px;">Our Cost</th>
-                <th style="min-width:110px;">Margin %</th>
-                <th style="min-width:120px;">Price</th>
-                <th style="min-width:120px;">Shipping</th>
                 <th style="min-width:120px;">Packaging</th>
-                <th style="min-width:130px;">Final Price</th>
-                
+                <th style="min-width:120px;">Shipping</th>
+                <th style="min-width:120px;">
+                  Final Cost
+                </th>
+                <th style="min-width:110px;" class="price-section section-divider-left">Margin %</th>
+                <th style="min-width:120px;" class="price-section">Price</th>
+                <th style="min-width:120px;" class="price-section">Add. Shipping</th>
+                <th style="min-width:120px;" class="price-section section-divider-right">Add. Packaging</th>
+                <th style="min-width:130px;" class="final-price-section section-divider-left section-divider-right">Final Price</th>
               </tr>
             </thead>
 
@@ -540,6 +577,7 @@
                     </select>
                   </td>
 
+                  {# Our Cost #}
                   <td>
                     <input
                       class="form-control form-control-sm cost"
@@ -549,7 +587,40 @@
                     >
                   </td>
 
+                  {# Pre-margin Packaging #}
                   <td>
+                    <input
+                      class="form-control form-control-sm pre-packaging"
+                      name="row_pre_packaging"
+                      value="{{ '%.4f'|format(r.get('pre_packaging', 0) or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  {# Pre-margin Shipping #}
+                  <td>
+                    <input
+                      class="form-control form-control-sm pre-shipping"
+                      name="row_pre_shipping"
+                      value="{{ '%.4f'|format(r.get('pre_shipping', 0) or 0) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  {# Final Cost (computed: cost + pre_packaging + pre_shipping) #}
+                  <td>
+                    <input
+                      class="form-control form-control-sm computed final-cost"
+                      name="row_final_cost"
+                      value="{{ '%.4f'|format(r.get('final_cost', 0) or 0) }}"
+                      inputmode="decimal"
+                      readonly
+                      tabindex="-1"
+                    >
+                  </td>
+
+                  {# Margin % #}
+                  <td class="price-section section-divider-left">
                     <input
                       class="form-control form-control-sm margin"
                       name="row_margin"
@@ -557,8 +628,9 @@
                       inputmode="decimal"
                     >
                   </td>
-                 
-                  <td>
+
+                  {# Price (computed: final_cost * (1 + margin/100)) #}
+                  <td class="price-section">
                     <input
                       class="form-control form-control-sm price"
                       name="row_price"
@@ -567,34 +639,38 @@
                     >
                   </td>
 
-                  <td>
+                  {# Additional Shipping #}
+                  <td class="price-section">
                     <input
-                      class="form-control form-control-sm shipping"
-                      name="row_shipping"
-                      value="{{ '%.4f'|format(r.shipping or 0) }}"
+                      class="form-control form-control-sm add-shipping"
+                      name="row_add_shipping"
+                      value="{{ '%.4f'|format(r.get('add_shipping', 0) or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
 
-                  <td>
+                  {# Additional Packaging #}
+                  <td class="price-section section-divider-right">
                     <input
-                      class="form-control form-control-sm packaging"
-                      name="row_packaging"
-                      value="{{ '%.4f'|format(r.packaging or 0) }}"
+                      class="form-control form-control-sm add-packaging"
+                      name="row_add_packaging"
+                      value="{{ '%.4f'|format(r.get('add_packaging', 0) or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
 
-                  <td>
+                  {# Final Price (computed: price + add_shipping + add_packaging) #}
+                  <td class="final-price-section section-divider-left section-divider-right">
                     <input
-                      class="form-control form-control-sm final"
+                      class="form-control form-control-sm computed final"
                       name="row_final"
                       value="{{ '%.4f'|format(r.final_price or 0) }}"
                       inputmode="decimal"
+                      readonly
+                      tabindex="-1"
                     >
                   </td>
 
-                  
                 </tr>
               {% endfor %}
             </tbody>
@@ -602,7 +678,7 @@
         </div>
 
         <div class="text-muted-small" style="margin-top:8px;">
-          Tip: Edit cost, margin, price, shipping, packaging, final price, or U/M. If you edit final price, price and margin will auto update.
+          Tip: Edit cost, pre-margin packaging/shipping, margin, price, or additional shipping/packaging. Final Cost and Final Price update automatically.
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
@@ -644,10 +720,12 @@
         el &&
         (
           el.classList.contains("cost") ||
+          el.classList.contains("pre-shipping") ||
+          el.classList.contains("pre-packaging") ||
           el.classList.contains("margin") ||
           el.classList.contains("price") ||
-          el.classList.contains("shipping") ||
-          el.classList.contains("packaging") ||
+          el.classList.contains("add-shipping") ||
+          el.classList.contains("add-packaging") ||
           el.classList.contains("final")
         )
       );
@@ -656,6 +734,7 @@
     function clearZeroOnFocus(e) {
       const el = e.target;
       if (!isCalcInput(el)) return;
+      if (el.classList.contains("computed")) return;
 
       const raw = String(el.value || "").trim();
       const n = toNum(raw);
@@ -675,6 +754,7 @@
     function restoreZeroOnBlur(e) {
       const el = e.target;
       if (!isCalcInput(el)) return;
+      if (el.classList.contains("computed")) return;
 
       const raw = String(el.value || "").trim();
 
@@ -719,99 +799,133 @@
     }
 
     function applyUMConversion(tr) {
-      const umEl = tr.querySelector(".um-select");
-      const costEl = tr.querySelector(".cost");
-      const priceEl = tr.querySelector(".price");
-      const marginEl = tr.querySelector(".margin");
-      const shipEl = tr.querySelector(".shipping");
-      const packEl = tr.querySelector(".packaging");
-      const finalEl = tr.querySelector(".final");
+      const umEl       = tr.querySelector(".um-select");
+      const costEl     = tr.querySelector(".cost");
+      const priceEl    = tr.querySelector(".price");
+      const marginEl   = tr.querySelector(".margin");
+      const preShipEl  = tr.querySelector(".pre-shipping");
+      const prePackEl  = tr.querySelector(".pre-packaging");
+      const finalCostEl = tr.querySelector(".final-cost");
+      const addShipEl  = tr.querySelector(".add-shipping");
+      const addPackEl  = tr.querySelector(".add-packaging");
+      const finalEl    = tr.querySelector(".final");
 
-      if (!umEl || !costEl || !priceEl || !marginEl || !shipEl || !packEl || !finalEl) return false;
+      if (!umEl || !costEl || !priceEl || !marginEl) return false;
 
-      const sourceCost = tr.dataset.sourceCost;
+      const sourceCost  = tr.dataset.sourceCost;
       const sourcePrice = tr.dataset.sourcePrice;
-      const sourceUM = tr.dataset.sourceUm;
-      const weight = tr.dataset.weight;
-      const targetUM = umEl.value;
-      const margin = toNum(marginEl.value);
-      const ship = toNum(shipEl.value);
-      const pack = toNum(packEl.value);
+      const sourceUM    = tr.dataset.sourceUm;
+      const weight      = tr.dataset.weight;
+      const targetUM    = umEl.value;
+      const margin      = toNum(marginEl.value);
+      const preShip     = toNum(preShipEl ? preShipEl.value : 0);
+      const prePack     = toNum(prePackEl ? prePackEl.value : 0);
+      const addShip     = toNum(addShipEl ? addShipEl.value : 0);
+      const addPack     = toNum(addPackEl ? addPackEl.value : 0);
 
-      const convertedCost = convertValueFromSource(sourceCost, sourceUM, targetUM, weight);
+      const convertedCost  = convertValueFromSource(sourceCost, sourceUM, targetUM, weight);
       const convertedPrice = convertValueFromSource(sourcePrice, sourceUM, targetUM, weight);
 
       if (convertedCost === null && convertedPrice === null) {
         return false;
       }
 
-      let price = 0;
+      let cost = toNum(costEl.value);
 
       if (convertedCost !== null) {
-        costEl.value = fmt4(convertedCost);
+        cost = convertedCost;
+        costEl.value = fmt4(cost);
       }
 
+      const finalCost = cost + preShip + prePack;
+      if (finalCostEl) finalCostEl.value = fmt4(finalCost);
+
+      let price = 0;
       if (convertedPrice !== null) {
         price = convertedPrice;
         priceEl.value = fmt4(price);
-      } else if (convertedCost !== null) {
-        price = convertedCost * (1 + (margin / 100));
-        priceEl.value = fmt4(price);
       } else {
-        price = toNum(priceEl.value);
+        price = finalCost * (1 + margin / 100);
+        priceEl.value = fmt4(price);
       }
 
-      finalEl.value = fmt4(price + ship + pack);
+      if (finalEl) finalEl.value = fmt4(price + addShip + addPack);
       return true;
     }
 
+    /**
+     * Central recalc function.
+     *
+     * New logic:
+     *   finalCost = cost + preShip + prePack
+     *   price     = finalCost * (1 + margin/100)
+     *   finalPrice = price + addShip + addPack
+     *
+     * Editing "price" back-calculates margin from finalCost.
+     * Editing "final" back-calculates price (and then margin).
+     */
     function updateRow(tr, changed, liveEdit = false) {
-      const costEl = tr.querySelector(".cost");
-      const marginEl = tr.querySelector(".margin");
-      const priceEl = tr.querySelector(".price");
-      const shipEl = tr.querySelector(".shipping");
-      const packEl = tr.querySelector(".packaging");
-      const finalEl = tr.querySelector(".final");
+      const costEl      = tr.querySelector(".cost");
+      const preShipEl   = tr.querySelector(".pre-shipping");
+      const prePackEl   = tr.querySelector(".pre-packaging");
+      const finalCostEl = tr.querySelector(".final-cost");
+      const marginEl    = tr.querySelector(".margin");
+      const priceEl     = tr.querySelector(".price");
+      const addShipEl   = tr.querySelector(".add-shipping");
+      const addPackEl   = tr.querySelector(".add-packaging");
+      const finalEl     = tr.querySelector(".final");
 
-      if (!costEl || !marginEl || !priceEl || !shipEl || !packEl || !finalEl) return;
+      if (!costEl || !marginEl || !priceEl || !finalEl) return;
 
-      let cost = toNum(costEl.value);
-      let margin = toNum(marginEl.value);
-      let price = toNum(priceEl.value);
-      let ship = toNum(shipEl.value);
-      let pack = toNum(packEl.value);
-      let finalP = toNum(finalEl.value);
+      let cost    = toNum(costEl.value);
+      let preShip = toNum(preShipEl ? preShipEl.value : 0);
+      let prePack = toNum(prePackEl ? prePackEl.value : 0);
+      let margin  = toNum(marginEl.value);
+      let price   = toNum(priceEl.value);
+      let addShip = toNum(addShipEl ? addShipEl.value : 0);
+      let addPack = toNum(addPackEl ? addPackEl.value : 0);
+      let finalP  = toNum(finalEl.value);
 
       if (changed === "um") {
         const didConvert = applyUMConversion(tr);
-
-        cost = toNum(costEl.value);
-        margin = toNum(marginEl.value);
-        price = toNum(priceEl.value);
-        ship = toNum(shipEl.value);
-        pack = toNum(packEl.value);
-
         if (!didConvert) {
-          price = cost * (1 + margin / 100);
+          cost    = toNum(costEl.value);
+          preShip = toNum(preShipEl ? preShipEl.value : 0);
+          prePack = toNum(prePackEl ? prePackEl.value : 0);
+          margin  = toNum(marginEl.value);
+          addShip = toNum(addShipEl ? addShipEl.value : 0);
+          addPack = toNum(addPackEl ? addPackEl.value : 0);
+
+          const finalCost = cost + preShip + prePack;
+          if (finalCostEl) finalCostEl.value = fmt4(finalCost);
+          price = finalCost * (1 + margin / 100);
           priceEl.value = fmt4(price);
-          finalEl.value = fmt4(price + ship + pack);
+          finalEl.value = fmt4(price + addShip + addPack);
         }
         return;
       }
 
-      if (changed === "cost") {
-        price = cost * (1 + margin / 100);
-        finalP = price + ship + pack;
+      // For any change, recompute finalCost first
+      const finalCost = cost + preShip + prePack;
+      if (finalCostEl) finalCostEl.value = fmt4(finalCost);
 
-        if (!liveEdit) costEl.value = fmt4(cost);
+      if (changed === "cost" || changed === "pre-shipping" || changed === "pre-packaging") {
+        price  = finalCost * (1 + margin / 100);
+        finalP = price + addShip + addPack;
+
+        if (!liveEdit) {
+          if (changed === "cost")         costEl.value    = fmt4(cost);
+          if (changed === "pre-shipping") preShipEl.value = fmt4(preShip);
+          if (changed === "pre-packaging") prePackEl.value = fmt4(prePack);
+        }
         priceEl.value = fmt4(price);
         finalEl.value = fmt4(finalP);
         return;
       }
 
       if (changed === "margin") {
-        price = cost * (1 + margin / 100);
-        finalP = price + ship + pack;
+        price  = finalCost * (1 + margin / 100);
+        finalP = price + addShip + addPack;
 
         if (!liveEdit) marginEl.value = fmt2(margin);
         priceEl.value = fmt4(price);
@@ -820,48 +934,44 @@
       }
 
       if (changed === "price") {
-        if (cost > 0) {
-          margin = ((price - cost) / cost) * 100;
+        // back-calc margin from finalCost
+        if (finalCost > 0) {
+          margin = ((price - finalCost) / finalCost) * 100;
         } else {
           margin = 0;
         }
-
-        finalP = price + ship + pack;
+        finalP = price + addShip + addPack;
 
         if (!liveEdit) priceEl.value = fmt4(price);
         marginEl.value = fmt2(margin);
-        finalEl.value = fmt4(finalP);
+        finalEl.value  = fmt4(finalP);
         return;
       }
 
-      if (changed === "shipping") {
-        finalP = price + ship + pack;
+      if (changed === "add-shipping" || changed === "add-packaging") {
+        finalP = price + addShip + addPack;
 
-        if (!liveEdit) shipEl.value = fmt4(ship);
-        finalEl.value = fmt4(finalP);
-        return;
-      }
-
-      if (changed === "packaging") {
-        finalP = price + ship + pack;
-
-        if (!liveEdit) packEl.value = fmt4(pack);
+        if (!liveEdit) {
+          if (changed === "add-shipping") addShipEl.value = fmt4(addShip);
+          if (changed === "add-packaging") addPackEl.value = fmt4(addPack);
+        }
         finalEl.value = fmt4(finalP);
         return;
       }
 
       if (changed === "final") {
-        price = finalP - ship - pack;
+        // back-calc price from final, then margin from finalCost
+        price = finalP - addShip - addPack;
         if (price < 0) price = 0;
 
-        if (cost > 0) {
-          margin = ((price - cost) / cost) * 100;
+        if (finalCost > 0) {
+          margin = ((price - finalCost) / finalCost) * 100;
         } else {
           margin = 0;
         }
 
         if (!liveEdit) finalEl.value = fmt4(finalP);
-        priceEl.value = fmt4(price);
+        priceEl.value  = fmt4(price);
         marginEl.value = fmt2(margin);
         return;
       }
@@ -878,7 +988,7 @@
     function getEditableInputsInRow(tr) {
       if (!tr) return [];
       return Array.from(
-        tr.querySelectorAll(".cost, .margin, .price, .shipping, .packaging, .final")
+        tr.querySelectorAll(".cost, .pre-packaging, .pre-shipping, .margin, .price, .add-shipping, .add-packaging")
       );
     }
 
@@ -889,7 +999,7 @@
       const nextTr = tr.nextElementSibling;
       if (!nextTr) return;
 
-      const classes = ["cost", "margin", "price", "shipping", "packaging", "final"];
+      const classes = ["cost", "pre-packaging", "pre-shipping", "margin", "price", "add-shipping", "add-packaging"];
       const colClass = classes.find(cls => currentInput.classList.contains(cls));
       if (!colClass) return;
 
@@ -906,7 +1016,7 @@
       const prevTr = tr.previousElementSibling;
       if (!prevTr) return;
 
-      const classes = ["cost", "margin", "price", "shipping", "packaging", "final"];
+      const classes = ["cost", "pre-packaging", "pre-shipping", "margin", "price", "add-shipping", "add-packaging"];
       const colClass = classes.find(cls => currentInput.classList.contains(cls));
       if (!colClass) return;
 
@@ -960,13 +1070,16 @@
 
     function updateRowFromElement(tr, el, liveEdit = false) {
       if (!tr || !el) return;
+      if (el.classList.contains("computed")) return;
 
-      if (el.classList.contains("cost")) updateRow(tr, "cost", liveEdit);
-      else if (el.classList.contains("margin")) updateRow(tr, "margin", liveEdit);
-      else if (el.classList.contains("price")) updateRow(tr, "price", liveEdit);
-      else if (el.classList.contains("shipping")) updateRow(tr, "shipping", liveEdit);
-      else if (el.classList.contains("packaging")) updateRow(tr, "packaging", liveEdit);
-      else if (el.classList.contains("final")) updateRow(tr, "final", liveEdit);
+      if      (el.classList.contains("cost"))          updateRow(tr, "cost", liveEdit);
+      else if (el.classList.contains("pre-shipping"))  updateRow(tr, "pre-shipping", liveEdit);
+      else if (el.classList.contains("pre-packaging")) updateRow(tr, "pre-packaging", liveEdit);
+      else if (el.classList.contains("margin"))        updateRow(tr, "margin", liveEdit);
+      else if (el.classList.contains("price"))         updateRow(tr, "price", liveEdit);
+      else if (el.classList.contains("add-shipping"))  updateRow(tr, "add-shipping", liveEdit);
+      else if (el.classList.contains("add-packaging")) updateRow(tr, "add-packaging", liveEdit);
+      else if (el.classList.contains("final"))         updateRow(tr, "final", liveEdit);
     }
 
     const table = document.getElementById("quote-table");
@@ -1103,55 +1216,52 @@
 
     const rows = table.querySelectorAll("tbody tr");
     rows.forEach(function(tr) {
-      const productInput = tr.querySelector('input[name="row_product"]');
+      const productInput    = tr.querySelector('input[name="row_product"]');
       const descriptionInput = tr.querySelector('input[name="row_description"]');
-      const umInput = tr.querySelector('select[name="row_um"]');
-      const packageInput = tr.querySelector('select[name="row_package_type"]');
-      const costInput = tr.querySelector('input[name="row_cost"]');
-      const marginInput = tr.querySelector('input[name="row_margin"]');
-      const priceInput = tr.querySelector('input[name="row_price"]');
-      const shippingInput = tr.querySelector('input[name="row_shipping"]');
-      const packagingInput = tr.querySelector('input[name="row_packaging"]');
-      const finalInput = tr.querySelector('input[name="row_final"]');
+      const umInput         = tr.querySelector('select[name="row_um"]');
+      const packageInput    = tr.querySelector('select[name="row_package_type"]');
+      const costInput       = tr.querySelector('input[name="row_cost"]');
+      const preShipInput    = tr.querySelector('input[name="row_pre_shipping"]');
+      const prePackInput    = tr.querySelector('input[name="row_pre_packaging"]');
+      const marginInput     = tr.querySelector('input[name="row_margin"]');
+      const priceInput      = tr.querySelector('input[name="row_price"]');
+      const addShipInput    = tr.querySelector('input[name="row_add_shipping"]');
+      const addPackInput    = tr.querySelector('input[name="row_add_packaging"]');
+      const finalInput      = tr.querySelector('input[name="row_final"]');
 
-      appendHidden(holder, "row_product", productInput ? productInput.value : "");
-      appendHidden(holder, "row_description", descriptionInput ? descriptionInput.value : "");
-      appendHidden(holder, "row_um", umInput ? umInput.value : "");
-      appendHidden(holder, "row_package_type", packageInput ? packageInput.value : "");
-      appendHidden(holder, "row_cost", costInput ? costInput.value : "0");
-      appendHidden(holder, "row_margin", marginInput ? marginInput.value : "0");
-      appendHidden(holder, "row_price", priceInput ? priceInput.value : "0");
-      appendHidden(holder, "row_shipping", shippingInput ? shippingInput.value : "0");
-      appendHidden(holder, "row_packaging", packagingInput ? packagingInput.value : "0");
-      appendHidden(holder, "row_final", finalInput ? finalInput.value : "0");
+      appendHidden(holder, "row_product",      productInput    ? productInput.value    : "");
+      appendHidden(holder, "row_description",  descriptionInput ? descriptionInput.value : "");
+      appendHidden(holder, "row_um",           umInput         ? umInput.value         : "");
+      appendHidden(holder, "row_package_type", packageInput    ? packageInput.value    : "");
+      appendHidden(holder, "row_cost",         costInput       ? costInput.value       : "0");
+      appendHidden(holder, "row_pre_shipping", preShipInput    ? preShipInput.value    : "0");
+      appendHidden(holder, "row_pre_packaging",prePackInput    ? prePackInput.value    : "0");
+      appendHidden(holder, "row_margin",       marginInput     ? marginInput.value     : "0");
+      appendHidden(holder, "row_price",        priceInput      ? priceInput.value      : "0");
+      appendHidden(holder, "row_add_shipping", addShipInput    ? addShipInput.value    : "0");
+      appendHidden(holder, "row_add_packaging",addPackInput    ? addPackInput.value    : "0");
+      appendHidden(holder, "row_final",        finalInput      ? finalInput.value      : "0");
     });
   }
 
   function submitCustomerDefaults(source) {
     const actionInput = document.getElementById("printer-action");
+
     if (actionInput) {
-      actionInput.value = "select_customer";
+      if (source === "period") {
+        actionInput.value = "refresh_period_costs";
+        sessionStorage.removeItem("printer_draft_state");
+      } else {
+        actionInput.value = "select_customer";
+        savePrinterDraftState();
+      }
     }
 
     syncCurrentRowsToToolbarForm();
-    savePrinterDraftState();
 
     const form = document.getElementById("printer-form");
     if (form) {
       form.submit();
-    }
-  }
-
-  function toggleProductPanel(event) {
-    event.stopPropagation();
-    const panel = document.getElementById("product-panel");
-    if (panel) {
-      panel.classList.toggle("hidden");
-    }
-
-    const search = document.getElementById("product-search");
-    if (search && panel && !panel.classList.contains("hidden")) {
-      setTimeout(() => search.focus(), 0);
     }
   }
 
@@ -1261,38 +1371,30 @@
     if (!table) return [];
 
     return Array.from(table.querySelectorAll("tbody tr")).map(function(tr) {
-      const productInput = tr.querySelector('input[name="row_product"]');
-      const descriptionInput = tr.querySelector('input[name="row_description"]');
-      const umInput = tr.querySelector('select[name="row_um"]');
-      const packageInput = tr.querySelector('select[name="row_package_type"]');
-      const costInput = tr.querySelector('input[name="row_cost"]');
-      const marginInput = tr.querySelector('input[name="row_margin"]');
-      const priceInput = tr.querySelector('input[name="row_price"]');
-      const shippingInput = tr.querySelector('input[name="row_shipping"]');
-      const packagingInput = tr.querySelector('input[name="row_packaging"]');
-      const finalInput = tr.querySelector('input[name="row_final"]');
-
       return {
-        product: productInput ? productInput.value : "",
-        description: descriptionInput ? descriptionInput.value : "",
-        um: umInput ? umInput.value : "",
-        package_type: packageInput ? packageInput.value : "",
-        cost: costInput ? costInput.value : "0",
-        margin: marginInput ? marginInput.value : "0",
-        price: priceInput ? priceInput.value : "0",
-        shipping: shippingInput ? shippingInput.value : "0",
-        packaging: packagingInput ? packagingInput.value : "0",
-        final: finalInput ? finalInput.value : "0"
+        product:      tr.querySelector('input[name="row_product"]')?.value      || "",
+        description:  tr.querySelector('input[name="row_description"]')?.value  || "",
+        um:           tr.querySelector('select[name="row_um"]')?.value          || "",
+        package_type: tr.querySelector('select[name="row_package_type"]')?.value || "",
+        cost:         tr.querySelector('input[name="row_cost"]')?.value         || "0",
+        pre_shipping: tr.querySelector('input[name="row_pre_shipping"]')?.value || "0",
+        pre_packaging:tr.querySelector('input[name="row_pre_packaging"]')?.value || "0",
+        margin:       tr.querySelector('input[name="row_margin"]')?.value       || "0",
+        final_cost:   tr.querySelector('input[name="row_final_cost"]')?.value || "0",
+        price:        tr.querySelector('input[name="row_price"]')?.value        || "0",
+        add_shipping: tr.querySelector('input[name="row_add_shipping"]')?.value || "0",
+        add_packaging:tr.querySelector('input[name="row_add_packaging"]')?.value || "0",
+        final:        tr.querySelector('input[name="row_final"]')?.value        || "0"
       };
     });
   }
 
   function savePrinterDraftState() {
     const state = {
-      pricing_period: getToolbarFieldValue("pricing_period"),
-      customer_id: getToolbarFieldValue("customer_id"),
+      pricing_period:  getToolbarFieldValue("pricing_period"),
+      customer_id:     getToolbarFieldValue("customer_id"),
       sales_person_id: getToolbarFieldValue("sales_person_id"),
-      rows: getCurrentQuoteRows()
+      rows:            getCurrentQuoteRows()
     };
 
     sessionStorage.setItem("printer_draft_state", JSON.stringify(state));
@@ -1305,16 +1407,19 @@
     holder.innerHTML = "";
 
     state.rows.forEach(function(row) {
-      appendHidden(holder, "row_product", row.product || "");
-      appendHidden(holder, "row_description", row.description || "");
-      appendHidden(holder, "row_um", row.um || "");
-      appendHidden(holder, "row_package_type", row.package_type || "");
-      appendHidden(holder, "row_cost", row.cost || "0");
-      appendHidden(holder, "row_margin", row.margin || "0");
-      appendHidden(holder, "row_price", row.price || "0");
-      appendHidden(holder, "row_shipping", row.shipping || "0");
-      appendHidden(holder, "row_packaging", row.packaging || "0");
-      appendHidden(holder, "row_final", row.final || "0");
+      appendHidden(holder, "row_product",       row.product       || "");
+      appendHidden(holder, "row_description",   row.description   || "");
+      appendHidden(holder, "row_um",            row.um            || "");
+      appendHidden(holder, "row_package_type",  row.package_type  || "");
+      appendHidden(holder, "row_cost",          row.cost  || "0");
+      appendHidden(holder, "row_pre_shipping",  row.pre_shipping  || "0");
+      appendHidden(holder, "row_pre_packaging", row.pre_packaging || "0");
+      appendHidden(holder, "row_margin",        row.margin        || "0");
+      appendHidden(holder, "row_price",         row.price || "0");
+      appendHidden(holder, "row_add_shipping",  row.add_shipping  || "0");
+      appendHidden(holder, "row_add_packaging", row.add_packaging || "0");
+      appendHidden(holder, "row_final",         row.final || "0");
+      appendHidden(holder, "row_final_cost",    row.final_cost || "0");
     });
   }
 
@@ -1357,15 +1462,29 @@
   }
 
   document.addEventListener("DOMContentLoaded", function() {
-    restorePrinterDraftStateIfNeeded();
+      restorePrinterDraftStateIfNeeded();
 
-    const priceListForm = document.getElementById("price-list-form");
-    if (priceListForm) {
-      priceListForm.addEventListener("submit", function() {
-        savePrinterDraftState();
-      });
+      const priceListForm = document.getElementById("price-list-form");
+      if (priceListForm) {
+        priceListForm.addEventListener("submit", function() {
+          savePrinterDraftState();
+        });
+      }
+    });
+
+    document.addEventListener("input", function(e) {
+    if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
+      savePrinterDraftState();
     }
   });
+
+  document.addEventListener("change", function(e) {
+    if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
+      savePrinterDraftState();
+    }
+  });
+
+window.addEventListener("beforeunload", savePrinterDraftState);
 </script>
 
 <script>
@@ -1405,120 +1524,7 @@
   });
 </script>
 
-<script>
-  function autoSavePrinterDraft() {
-    const state = {
-      pricing_period: document.getElementById("pricing_period")?.value || "",
-      customer_id: document.getElementById("customer_id")?.value || "",
-      sales_person_id: document.getElementById("sales_person_id")?.value || "",
-      rows: []
-    };
 
-    document.querySelectorAll("#quote-table tbody tr").forEach(function(tr) {
-      state.rows.push({
-        product: tr.querySelector('input[name="row_product"]')?.value || "",
-        description: tr.querySelector('input[name="row_description"]')?.value || "",
-        cost: tr.querySelector('input[name="row_cost"]')?.value || "",
-        um: tr.querySelector('select[name="row_um"]')?.value || "",
-        package_type: tr.querySelector('select[name="row_package_type"]')?.value || "",
-        price: tr.querySelector('input[name="row_price"]')?.value || "",
-        shipping: tr.querySelector('input[name="row_shipping"]')?.value || "",
-        packaging: tr.querySelector('input[name="row_packaging"]')?.value || "",
-        final: tr.querySelector('input[name="row_final"]')?.value || "",
-        margin: tr.querySelector('input[name="row_margin"]')?.value || ""
-      });
-    });
-
-    sessionStorage.setItem("printer_draft_state", JSON.stringify(state));
-  }
-
-  function restorePrinterDraft() {
-    const raw = sessionStorage.getItem("printer_draft_state");
-    if (!raw) return;
-
-    let state;
-    try {
-      state = JSON.parse(raw);
-    } catch {
-      return;
-    }
-
-    if (state.pricing_period) {
-      const period = document.getElementById("pricing_period");
-      if (period) period.value = state.pricing_period;
-    }
-
-    if (state.customer_id) {
-      const customer = document.getElementById("customer_id");
-      if (customer) customer.value = state.customer_id;
-    }
-
-    if (state.sales_person_id) {
-      const salesperson = document.getElementById("sales_person_id");
-      if (salesperson) salesperson.value = state.sales_person_id;
-    }
-
-    const tableRows = document.querySelectorAll("#quote-table tbody tr");
-
-    state.rows.forEach(function(savedRow, index) {
-      const tr = tableRows[index];
-      if (!tr) return;
-
-      const currentProduct =
-        tr.querySelector('input[name="row_product"]')?.value || "";
-
-      const savedProduct = savedRow.product || "";
-
-      // IMPORTANT:
-      // Do not restore old row data into a different product row.
-      // This prevents duplicated rows from getting overwritten by the next row's old cost.
-      if (
-        currentProduct.trim().toLowerCase() !== savedProduct.trim().toLowerCase()
-      ) {
-        return;
-      }
-
-      const setVal = (selector, value) => {
-        const el = tr.querySelector(selector);
-        if (el) el.value = value || "";
-      };
-
-      setVal('input[name="row_cost"]', savedRow.cost);
-      setVal('select[name="row_um"]', savedRow.um);
-      setVal('select[name="row_package_type"]', savedRow.package_type);
-      setVal('input[name="row_price"]', savedRow.price);
-      setVal('input[name="row_shipping"]', savedRow.shipping);
-      setVal('input[name="row_packaging"]', savedRow.packaging);
-      setVal('input[name="row_final"]', savedRow.final);
-      setVal('input[name="row_margin"]', savedRow.margin);
-    });
-  }
-
-  document.addEventListener("DOMContentLoaded", function() {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("history_load") === "1") {
-      sessionStorage.removeItem("printer_draft_state");
-      sessionStorage.removeItem("keep_product_panel_open");
-      return;
-    }
-
-    restorePrinterDraft();
-
-    document.addEventListener("input", function(e) {
-      if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
-        autoSavePrinterDraft();
-      }
-    });
-
-    document.addEventListener("change", function(e) {
-      if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
-        autoSavePrinterDraft();
-      }
-    });
-
-    window.addEventListener("beforeunload", autoSavePrinterDraft);
-  });
-</script>
 
 <script>
   function startNewBlankList() {
@@ -1530,13 +1536,12 @@
     sessionStorage.removeItem("keep_product_panel_open");
 
     const customerEl = document.getElementById("customer_id");
-    const salesEl = document.getElementById("sales_person_id");
-    const periodEl = document.getElementById("pricing_period");
-    const holder = document.getElementById("existing-row-state");
+    const salesEl    = document.getElementById("sales_person_id");
+    const holder     = document.getElementById("existing-row-state");
 
     if (customerEl) customerEl.value = "";
-    if (salesEl) salesEl.value = "";
-    if (holder) holder.innerHTML = "";
+    if (salesEl)    salesEl.value    = "";
+    if (holder)     holder.innerHTML = "";
 
     setPrinterAction("new");
     return true;

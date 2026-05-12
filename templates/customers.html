@@ -49,6 +49,10 @@
     flex-wrap: wrap;
   }
 
+  .customer-search-wrap {
+    margin-bottom: 14px;
+  }
+
   .customer-list-table {
     width: 100%;
     table-layout: fixed;
@@ -137,7 +141,8 @@
           </a>
         </div>
       </div>
-      <div class="mb-3">
+
+      <div class="customer-search-wrap">
         <input
           type="text"
           id="customerSearch"
@@ -177,8 +182,7 @@
                     {% endif %}
                   </td>
                   <td>
-                    <a href="{{ url_for('customer_profile', customer_id=c.id) }}"
-                      class="btn btn-outline-primary btn-sm">
+                    <a href="{{ url_for('customer_profile', customer_id=c.id) }}" class="btn btn-outline-primary btn-sm">
                       View
                     </a>
                   </td>
@@ -196,20 +200,18 @@
     </div>
   </div>
 </div>
+
 <script>
   function filterCustomers() {
-    const searchValue = document.getElementById("customerSearch").value.toLowerCase();
+    const searchInput = document.getElementById("customerSearch");
+    const searchValue = searchInput ? searchInput.value.toLowerCase() : "";
     const rows = document.querySelectorAll(".customer-row");
 
     rows.forEach(row => {
       const customerName = row.getAttribute("data-customer-name") || "";
-
-      if (customerName.includes(searchValue)) {
-        row.style.display = "";
-      } else {
-        row.style.display = "none";
-      }
+      row.style.display = customerName.includes(searchValue) ? "" : "none";
     });
   }
 </script>
+
 {% endblock %}

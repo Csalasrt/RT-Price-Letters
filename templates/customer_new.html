@@ -350,43 +350,72 @@
 
       <form method="POST" action="{{ url_for('customer_new_page') }}" id="customer-new-form">
         <div class="top-entry-row">
-          <div>
-            <label class="field-label">Customer Name *</label>
-            <input
-              type="text"
-              name="customer_name"
-              class="text-input"
-              value="{{ customer_name if customer_name is defined else '' }}"
-              placeholder="Enter customer name"
-              required
-            >
-          </div>
+            <div>
+                <label class="field-label">Customer Name *</label>
+                <input
+                type="text"
+                name="customer_name"
+                class="text-input"
+                value="{{ customer_name if customer_name is defined else '' }}"
+                placeholder="Enter customer name"
+                required
+                >
+            </div>
 
-          <div>
-            <label class="field-label">Products</label>
+            <div>
+                <label class="field-label">Products</label>
 
-            <div class="product-picker" id="product-picker">
-              <div class="product-trigger placeholder" id="product-trigger" onclick="toggleProductPanel(event)">
-                <div class="product-trigger-text" id="product-trigger-text">Select products...</div>
-                <div class="product-trigger-arrow">▾</div>
-              </div>
-
-              <div class="product-panel hidden" id="product-panel">
-                <div class="product-search-wrap">
-                  <input
-                    type="text"
-                    id="product-search"
-                    class="product-search"
-                    placeholder="Search products..."
-                    oninput="filterProductOptions()"
-                  >
+                <div class="product-picker" id="product-picker">
+                <div class="product-trigger placeholder" id="product-trigger" onclick="toggleProductPanel(event)">
+                    <div class="product-trigger-text" id="product-trigger-text">Select products...</div>
+                    <div class="product-trigger-arrow">▾</div>
                 </div>
 
-                <div class="product-options" id="product-options"></div>
-              </div>
+                <div class="product-panel hidden" id="product-panel">
+                    <div class="product-search-wrap">
+                    <input
+                        type="text"
+                        id="product-search"
+                        class="product-search"
+                        placeholder="Search products..."
+                        oninput="filterProductOptions()"
+                    >
+                    </div>
+
+                    <div class="product-options" id="product-options"></div>
+                </div>
+                </div>
             </div>
-          </div>
-        </div>
+            </div>
+
+            <div style="margin-bottom: 18px;">
+            <label class="field-label">Customer Locations</label>
+
+            <div id="locations-box">
+                {% if locations is defined and locations %}
+                {% for location in locations %}
+                    <input
+                    type="text"
+                    name="locations[]"
+                    class="text-input mb-2"
+                    value="{{ location }}"
+                    placeholder="Enter location name"
+                    >
+                {% endfor %}
+                {% else %}
+                <input
+                    type="text"
+                    name="locations[]"
+                    class="text-input mb-2"
+                    placeholder="Enter location name"
+                >
+                {% endif %}
+            </div>
+
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addLocationInput()">
+                + Add Location
+            </button>
+            </div>
 
         <div class="section-divider"></div>
 
@@ -435,6 +464,17 @@
 <script>
   const RAW_COMPANY_PRODUCTS = {{ company_products|tojson if company_products is defined else '[]' }};
   const EXISTING_ROWS = {{ form_rows|tojson if form_rows is defined else '[]' }};
+  function addLocationInput() {
+    const box = document.getElementById("locations-box");
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.name = "locations[]";
+    input.className = "text-input mb-2";
+    input.placeholder = "Enter location name";
+
+    box.appendChild(input);
+  }
 
   const rowsBody = document.getElementById("customer-rows-body");
   const emptyStateRow = document.getElementById("empty-state-row");
