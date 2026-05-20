@@ -29,42 +29,37 @@
         <div style="font-weight:700;">
           Customer Locations
         </div>
-
-        <button type="submit" form="locationsForm" class="btn btn-primary btn-sm">
-          Save Locations
-        </button>
       </div>
 
       <form id="locationsForm" method="POST" action="{{ url_for('customer_locations_save', customer_id=customer.id) }}">
         <div id="locationsList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
 
+          {% set us_states = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"] %}
+
           {% if customer.locations and customer.locations|length > 0 %}
             {% for loc in customer.locations %}
-            <div class="location-row" style="display:flex; gap:8px; align-items:center;">
-              <input
-                type="text"
-                name="customer_locations[]"
-                class="form-control form-control-sm"
-                value="{{ loc }}"
-                placeholder="Location name"
-              >
-              <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">
-                Remove
-              </button>
-            </div>
+              {% set parts = loc.rsplit(' ', 1) %}
+              {% set loc_city = parts[0] if parts|length == 2 else loc %}
+              {% set loc_state = parts[1] if parts|length == 2 else "TX" %}
+              <div class="location-row" style="display:flex; gap:8px; align-items:center;">
+                <input type="text" name="location_city[]" class="form-control form-control-sm" value="{{ loc_city }}" placeholder="City">
+                <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">
+                  {% for st in us_states %}
+                    <option value="{{ st }}" {% if loc_state == st %}selected{% endif %}>{{ st }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
+              </div>
             {% endfor %}
           {% else %}
             <div class="location-row" style="display:flex; gap:8px; align-items:center;">
-              <input
-                type="text"
-                name="customer_locations[]"
-                class="form-control form-control-sm"
-                value=""
-                placeholder="Location name"
-              >
-              <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">
-                Remove
-              </button>
+              <input type="text" name="location_city[]" class="form-control form-control-sm" value="" placeholder="City">
+              <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">
+                {% for st in us_states %}
+                  <option value="{{ st }}" {% if st == "TX" %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
             </div>
           {% endif %}
 
@@ -77,36 +72,64 @@
 
       <hr>
 
-      <div style="font-weight:700; margin-bottom:10px;">
-        Default Customer Setup
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="font-weight:700;">Default Customer Setup</div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addDefaultRow()">+ Add Product</button>
+          <button type="submit" form="defaultSetupForm" class="btn btn-primary btn-sm">Save Setup</button>
+        </div>
       </div>
 
-      {% if customer.default_letter_rows and customer.default_letter_rows|length > 0 %}
-      <div class="table-responsive">
-        <table class="table table-sm align-middle text-center">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Description</th>
-              <th>U/M</th>
-              <th>Package</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in customer.default_letter_rows %}
-            <tr>
-              <td>{{ row.product }}</td>
-              <td>{{ row.description }}</td>
-              <td>{{ row.um }}</td>
-              <td>{{ row.package_type }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-        <div class="text-muted">No default products configured.</div>
-      {% endif %}
+      <form id="defaultSetupForm" method="POST" action="{{ url_for('customer_template_save', customer_id=customer.id) }}">
+        <div class="table-responsive">
+          <table class="table table-sm align-middle text-center" id="default-setup-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Description</th>
+                <th>U/M</th>
+                <th>Package</th>
+                <th>Margin %</th>
+                <th>Shipping</th>
+                <th>Packaging</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if customer.default_letter_rows and customer.default_letter_rows|length > 0 %}
+                {% for row in customer.default_letter_rows %}
+                <tr class="default-row">
+                  <td>
+                    <div class="product-cell-wrapper" style="position:relative;">
+                      <input type="text" name="default_row_product" class="form-control form-control-sm text-center default-product-input" value="{{ row.product }}" placeholder="Product" autocomplete="off">
+                      <div class="default-product-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ccc; border-radius:4px; z-index:999; max-height:180px; overflow-y:auto;"></div>
+                    </div>
+                  </td>
+                  <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}"></td>
+                  <td><input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="{{ row.um }}" style="max-width:70px;"></td>
+                  <td>
+                    <select name="default_row_package_type" class="form-control form-control-sm text-center">
+                      {% for pkg in ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"] %}
+                        <option value="{{ pkg }}" {% if row.package_type == pkg %}selected{% endif %}>{{ pkg }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                  <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px;"></td>
+                  <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px;"></td>
+                  <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px;"></td>
+                  <td style="display:flex; gap:4px; justify-content:center;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicateDefaultRow(this)" title="Duplicate">⧉</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDefaultRow(this)">✕</button>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </form>
 
     </div>
   </div>
@@ -117,75 +140,68 @@
   <div id="tab-template" class="card shadow-sm" style="display:none;">
     <div class="card-body">
 
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
-        <div style="font-weight:700;">
-          Saved Template
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <div style="font-weight:700;">Saved Template</div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addDefaultRow()">+ Add Product</button>
+          <button type="submit" form="defaultSetupForm" class="btn btn-primary btn-sm">Save Template</button>
         </div>
-
-        <button type="submit" form="templateForm" class="btn btn-primary btn-sm">
-          Save Template
-        </button>
       </div>
 
-      {% set template_rows = customer.default_letter_rows %}
+      {% if customer.default_letter_rows and customer.default_letter_rows|length > 0 %}
+        <div class="text-muted" style="font-size:12px; margin-bottom:10px;">
+          Editing here updates the same default setup shown on the Customer Info tab.
+        </div>
+      {% endif %}
 
-      {% if template_rows and template_rows|length > 0 %}
-      <form id="templateForm" method="POST" action="{{ url_for('customer_template_save', customer_id=customer.id) }}">
-        <div class="table-responsive">
-          <table class="table table-sm align-middle text-center">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Description</th>
-                <th>U/M</th>
-                <th>Package</th>
-                <th>Margin %</th>
-                <th>Shipping</th>
-                <th>Packaging</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {% for row in template_rows %}
-              <tr>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle text-center">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Description</th>
+              <th>U/M</th>
+              <th>Package</th>
+              <th>Margin %</th>
+              <th>Shipping</th>
+              <th>Packaging</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="template-tab-tbody">
+            {% if customer.default_letter_rows and customer.default_letter_rows|length > 0 %}
+              {% for row in customer.default_letter_rows %}
+              <tr class="default-row">
                 <td>
-                  <input type="text" name="default_row_product" class="form-control form-control-sm text-center" value="{{ row.product }}">
+                  <div class="product-cell-wrapper" style="position:relative;">
+                    <input type="text" name="default_row_product" class="form-control form-control-sm text-center default-product-input" value="{{ row.product }}" placeholder="Product" autocomplete="off">
+                    <div class="default-product-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ccc; border-radius:4px; z-index:999; max-height:180px; overflow-y:auto;"></div>
+                  </div>
                 </td>
-
+                <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}"></td>
+                <td><input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="{{ row.um }}" style="max-width:70px;"></td>
                 <td>
-                  <input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}">
+                  <select name="default_row_package_type" class="form-control form-control-sm text-center">
+                    {% for pkg in ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"] %}
+                      <option value="{{ pkg }}" {% if row.package_type == pkg %}selected{% endif %}>{{ pkg }}</option>
+                    {% endfor %}
+                  </select>
                 </td>
-
-                <td>
-                  <input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="{{ row.um }}">
-                </td>
-
-                <td>
-                  <input type="text" name="default_row_package_type" class="form-control form-control-sm text-center" value="{{ row.package_type }}">
-                </td>
-
-                <td>
-                  <input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}">
-                </td>
-
-                <td>
-                  <input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}">
-                </td>
-
-                <td>
-                  <input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}">
+                <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px;"></td>
+                <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px;"></td>
+                <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px;"></td>
+                <td style="display:flex; gap:4px;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicateDefaultRow(this)" title="Duplicate">⧉</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDefaultRow(this)">✕</button>
                 </td>
               </tr>
               {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </form>
-      {% else %}
-        <div class="text-muted">
-          No template saved yet. Save or download a price letter to generate one.
-        </div>
-      {% endif %}
+            {% else %}
+              <tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
 
     </div>
   </div>
@@ -265,6 +281,43 @@
 
 </div>
 
+
+<style>
+  .table-responsive {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+  }
+
+  .product-cell-wrapper {
+    position: relative;
+    overflow: visible !important;
+  }
+
+  .default-product-dropdown {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    z-index: 99999 !important;
+
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+
+    max-height: 220px;
+    overflow-y: auto;
+
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  }
+
+  #tab-info,
+  #tab-template,
+  .card,
+  .card-body {
+    overflow: visible !important;
+  }
+</style>
+
 <!-- ========================= -->
 <!-- SCRIPT -->
 <!-- ========================= -->
@@ -298,42 +351,285 @@
   buttons.history.onclick = () => switchTab("history");
   buttons.analytics.onclick = () => switchTab("analytics");
 
+  const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
+
   function addLocationRow() {
     const list = document.getElementById("locationsList");
+    const options = US_STATES.map(st =>
+      `<option value="${st}" ${st === "TX" ? "selected" : ""}>${st}</option>`
+    ).join("");
 
     const row = document.createElement("div");
     row.className = "location-row";
-    row.style.display = "flex";
-    row.style.gap = "8px";
-    row.style.alignItems = "center";
-
+    row.style.cssText = "display:flex; gap:8px; align-items:center;";
     row.innerHTML = `
-      <input
-        type="text"
-        name="customer_locations[]"
-        class="form-control form-control-sm"
-        value=""
-        placeholder="Location name"
-      >
-      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">
-        Remove
-      </button>
+      <input type="text" name="location_city[]" class="form-control form-control-sm" value="" placeholder="City">
+      <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">${options}</select>
+      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
     `;
-
     list.appendChild(row);
+    attachAutoSave(row);  // ← add this
   }
+
+  // Wire up existing rows on page load
+  document.querySelectorAll(".location-row").forEach(attachAutoSave);
 
   function removeLocationRow(button) {
     const row = button.closest(".location-row");
-    if (row) {
-      row.remove();
-    }
+    if (row) row.remove();
 
     const list = document.getElementById("locationsList");
     if (list.children.length === 0) {
       addLocationRow();
+    } else {
+      autoSaveLocations();  // ← save the updated list after removal
     }
   }
+
+  function autoSaveLocations() {
+    const rows = document.querySelectorAll(".location-row");
+    const cities = [];
+    const states = [];
+
+    rows.forEach(row => {
+      const city = row.querySelector('input[name="location_city[]"]');
+      const state = row.querySelector('select[name="location_state[]"]');
+      if (city && city.value.trim() && state && state.value) {
+        cities.push(city.value.trim());
+        states.push(state.value);
+      }
+    });
+
+    const formData = new FormData();
+    cities.forEach(c => formData.append("location_city[]", c));
+    states.forEach(s => formData.append("location_state[]", s));
+
+    fetch("{{ url_for('customer_locations_save', customer_id=customer.id) }}", {
+      method: "POST",
+      body: formData
+    }).then(resp => {
+      if (resp.ok) showLocationSaveIndicator();
+    }).catch(() => {});
+  }
+
+  function showLocationSaveIndicator() {
+    let indicator = document.getElementById("location-save-indicator");
+    if (!indicator) {
+      indicator = document.createElement("span");
+      indicator.id = "location-save-indicator";
+      indicator.style.cssText = "font-size:12px; color:#067647; margin-left:10px; transition:opacity 0.4s;";
+      document.querySelector("#locationsForm").parentElement
+        .querySelector("div[style*='font-weight:700']")
+        .appendChild(indicator);
+    }
+    indicator.textContent = "✓ Saved";
+    indicator.style.opacity = "1";
+    setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+  }
+
+  function attachAutoSave(row) {
+    const city = row.querySelector('input[name="location_city[]"]');
+    const state = row.querySelector('select[name="location_state[]"]');
+    if (city) city.addEventListener("blur", autoSaveLocations);
+    if (state) state.addEventListener("change", autoSaveLocations);
+  }
+
+  // ── Default setup / template product dropdown ──
+  const PROFILE_PRODUCTS = {{ (products or company_products or []) | tojson }};
+
+  function productRowHtml() {
+    const pkgOptions = ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"]
+      .map(p => `<option value="${p}">${p}</option>`).join("");
+
+    return `
+      <td>
+        <div class="product-cell-wrapper" style="position:relative;">
+          <input type="text" name="default_row_product" class="form-control form-control-sm text-center default-product-input" value="" placeholder="Product" autocomplete="off">
+          <div class="default-product-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ccc; border-radius:4px; z-index:999; max-height:180px; overflow-y:auto;"></div>
+        </div>
+      </td>
+      <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value=""></td>
+      <td><input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="" style="max-width:70px;"></td>
+      <td><select name="default_row_package_type" class="form-control form-control-sm text-center">${pkgOptions}</select></td>
+      <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="0" style="max-width:80px;"></td>
+      <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="0" style="max-width:90px;"></td>
+      <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="0" style="max-width:90px;"></td>
+      <td style="display:flex; gap:4px;">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicateDefaultRow(this)" title="Duplicate">⧉</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDefaultRow(this)">✕</button>
+      </td>
+    `;
+  }
+
+  function addDefaultRow() {
+    const mainTbody = document.querySelector("#default-setup-table tbody");
+    const templateTbody = document.getElementById("template-tab-tbody");
+
+    [mainTbody, templateTbody].forEach(tbody => {
+      const emptyRow = tbody.querySelector("tr td[colspan]");
+      if (emptyRow) emptyRow.closest("tr").remove();
+
+      const tr = document.createElement("tr");
+      tr.className = "default-row";
+      tr.innerHTML = productRowHtml();
+      tbody.appendChild(tr);
+      attachProductDropdown(tr.querySelector(".default-product-input"));
+    });
+
+    syncTemplateRowsToMain();
+  }
+
+  function removeDefaultRow(btn) {
+    const tr = btn.closest("tr");
+    const rowIndex = Array.from(tr.parentElement.querySelectorAll("tr.default-row")).indexOf(tr);
+
+    document.querySelectorAll("#default-setup-table tbody, #template-tab-tbody").forEach(tbody => {
+      const rows = tbody.querySelectorAll("tr.default-row");
+      if (rows[rowIndex]) rows[rowIndex].remove();
+
+      if (tbody.querySelectorAll("tr.default-row").length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>`;
+      }
+    });
+  }
+
+  function duplicateDefaultRow(btn) {
+    const original = btn.closest("tr");
+    const rowIndex = Array.from(original.parentElement.querySelectorAll("tr.default-row")).indexOf(original);
+
+    document.querySelectorAll("#default-setup-table tbody, #template-tab-tbody").forEach(tbody => {
+      const rows = tbody.querySelectorAll("tr.default-row");
+      const source = rows[rowIndex];
+      if (!source) return;
+
+      const clone = source.cloneNode(true);
+      const dropdown = clone.querySelector(".default-product-dropdown");
+      const input = clone.querySelector(".default-product-input");
+
+      if (dropdown) dropdown.style.display = "none";
+      if (input) attachProductDropdown(input);
+
+      source.insertAdjacentElement("afterend", clone);
+    });
+
+    syncTemplateRowsToMain();
+  }
+
+  let activeFloatingDropdown = null;
+
+  function attachProductDropdown(input) {
+    if (!input || input.dataset.dropdownAttached === "1") return;
+    input.dataset.dropdownAttached = "1";
+
+    input.addEventListener("input", showFloatingProductDropdown);
+    input.addEventListener("focus", showFloatingProductDropdown);
+
+    input.addEventListener("blur", function () {
+      setTimeout(() => {
+        if (activeFloatingDropdown) {
+          activeFloatingDropdown.remove();
+          activeFloatingDropdown = null;
+        }
+        syncTemplateRowsToMain();
+      }, 150);
+    });
+  }
+
+  function showFloatingProductDropdown(e) {
+    const input = e.target;
+    const q = input.value.trim().toLowerCase();
+
+    if (activeFloatingDropdown) {
+      activeFloatingDropdown.remove();
+      activeFloatingDropdown = null;
+    }
+
+    const matches = PROFILE_PRODUCTS.filter(p =>
+      (p.product || "").toLowerCase().includes(q)
+    );
+
+    if (!matches.length) return;
+
+    const rect = input.getBoundingClientRect();
+
+    const dropdown = document.createElement("div");
+    activeFloatingDropdown = dropdown;
+
+    dropdown.style.cssText = `
+      position: fixed;
+      top: ${rect.bottom + 2}px;
+      left: ${rect.left}px;
+      width: ${rect.width}px;
+      max-height: 220px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+      z-index: 2147483647;
+    `;
+
+    matches.slice(0, 25).forEach(function(p) {
+      const div = document.createElement("div");
+      div.textContent = p.product;
+      div.style.cssText = `
+        padding: 7px 10px;
+        cursor: pointer;
+        font-size: 13px;
+        text-align: left;
+        background: #fff;
+      `;
+
+      div.addEventListener("mousedown", function(ev) {
+        ev.preventDefault();
+
+        input.value = p.product || "";
+
+        const tr = input.closest("tr");
+        const descInput = tr.querySelector('input[name="default_row_description"]');
+        const umInput = tr.querySelector('input[name="default_row_um"]');
+
+        if (descInput && p.description) descInput.value = p.description;
+        if (umInput && p.um) umInput.value = p.um;
+
+        if (activeFloatingDropdown) {
+          activeFloatingDropdown.remove();
+          activeFloatingDropdown = null;
+        }
+
+        syncTemplateRowsToMain();
+      });
+
+      div.addEventListener("mouseover", () => div.style.background = "#f0f4ff");
+      div.addEventListener("mouseout", () => div.style.background = "#fff");
+
+      dropdown.appendChild(div);
+    });
+
+    document.body.appendChild(dropdown);
+  }
+
+  function syncTemplateRowsToMain() {
+    const mainRows = document.querySelectorAll("#default-setup-table tbody tr.default-row");
+    const templateRows = document.querySelectorAll("#template-tab-tbody tr.default-row");
+
+    templateRows.forEach((templateRow, i) => {
+      const mainRow = mainRows[i];
+      if (!mainRow) return;
+
+      const templateInputs = templateRow.querySelectorAll("input, select");
+      const mainInputs = mainRow.querySelectorAll("input, select");
+
+      templateInputs.forEach((input, j) => {
+        if (mainInputs[j]) mainInputs[j].value = input.value;
+      });
+    });
+  }
+
+  document.querySelectorAll(".default-product-input").forEach(attachProductDropdown);
+
+  document.getElementById("template-tab-tbody")?.addEventListener("input", syncTemplateRowsToMain);
+  document.getElementById("template-tab-tbody")?.addEventListener("change", syncTemplateRowsToMain);
 </script>
 
 {% endblock %}

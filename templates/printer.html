@@ -200,52 +200,66 @@
 
   .selection-header-cell,
   .selection-cell {
-    width: 58px;
-    min-width: 58px;
-    padding-left: 1px !important;
-    padding-right: 6px !important;
+    width: 74px;
+    min-width: 74px;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    text-align: center !important;
   }
 
-  .selection-header-wrap {
-    display: flex;
+  .selection-header-wrap,
+  .row-actions {
+    display: grid;
+    grid-template-columns: 28px 28px;
     align-items: center;
     justify-content: center;
-    width: 100%;
-  }
-
-  .row-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-    padding-left: 21.5px;
+    column-gap: 8px;
     width: 100%;
   }
 
   .delete-row-check,
   #select-all-delete,
   .duplicate-btn {
-    width: 18px;
-    height: 18px;
+    width: 28px;
+    height: 28px;
     margin: 0;
     box-sizing: border-box;
-    vertical-align: middle;
-    flex: 0 0 18px;
-  }
-
-  .duplicate-btn {
+    flex: 0 0 28px;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid #6c757d;
+    border-radius: 3px;
+    background: #fff;
+    color: #495057;
+    cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    font-size: 13px;
     line-height: 1;
-    border: 1px solid #d0d5dd;
-    background: #fff;
-    border-radius: 4px;
-    cursor: pointer;
+  }
+
+  .delete-row-check,
+  #select-all-delete {
     position: relative;
-    left: -1px;
+  }
+
+  .delete-row-check:checked,
+  #select-all-delete:checked {
+    background: #6c757d;
+  }
+
+  .delete-row-check:checked::after,
+  #select-all-delete:checked::after {
+    content: "✓";
+    position: absolute;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .duplicate-btn {
+    font-size: 13px;
   }
 
   .duplicate-btn:hover {
@@ -499,10 +513,12 @@
                 <th class="selection-header-cell">
                   <div class="selection-header-wrap">
                     <input type="checkbox" id="select-all-delete">
+                    <span style="width:28px; height:28px; display:block;"></span>
                   </div>
                 </th>
                 <th style="min-width:220px;">Product</th>
                 <th style="min-width:90px;">UM</th>
+                <th style="min-width:320px;">Shipping Details</th>
                 <th style="min-width:160px;">Package Type</th>
                 <th style="min-width:120px;">Our Cost</th>
                 <th style="min-width:120px;">Packaging</th>
@@ -536,14 +552,14 @@
                       >
 
                       <button
-                        type="submit"
-                        name="duplicate_row"
-                        value="{{ loop.index0 }}"
-                        class="duplicate-btn"
-                        title="Duplicate row"
-                      >
-                        +
-                      </button>
+                      type="submit"
+                      name="duplicate_row"
+                      value="{{ loop.index0 }}"
+                      class="duplicate-btn"
+                      title="Duplicate row"
+                    >
+                      ⧉
+                    </button>
                     </div>
                   </td>
 
@@ -564,6 +580,53 @@
                       <option value="EACH" {% if (r.um or '')|upper == "EACH" %}selected{% endif %}>EACH</option>
                     </select>
                   </td>
+
+<td>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                      <select
+                        class="form-control form-control-sm shipping-type-select"
+                        name="row_shipping_type"
+                        onchange="handleShippingTypeChange(this)"
+                        style="max-width:80px;"
+                      >
+                        <option value="" {% if not r.get('shipping_type') %}selected{% endif %}>—</option>
+                        <option value="DEL" {% if r.get('shipping_type') == 'DEL' %}selected{% endif %}>DEL</option>
+                        <option value="FOB" {% if r.get('shipping_type') == 'FOB' %}selected{% endif %}>FOB</option>
+                      </select>
+
+                      <select
+                        class="form-control form-control-sm shipping-location-select"
+                        name="row_shipping_location"
+                        style="max-width:160px; {% if r.get('shipping_location') == '__custom__' %}display:none;{% endif %}"
+                        {% if not r.get('shipping_type') %}disabled{% endif %}
+                      >
+                        <option value="">— Location —</option>
+                        {% if r.get('shipping_type') == 'FOB' %}
+                          {% for loc in pickup_locations %}
+                            <option value="{{ loc.city }} {{ loc.state }}" {% if r.get('shipping_location') == loc.city ~ ' ' ~ loc.state %}selected{% endif %}>
+                              {{ loc.city }}, {{ loc.state }}
+                            </option>
+                          {% endfor %}
+                        {% else %}
+                          {% for loc in customer_locations %}
+                            <option value="{{ loc }}" {% if r.get('shipping_location') == loc %}selected{% endif %}>
+                              {{ loc }}
+                            </option>
+                          {% endfor %}
+                        {% endif %}
+                        <option value="__custom__">Other...</option>
+                      </select>
+
+                      <input
+                        type="text"
+                        class="form-control form-control-sm shipping-custom-input"
+                        name="row_shipping_custom"
+                        placeholder="Type location..."
+                        value="{{ r.get('shipping_custom', '') }}"
+                        style="max-width:160px; {% if r.get('shipping_location') != '__custom__' %}display:none;{% endif %}"
+                      >
+                    </div>
+                  </td>       
 
                   <td>
                     <select class="form-control form-control-sm package-type" name="row_package_type">
@@ -1228,19 +1291,25 @@
       const addShipInput    = tr.querySelector('input[name="row_add_shipping"]');
       const addPackInput    = tr.querySelector('input[name="row_add_packaging"]');
       const finalInput      = tr.querySelector('input[name="row_final"]');
+      const shippingTypeInput     = tr.querySelector('select[name="row_shipping_type"]');
+      const shippingLocationInput = tr.querySelector('select[name="row_shipping_location"]');
+      const shippingCustomInput   = tr.querySelector('input[name="row_shipping_custom"]');
 
-      appendHidden(holder, "row_product",      productInput    ? productInput.value    : "");
-      appendHidden(holder, "row_description",  descriptionInput ? descriptionInput.value : "");
-      appendHidden(holder, "row_um",           umInput         ? umInput.value         : "");
-      appendHidden(holder, "row_package_type", packageInput    ? packageInput.value    : "");
-      appendHidden(holder, "row_cost",         costInput       ? costInput.value       : "0");
-      appendHidden(holder, "row_pre_shipping", preShipInput    ? preShipInput.value    : "0");
-      appendHidden(holder, "row_pre_packaging",prePackInput    ? prePackInput.value    : "0");
-      appendHidden(holder, "row_margin",       marginInput     ? marginInput.value     : "0");
-      appendHidden(holder, "row_price",        priceInput      ? priceInput.value      : "0");
-      appendHidden(holder, "row_add_shipping", addShipInput    ? addShipInput.value    : "0");
-      appendHidden(holder, "row_add_packaging",addPackInput    ? addPackInput.value    : "0");
-      appendHidden(holder, "row_final",        finalInput      ? finalInput.value      : "0");
+      appendHidden(holder, "row_product",          productInput         ? productInput.value         : "");
+      appendHidden(holder, "row_description",      descriptionInput     ? descriptionInput.value     : "");
+      appendHidden(holder, "row_um",               umInput              ? umInput.value              : "");
+      appendHidden(holder, "row_package_type",     packageInput         ? packageInput.value         : "");
+      appendHidden(holder, "row_cost",             costInput            ? costInput.value            : "0");
+      appendHidden(holder, "row_pre_shipping",     preShipInput         ? preShipInput.value         : "0");
+      appendHidden(holder, "row_pre_packaging",    prePackInput         ? prePackInput.value         : "0");
+      appendHidden(holder, "row_margin",           marginInput          ? marginInput.value          : "0");
+      appendHidden(holder, "row_price",            priceInput           ? priceInput.value           : "0");
+      appendHidden(holder, "row_add_shipping",     addShipInput         ? addShipInput.value         : "0");
+      appendHidden(holder, "row_add_packaging",    addPackInput         ? addPackInput.value         : "0");
+      appendHidden(holder, "row_final",            finalInput           ? finalInput.value           : "0");
+      appendHidden(holder, "row_shipping_type",    shippingTypeInput    ? shippingTypeInput.value    : "");
+      appendHidden(holder, "row_shipping_location",shippingLocationInput? shippingLocationInput.value: "");
+      appendHidden(holder, "row_shipping_custom",  shippingCustomInput  ? shippingCustomInput.value  : "");
     });
   }
 
@@ -1264,11 +1333,94 @@
       form.submit();
     }
   }
+  function handleShippingTypeChange(select) {
+    const td = select.closest("td");
+    const locationSelect = td.querySelector(".shipping-location-select");
+    const customInput = td.querySelector(".shipping-custom-input");
+    const type = select.value;
+
+    const customerLocs = {{ customer_locations | tojson }};
+    const pickupLocs = {{ pickup_locations | tojson }};
+
+    locationSelect.innerHTML = '<option value="">— Location —</option>';
+
+    if (type === "DEL") {
+      customerLocs.forEach(function(loc) {
+        const opt = document.createElement("option");
+        opt.value = loc;
+        opt.textContent = loc;
+        locationSelect.appendChild(opt);
+      });
+    } else if (type === "FOB") {
+      pickupLocs.forEach(function(loc) {
+        const val = loc.city + " " + loc.state;
+        const opt = document.createElement("option");
+        opt.value = val;
+        opt.textContent = loc.city + ", " + loc.state;
+        locationSelect.appendChild(opt);
+      });
+    }
+
+    const customOpt = document.createElement("option");
+    customOpt.value = "__custom__";
+    customOpt.textContent = "Other...";
+    locationSelect.appendChild(customOpt);
+
+    // Always show both boxes; disable location dropdown when no type selected
+    locationSelect.disabled = !type;
+    locationSelect.style.display = "";
+    customInput.style.display = "none";
+    customInput.value = "";
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll(".shipping-location-select").forEach(function(sel) {
+      sel.addEventListener("change", function() {
+        const td = sel.closest("td");
+        const customInput = td.querySelector(".shipping-custom-input");
+        if (sel.value === "__custom__") {
+          sel.style.display = "none";       // hide dropdown
+          customInput.style.display = "";   // show text box in its place
+          customInput.focus();
+        } else {
+          customInput.style.display = "none";
+          customInput.value = "";
+        }
+      });
+    });
+
+    // If a row already has __custom__ saved, wire up a click on the input to go back
+    document.querySelectorAll(".shipping-custom-input").forEach(function(input) {
+      input.addEventListener("blur", function() {
+        // keep it as-is, value is preserved in the hidden field on sync
+      });
+    });
+  });
+
+  // Wire up existing rows on load for the custom input toggle
+  document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll(".shipping-location-select").forEach(function(sel) {
+      sel.addEventListener("change", function() {
+        const td = sel.closest("td");
+        const customInput = td.querySelector(".shipping-custom-input");
+        customInput.style.display = sel.value === "__custom__" ? "" : "none";
+        if (sel.value !== "__custom__") customInput.value = "";
+      });
+    });
+  });
 
   function closeProductPanel() {
     const panel = document.getElementById("product-panel");
     if (panel) {
       panel.classList.add("hidden");
+    }
+  }
+
+  function toggleProductPanel(e) {
+    e.stopPropagation();
+    const panel = document.getElementById("product-panel");
+    if (panel) {
+      panel.classList.toggle("hidden");
     }
   }
 
@@ -1384,7 +1536,15 @@
         price:        tr.querySelector('input[name="row_price"]')?.value        || "0",
         add_shipping: tr.querySelector('input[name="row_add_shipping"]')?.value || "0",
         add_packaging:tr.querySelector('input[name="row_add_packaging"]')?.value || "0",
-        final:        tr.querySelector('input[name="row_final"]')?.value        || "0"
+        final_price: tr.querySelector('input[name="row_final"]')?.value || "0",
+        final: tr.querySelector('input[name="row_final"]')?.value || "0",
+        source_cost: tr.querySelector('input[name="row_source_cost"]')?.value || "0",
+        source_um: tr.querySelector('input[name="row_source_um"]')?.value || "",
+        source_price: tr.querySelector('input[name="row_source_price"]')?.value || "0",
+        weight: tr.querySelector('input[name="row_weight"]')?.value || "",
+        shipping_type:     tr.querySelector('select[name="row_shipping_type"]')?.value     || "",
+        shipping_location: tr.querySelector('select[name="row_shipping_location"]')?.value || "",
+        shipping_custom:   tr.querySelector('input[name="row_shipping_custom"]')?.value    || "",
       };
     });
   }
@@ -1420,6 +1580,9 @@
       appendHidden(holder, "row_add_packaging", row.add_packaging || "0");
       appendHidden(holder, "row_final",         row.final || "0");
       appendHidden(holder, "row_final_cost",    row.final_cost || "0");
+      appendHidden(holder, "row_shipping_type",     row.shipping_type     || "");
+      appendHidden(holder, "row_shipping_location", row.shipping_location || "");
+      appendHidden(holder, "row_shipping_custom",   row.shipping_custom   || "");
     });
   }
 
@@ -1443,20 +1606,11 @@
       return;
     }
 
-    if (!getToolbarFieldValue("pricing_period") && state.pricing_period) {
-      setToolbarFieldValue("pricing_period", state.pricing_period);
-    }
+    if (state.pricing_period)  setToolbarFieldValue("pricing_period",  state.pricing_period);
+    if (state.customer_id)     setToolbarFieldValue("customer_id",     state.customer_id);
+    if (state.sales_person_id) setToolbarFieldValue("sales_person_id", state.sales_person_id);
 
-    if (!getToolbarFieldValue("customer_id") && state.customer_id) {
-      setToolbarFieldValue("customer_id", state.customer_id);
-    }
-
-    if (!getToolbarFieldValue("sales_person_id") && state.sales_person_id) {
-      setToolbarFieldValue("sales_person_id", state.sales_person_id);
-    }
-
-    const table = document.getElementById("quote-table");
-    if (!table && state.rows && state.rows.length) {
+    if (state.rows && state.rows.length) {
       rebuildRowsFromDraft(state);
     }
   }
@@ -1484,7 +1638,22 @@
     }
   });
 
-window.addEventListener("beforeunload", savePrinterDraftState);
+window.addEventListener("beforeunload", function () {
+  const state = {
+    pricing_period:  getToolbarFieldValue("pricing_period"),
+    customer_id:     getToolbarFieldValue("customer_id"),
+    sales_person_id: getToolbarFieldValue("sales_person_id"),
+    default_margin:  document.querySelector('input[name="default_margin"]')?.value || "15",
+    rows:            getCurrentQuoteRows()
+  };
+
+  sessionStorage.setItem("printer_draft_state", JSON.stringify(state));
+
+  navigator.sendBeacon(
+    "/printer/autosave",
+    new Blob([JSON.stringify(state)], { type: "application/json" })
+  );
+});
 </script>
 
 <script>

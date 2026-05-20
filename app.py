@@ -144,6 +144,13 @@ class CustomerLocation(db.Model):
     location_name = db.Column(db.String(255), nullable=False, default="")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
+class PickupLocation(db.Model):
+    __tablename__ = "pickup_locations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    city = db.Column(db.String(255), nullable=False, default="")
+    state = db.Column(db.String(2), nullable=False, default="")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 class CustomerDefaultRow(db.Model):
     __tablename__ = "customer_default_rows"
@@ -1773,7 +1780,10 @@ def normalize_printer_row(row):
         "add_shipping": add_shipping,
         "add_packaging": add_packaging,
         "final_price": final_price,
-        "weight": weight
+        "weight": weight,
+        "shipping_type":     (row.get("shipping_type") or "").strip(),
+        "shipping_location": (row.get("shipping_location") or "").strip(),
+        "shipping_custom":   (row.get("shipping_custom") or "").strip(),
     }
 
 def save_printer_working_draft(month_key, customer_id, sales_person_id, default_margin, rows):
@@ -2245,6 +2255,9 @@ def get_posted_printer_rows(form):
     posted_source_prices = form.getlist("row_source_price")
     posted_weights = form.getlist("row_weight")
     posted_final_costs = form.getlist("row_final_cost")
+    posted_shipping_types = form.getlist("row_shipping_type")
+    posted_shipping_locations = form.getlist("row_shipping_location")
+    posted_shipping_customs = form.getlist("row_shipping_custom")
 
     row_count = len(posted_products)
     rows = []
@@ -2274,7 +2287,11 @@ def get_posted_printer_rows(form):
             "source_um": posted_source_ums[i] if i < len(posted_source_ums) else posted_ums[i],
             "source_price": posted_source_prices[i] if i < len(posted_source_prices) else (posted_prices[i] if i < len(posted_prices) else 0),
             "weight": posted_weights[i] if i < len(posted_weights) else "",
+            "shipping_type":     posted_shipping_types[i]     if i < len(posted_shipping_types)     else "",
+            "shipping_location": posted_shipping_locations[i] if i < len(posted_shipping_locations) else "",
+            "shipping_custom":   posted_shipping_customs[i]   if i < len(posted_shipping_customs)   else "",
         }
+        
 
         rows.append(normalize_printer_row(row))
 
@@ -3598,6 +3615,47 @@ def force_period_costs_on_rows(rows, priced_by_name):
 
     return fixed_rows
 
+def load_pickup_locations():
+    rows = PickupLocation.query.order_by(
+        PickupLocation.state.asc(),
+        PickupLocation.city.asc()
+    ).all()
+
+    return [
+        {
+            "id": r.id,
+            "city": r.city or "",
+            "state": r.state or "",
+            "created_at": r.created_at.isoformat() if r.created_at else "",
+        }
+        for r in rows
+    ]
+
+
+def save_pickup_locations(locations):
+    PickupLocation.query.delete()
+
+    seen = set()
+
+    for loc in locations or []:
+        city = str(loc.get("city") or "").strip()
+        state = str(loc.get("state") or "").strip().upper()
+
+        if not city or not state:
+            continue
+
+        key = (city.lower(), state)
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        db.session.add(PickupLocation(
+            city=city,
+            state=state
+        ))
+
+    db.session.commit()
 
 # -------------------------
 # Forms
@@ -4268,7 +4326,8 @@ def customer_profile(customer_id):
         "customer_profile.html",
         customer=customer,
         customer_history=customer_history,
-        customer_template=customer_template
+        customer_template=customer_template,
+        products=load_company_products()      
     )
 
 @app.route("/customers/<customer_id>/locations/save", methods=["POST"])
@@ -4280,16 +4339,14 @@ def customer_locations_save(customer_id):
         flash("Customer not found.", "error")
         return redirect(url_for("customers_page"))
 
-    location_names = [
-        x.strip()
-        for x in request.form.getlist("customer_locations[]")
-        if x.strip()
-    ]
+    cities = request.form.getlist("location_city[]")
+    states = request.form.getlist("location_state[]")
+    locations = [f"{c.strip()} {s.strip()}" for c, s in zip(cities, states) if c.strip()]
 
     # Remove duplicates while keeping order
     cleaned_locations = []
     seen = set()
-    for name in location_names:
+    for name in locations:
         key = name.lower()
         if key not in seen:
             seen.add(key)
@@ -4410,6 +4467,24 @@ def customer_profile_save(customer_id):
     save_customers(customers)
     flash("Customer profile updated.", "success")
     return redirect(url_for("customer_profile", customer_id=customer_id))
+
+@app.route("/printer/autosave", methods=["POST"])
+@login_required
+def printer_autosave():
+    data = request.get_json(silent=True) or {}
+
+    month_key = (data.get("pricing_period") or current_month_key_central()).strip()
+    rows = data.get("rows") or []
+
+    save_printer_working_draft(
+        month_key=month_key,
+        customer_id=(data.get("customer_id") or "").strip(),
+        sales_person_id=(data.get("sales_person_id") or "").strip(),
+        default_margin=(data.get("default_margin") or "15").strip(),
+        rows=rows
+    )
+
+    return jsonify({"ok": True})
 
 @app.route("/printer", methods=["GET", "POST"])
 @login_required
@@ -5222,6 +5297,11 @@ def printer_page():
         }
         session.modified = True
 
+    
+    selected_customer = next((c for c in customers if c.get("id") == form.get("customer_id")), None)
+    customer_locations = [loc for loc in (selected_customer.get("locations") or [])] if selected_customer else []
+    pickup_locations = load_pickup_locations()
+
     return render_template(
         "printer.html",
         month_key=month_key,
@@ -5234,6 +5314,8 @@ def printer_page():
         customer_name=customer_name,
         available_periods=available_periods,
         selected_pricing_period=form.get("pricing_period", month_key),
+        customer_locations=customer_locations,       # ← add
+        pickup_locations=pickup_locations,           # ← add
         page="printer",
         page_title="Build Letter"
     )
@@ -5476,7 +5558,7 @@ def admin_users_page():
     errors = []
     company_info = load_company_info()
     company_products = load_company_products()
-    
+    pickup_locations = load_pickup_locations()
 
     if request.method == "POST":
         if "duplicate_row" in request.form:
@@ -5515,6 +5597,7 @@ def admin_users_page():
 
         elif action == "delete":
             user_id = request.form.get("user_id")
+
             try:
                 user_id = int(user_id)
             except Exception:
@@ -5527,6 +5610,26 @@ def admin_users_page():
                 flash("User removed.", "success")
                 return redirect(url_for("admin_users_page"))
 
+        elif action == "save_pickup_locations":
+            cities = request.form.getlist("pickup_city[]")
+            states = request.form.getlist("pickup_state[]")
+
+            locations = []
+
+            for city, state in zip(cities, states):
+                city = (city or "").strip()
+                state = (state or "").strip().upper()
+
+                if city or state:
+                    locations.append({
+                        "city": city,
+                        "state": state
+                    })
+
+            save_pickup_locations(locations)
+            flash("Pickup locations saved.", "success")
+            return redirect(url_for("admin_users_page"))
+
         elif action == "save_company":
             company_name = (request.form.get("company_name") or "").strip()
             website_url = (request.form.get("website_url") or "").strip()
@@ -5537,6 +5640,7 @@ def admin_users_page():
             company_info["address"] = address
 
             logo_file = request.files.get("logo_file")
+
             if logo_file and logo_file.filename:
                 if allowed_logo_file(logo_file.filename):
                     filename = secure_filename(logo_file.filename)
@@ -5553,14 +5657,15 @@ def admin_users_page():
                 flash("Company information updated.", "success")
                 return redirect(url_for("admin_users_page"))
 
-
     users = get_all_users()
+
     return render_template(
         "admin_users.html",
         users=users,
         errors=errors,
         company_info=company_info,
         company_products=company_products,
+        pickup_locations=pickup_locations,
         page="admin",
         page_title="Admin"
     )

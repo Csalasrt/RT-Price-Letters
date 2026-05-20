@@ -53,6 +53,71 @@
         <button class="btn btn-primary btn-sm" type="submit">Save Company Info</button>
       </div>
     </form>
+
+    <hr>
+
+    <div style="font-weight:700; margin-bottom:10px;">Pickup Locations</div>
+
+    <form id="pickupLocationsForm" method="POST">
+      <input type="hidden" name="action" value="save_pickup_locations">
+
+      <div id="pickupLocationsList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+
+        {% if pickup_locations and pickup_locations|length > 0 %}
+          {% for loc in pickup_locations %}
+          <div class="pickup-location-row" style="display:flex; gap:8px; align-items:center;">
+            <input
+              type="text"
+              name="pickup_city[]"
+              class="form-control form-control-sm"
+              value="{{ loc.city }}"
+              placeholder="City"
+            >
+
+            <select name="pickup_state[]" class="form-control form-control-sm" style="max-width:120px;">
+              {% for st in ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"] %}
+                <option value="{{ st }}" {% if loc.state == st %}selected{% endif %}>{{ st }}</option>
+              {% endfor %}
+            </select>
+
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePickupLocationRow(this)">
+              Remove
+            </button>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="pickup-location-row" style="display:flex; gap:8px; align-items:center;">
+            <input
+              type="text"
+              name="pickup_city[]"
+              class="form-control form-control-sm"
+              value=""
+              placeholder="City"
+            >
+
+            <select name="pickup_state[]" class="form-control form-control-sm" style="max-width:120px;">
+              <option value="TX">TX</option>
+              {% for st in ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","UT","VT","VA","WA","WV","WI","WY"] %}
+                <option value="{{ st }}">{{ st }}</option>
+              {% endfor %}
+            </select>
+
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePickupLocationRow(this)">
+              Remove
+            </button>
+          </div>
+        {% endif %}
+
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addPickupLocationRow()">
+          + Add Pickup Location
+        </button>
+
+      
+      </div>
+    </form>
   </div>
 </div>
 
@@ -132,5 +197,104 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+  const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
+
+  function addPickupLocationRow() {
+    const list = document.getElementById("pickupLocationsList");
+    const options = US_STATES.map(st =>
+      `<option value="${st}" ${st === "TX" ? "selected" : ""}>${st}</option>`
+    ).join("");
+
+    const row = document.createElement("div");
+    row.className = "pickup-location-row";
+    row.style.cssText = "display:flex; gap:8px; align-items:center;";
+    row.innerHTML = `
+      <input type="text" name="pickup_city[]" class="form-control form-control-sm" value="" placeholder="City">
+      <select name="pickup_state[]" class="form-control form-control-sm" style="max-width:120px;">${options}</select>
+      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePickupLocationRow(this)">Remove</button>
+    `;
+    list.appendChild(row);
+    attachPickupAutoSave(row);  // ← add this
+  }
+
+  function removePickupLocationRow(button) {
+    const row = button.closest(".pickup-location-row");
+    if (row) row.remove();
+
+    const list = document.getElementById("pickupLocationsList");
+    if (list.children.length === 0) {
+      addPickupLocationRow();
+    } else {
+      autoSavePickupLocations();  // ← save after removal
+    }
+  }
+  
+
+  function removePickupLocationRow(button) {
+    const row = button.closest(".pickup-location-row");
+
+    if (row) {
+      row.remove();
+    }
+
+    const list = document.getElementById("pickupLocationsList");
+
+    if (list.children.length === 0) {
+      addPickupLocationRow();
+    }
+  }
+
+function autoSavePickupLocations() {
+  const rows = document.querySelectorAll(".pickup-location-row");
+  const formData = new FormData();
+  formData.append("action", "save_pickup_locations");
+
+  rows.forEach(row => {
+    const city = row.querySelector('input[name="pickup_city[]"]');
+    const state = row.querySelector('select[name="pickup_state[]"]');
+    if (city && city.value.trim() && state && state.value) {
+      formData.append("pickup_city[]", city.value.trim());
+      formData.append("pickup_state[]", state.value);
+    }
+  });
+
+  fetch("", {
+    method: "POST",
+    body: formData
+  }).then(resp => {
+    if (resp.ok) showPickupSaveIndicator();
+  }).catch(() => {});
+}
+
+function showPickupSaveIndicator() {
+  let indicator = document.getElementById("pickup-save-indicator");
+  if (!indicator) {
+    indicator = document.createElement("span");
+    indicator.id = "pickup-save-indicator";
+    indicator.style.cssText = "font-size:12px; color:#067647; margin-left:10px; transition:opacity 0.4s;";
+    document.querySelector("#pickupLocationsList")
+      .closest("form")
+      .previousElementSibling
+      .querySelector("div[style*='font-weight:700']")
+      .appendChild(indicator);
+  }
+  indicator.textContent = "✓ Saved";
+  indicator.style.opacity = "1";
+  setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+}
+
+function attachPickupAutoSave(row) {
+  const city = row.querySelector('input[name="pickup_city[]"]');
+  const state = row.querySelector('select[name="pickup_state[]"]');
+  if (city) city.addEventListener("blur", autoSavePickupLocations);
+  if (state) state.addEventListener("change", autoSavePickupLocations);
+}
+
+// Wire up existing rows on load
+document.querySelectorAll(".pickup-location-row").forEach(attachPickupAutoSave);
+
+</script>
 
 {% endblock %}
