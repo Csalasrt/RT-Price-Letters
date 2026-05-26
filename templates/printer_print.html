@@ -400,28 +400,68 @@
 
   async function exportPriceLetter() {
     const button = document.getElementById("download-letter-btn");
+    const format = document.getElementById("export-format").value;  // ← read the dropdown
     const oldText = button.innerText;
 
     button.disabled = true;
     button.innerText = "Preparing...";
 
     try {
-      const built = await buildPriceLetterPdf();
-      if (!built) return;
+      const preview = document.getElementById("price-letter-preview");
+      if (!preview) return;
 
-      built.pdf.save(built.fileName);
+      const canvas = await html2canvas(preview, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff"
+      });
 
+      const customerName = `{{ quote.get("customer_name", "") }}`;
+      const displayDate = `{{ display_date }}`;
+      const safeCustomer = customerName.replace(/[^\w\s-]/g, "").trim() || "PriceLetter";
+      const safeDate = displayDate.replace(/\//g, "-") || "date";
+      const fileBase = `${safeCustomer}-${safeDate}`;
+
+      if (format === "png") {
+        // ── PNG branch ──────────────────────────────────────────
+        const link = document.createElement("a");
+        link.download = `${fileBase}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+
+      } else {
+        // ── PDF branch (default) ─────────────────────────────────
+        const imgData = canvas.toDataURL("image/png");
+        const { jsPDF } = window.jspdf;
+
+        const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+        const pageWidth  = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 36;
+        const maxWidth  = pageWidth  - margin * 2;
+        const maxHeight = pageHeight - margin * 2;
+
+        let imgWidth  = maxWidth;
+        let imgHeight = (canvas.height * imgWidth) / canvas.width;
+        if (imgHeight > maxHeight) {
+          imgHeight = maxHeight;
+          imgWidth  = (canvas.width * imgHeight) / canvas.height;
+        }
+
+        pdf.addImage(imgData, "PNG", (pageWidth - imgWidth) / 2, margin, imgWidth, imgHeight);
+        pdf.save(`${fileBase}.pdf`);
+      }
+
+      // ── Post-download housekeeping (same as before) ───────────
       await fetch("{{ url_for('printer_mark_printed') }}", {
         method: "POST",
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
+        headers: { "X-Requested-With": "XMLHttpRequest" }
       });
 
       sessionStorage.removeItem("printer_draft_state");
       sessionStorage.removeItem("keep_product_panel_open");
-
       window.location.href = "{{ url_for('printer_page') }}";
+
     } catch (err) {
       console.error("Export failed:", err);
       alert("Export failed. Please try again.");
