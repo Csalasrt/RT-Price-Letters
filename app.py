@@ -1621,10 +1621,11 @@ def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fall
 
     built["description"] = saved_description
     built["package_type"] = package_type
-    # Always honour the UM the user chose in their customer defaults.
-    # build_printer_row_from_priced_product sets um from the pricing entry,
-    # but if the user saved GAL we must keep GAL regardless of which entry
-    # was matched (or whether a fallback entry was used).
+    # Always honour the UM the user saved in their customer defaults.
+    # build_printer_row_from_priced_product takes um from the pricing entry,
+    # and build_printer_row_from_name_only (used for custom products with no
+    # pricing match) sets um to "". Either way, overwrite with saved_um so
+    # the printer always reflects what the customer setup actually specified.
     if saved_um:
         built["um"] = saved_um
         built["source_um"] = saved_um
@@ -6665,7 +6666,15 @@ def api_historical_customer_cost():
 @app.route("/customers/new", methods=["GET", "POST"])
 @login_required
 def customer_new_page():
-    company_products = load_company_products()
+    # Use the same merged product list the printer uses so the dropdown shows
+    # every product — both from the company product list and from pricing uploads.
+    available_periods = get_available_pricing_periods()
+    if available_periods:
+        latest_period = available_periods[-1]["value"]
+        _, merged_options, _ = get_printer_product_options(latest_period)
+        company_products = merged_options
+    else:
+        company_products = load_company_products()
     errors = []
 
     customer_name = ""

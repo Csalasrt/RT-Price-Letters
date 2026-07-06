@@ -365,25 +365,28 @@
             <div>
                 <label class="field-label">Products</label>
 
-                <div class="product-picker" id="product-picker">
-                <div class="product-trigger placeholder" id="product-trigger" onclick="toggleProductPanel(event)">
-                    <div class="product-trigger-text" id="product-trigger-text">Select products...</div>
-                    <div class="product-trigger-arrow">▾</div>
-                </div>
-
-                <div class="product-panel hidden" id="product-panel">
-                    <div class="product-search-wrap">
-                    <input
-                        type="text"
-                        id="product-search"
-                        class="product-search"
-                        placeholder="Search products..."
-                        oninput="filterProductOptions()"
-                    >
+                <div style="display:flex; gap:8px; align-items:flex-start;">
+                  <div class="product-picker" id="product-picker" style="flex:1;">
+                    <div class="product-trigger placeholder" id="product-trigger" onclick="toggleProductPanel(event)">
+                        <div class="product-trigger-text" id="product-trigger-text">Select products...</div>
+                        <div class="product-trigger-arrow">▾</div>
                     </div>
 
-                    <div class="product-options" id="product-options"></div>
-                </div>
+                    <div class="product-panel hidden" id="product-panel">
+                        <div class="product-search-wrap">
+                        <input
+                            type="text"
+                            id="product-search"
+                            class="product-search"
+                            placeholder="Search products..."
+                            oninput="filterProductOptions()"
+                        >
+                        </div>
+
+                        <div class="product-options" id="product-options"></div>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" style="height:40px; white-space:nowrap;" onclick="addCustomRow()">+ Custom</button>
                 </div>
             </div>
             </div>
@@ -391,33 +394,28 @@
             <div style="margin-bottom: 18px;">
             <label class="field-label">Customer Locations</label>
 
-            {% set us_states = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"] %}
-            <div id="locations-box" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px;">
+            <div id="locations-box">
                 {% if locations is defined and locations %}
                 {% for location in locations %}
-                    {% set parts = location.rsplit(' ', 1) %}
-                    {% set loc_city = parts[0] if parts|length == 2 else location %}
-                    {% set loc_state = parts[1] if parts|length == 2 else "TX" %}
-                    <div class="location-row" style="display:flex; gap:8px; align-items:center;">
-                        <input type="text" name="location_city[]" class="form-control form-control-sm" value="{{ loc_city }}" placeholder="City">
-                        <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">
-                            {% for st in us_states %}<option value="{{ st }}" {% if loc_state == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
-                        </select>
-                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
-                    </div>
+                    <input
+                    type="text"
+                    name="locations[]"
+                    class="text-input mb-2"
+                    value="{{ location }}"
+                    placeholder="Enter location name"
+                    >
                 {% endfor %}
                 {% else %}
-                <div class="location-row" style="display:flex; gap:8px; align-items:center;">
-                    <input type="text" name="location_city[]" class="form-control form-control-sm" value="" placeholder="City">
-                    <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">
-                        {% for st in us_states %}<option value="{{ st }}" {% if st == "TX" %}selected{% endif %}>{{ st }}</option>{% endfor %}
-                    </select>
-                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
-                </div>
+                <input
+                    type="text"
+                    name="locations[]"
+                    class="text-input mb-2"
+                    placeholder="Enter location name"
+                >
                 {% endif %}
             </div>
 
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addLocationRow()">
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addLocationInput()">
                 + Add Location
             </button>
             </div>
@@ -469,32 +467,16 @@
 <script>
   const RAW_COMPANY_PRODUCTS = {{ company_products|tojson if company_products is defined else '[]' }};
   const EXISTING_ROWS = {{ form_rows|tojson if form_rows is defined else '[]' }};
-  const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
-
-  function addLocationRow() {
+  function addLocationInput() {
     const box = document.getElementById("locations-box");
-    const options = US_STATES.map(st =>
-      `<option value="${st}" ${st === "TX" ? "selected" : ""}>${st}</option>`
-    ).join("");
 
-    const row = document.createElement("div");
-    row.className = "location-row";
-    row.style.cssText = "display:flex; gap:8px; align-items:center;";
-    row.innerHTML = `
-      <input type="text" name="location_city[]" class="form-control form-control-sm" value="" placeholder="City">
-      <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">${options}</select>
-      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
-    `;
-    box.appendChild(row);
-  }
+    const input = document.createElement("input");
+    input.type = "text";
+    input.name = "locations[]";
+    input.className = "text-input mb-2";
+    input.placeholder = "Enter location name";
 
-  function removeLocationRow(btn) {
-    const row = btn.closest(".location-row");
-    if (row) row.remove();
-    const box = document.getElementById("locations-box");
-    if (!box.querySelector(".location-row")) {
-      addLocationRow();
-    }
+    box.appendChild(input);
   }
 
   const rowsBody = document.getElementById("customer-rows-body");
@@ -613,8 +595,6 @@
       return;
     }
 
-    const hasCustomRows = getAllRows().some(tr => getRowProduct(tr) === CUSTOM_PRODUCT_SENTINEL);
-
     productOptions.innerHTML = products.map(product => `
       <label class="product-option" data-product-name="${escapeHtml(product.toLowerCase())}">
         <input
@@ -624,16 +604,7 @@
         >
         <span class="product-option-name">${escapeHtml(product)}</span>
       </label>
-    `).join("") + `
-      <label class="product-option" data-product-name="custom" style="border-top:1px solid #eaecf0; margin-top:4px; padding-top:6px;">
-        <input
-          type="checkbox"
-          value="${CUSTOM_PRODUCT_SENTINEL}"
-          ${hasCustomRows ? "checked" : ""}
-        >
-        <span class="product-option-name" style="font-style:italic; color:#667085;">+ Custom</span>
-      </label>
-    `;
+    `).join("");
 
     productOptions.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
       cb.addEventListener("change", function() {
@@ -688,19 +659,17 @@
     select.className = "table-select";
 
     const options = [
+      { value: "", label: "Select" },
       { value: "LB", label: "LB" },
       { value: "GAL", label: "GAL" },
       { value: "EACH", label: "EACH" }
     ];
 
-    const normalizedSelected = (selectedValue || "").toUpperCase();
     options.forEach(opt => {
       const option = document.createElement("option");
       option.value = opt.value;
       option.textContent = opt.label;
-      if (normalizedSelected ? normalizedSelected === opt.value : opt.value === "LB") {
-        option.selected = true;
-      }
+      if ((selectedValue || "").toUpperCase() === opt.value) option.selected = true;
       select.appendChild(option);
     });
 
@@ -784,7 +753,7 @@
       const umValue = tr.querySelector('[name="row_um"]') ? tr.querySelector('[name="row_um"]').value : "";
       const packageValue = tr.querySelector('[name="row_package_type"]') ? tr.querySelector('[name="row_package_type"]').value : "";
       const descriptionValue = tr.querySelector('[name="row_description"]') ? tr.querySelector('[name="row_description"]').value : "";
-      const customProductName = isCustom && tr.querySelector('[name="row_product"]') ? tr.querySelector('[name="row_product"]').value : "";
+      const customProductName = isCustom ? (tr.querySelector('[name="row_product"]') ? tr.querySelector('[name="row_product"]').value : "") : "";
 
       const newRow = buildRowElement({
         product: product,
@@ -794,8 +763,12 @@
         custom_product_name: customProductName
       });
 
-      const lastMatchingRow = findLastRowForProduct(product) || tr;
-      lastMatchingRow.insertAdjacentElement("afterend", newRow);
+      if (isCustom) {
+        tr.insertAdjacentElement("afterend", newRow);
+      } else {
+        const lastMatchingRow = findLastRowForProduct(product) || tr;
+        lastMatchingRow.insertAdjacentElement("afterend", newRow);
+      }
       updateEmptyState();
       renderProductOptions();
     });
@@ -816,22 +789,21 @@
   }
 
   function addProductRow(productName) {
-    const isCustom = productName === CUSTOM_PRODUCT_SENTINEL;
-    const tr = buildRowElement({
-      product: productName,
-      um: "",
-      package_type: "",
-      description: "",
-      custom_product_name: ""
-    });
+    const tr = buildRowElement({ product: productName, um: "", package_type: "", description: "" });
     if (!tr) return;
-    if (isCustom) {
-      rowsBody.appendChild(tr);
-    } else {
-      insertRowUnderProductGroup(tr, productName);
-    }
+    insertRowUnderProductGroup(tr, productName);
     updateEmptyState();
     renderProductOptions();
+  }
+
+  function addCustomRow() {
+    const tr = buildRowElement({ product: CUSTOM_PRODUCT_SENTINEL, um: "", package_type: "", description: "", custom_product_name: "" });
+    if (!tr) return;
+    rowsBody.appendChild(tr);
+    updateEmptyState();
+    // Focus the product name input so the user can start typing immediately
+    const nameInput = tr.querySelector('[name="row_product"]');
+    if (nameInput) nameInput.focus();
   }
 
   function removeAllRowsForProduct(productName) {

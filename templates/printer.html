@@ -388,7 +388,8 @@
         <div class="toolbar-field">
           <label>Products</label>
 
-          <div class="product-picker" id="product-picker">
+          <div style="display:flex; gap:8px; align-items:flex-start;">
+          <div class="product-picker" id="product-picker" style="flex:1;">
             <div class="product-trigger" id="product-trigger" onclick="toggleProductPanel(event)">
               <div class="product-trigger-text">
                 {% if ns.selected_count > 0 %}
@@ -437,17 +438,11 @@
                     No products found for this month yet. Upload pricing first.
                   </div>
                 {% endif %}
-                <label class="product-option custom-product-option" data-product-name="custom" style="border-top:1px solid #eaecf0; margin-top:4px; padding-top:6px;">
-                  <input
-                    type="checkbox"
-                    id="custom-product-checkbox"
-                    value="__custom__"
-                    onchange="handleCustomProductToggle(this)"
-                  >
-                  <span class="product-option-name" style="font-style:italic; color:#667085;">+ Custom</span>
-                </label>
+
               </div>
             </div>
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm" style="height:40px; white-space:nowrap; margin-top:auto;" onclick="addCustomRow()">+ Custom</button>
           </div>
         </div>
       </div>
@@ -1425,18 +1420,6 @@
     }
   }
 
-  function handleCustomProductToggle(checkbox) {
-    if (checkbox.checked) {
-      addCustomRow();
-    } else {
-      // Remove all custom rows
-      const tbody = document.querySelector("#quote-table tbody");
-      if (tbody) {
-        tbody.querySelectorAll("tr[data-custom-row]").forEach(tr => tr.remove());
-      }
-    }
-  }
-
   function addCustomRow() {
     const tbody = document.querySelector("#quote-table tbody");
     if (!tbody) return;
@@ -1518,6 +1501,9 @@
     `;
 
     tbody.appendChild(tr);
+    // Focus the product name field so the user can start typing immediately
+    const nameInput = tr.querySelector('[name="row_product"]');
+    if (nameInput) nameInput.focus();
   }
 
   function duplicateCustomRow(btn) {
