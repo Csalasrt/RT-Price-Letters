@@ -391,28 +391,33 @@
             <div style="margin-bottom: 18px;">
             <label class="field-label">Customer Locations</label>
 
-            <div id="locations-box">
+            {% set us_states = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"] %}
+            <div id="locations-box" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px;">
                 {% if locations is defined and locations %}
                 {% for location in locations %}
-                    <input
-                    type="text"
-                    name="locations[]"
-                    class="text-input mb-2"
-                    value="{{ location }}"
-                    placeholder="Enter location name"
-                    >
+                    {% set parts = location.rsplit(' ', 1) %}
+                    {% set loc_city = parts[0] if parts|length == 2 else location %}
+                    {% set loc_state = parts[1] if parts|length == 2 else "TX" %}
+                    <div class="location-row" style="display:flex; gap:8px; align-items:center;">
+                        <input type="text" name="location_city[]" class="form-control form-control-sm" value="{{ loc_city }}" placeholder="City">
+                        <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">
+                            {% for st in us_states %}<option value="{{ st }}" {% if loc_state == st %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
+                    </div>
                 {% endfor %}
                 {% else %}
-                <input
-                    type="text"
-                    name="locations[]"
-                    class="text-input mb-2"
-                    placeholder="Enter location name"
-                >
+                <div class="location-row" style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" name="location_city[]" class="form-control form-control-sm" value="" placeholder="City">
+                    <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">
+                        {% for st in us_states %}<option value="{{ st }}" {% if st == "TX" %}selected{% endif %}>{{ st }}</option>{% endfor %}
+                    </select>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
+                </div>
                 {% endif %}
             </div>
 
-            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addLocationInput()">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addLocationRow()">
                 + Add Location
             </button>
             </div>
@@ -464,16 +469,32 @@
 <script>
   const RAW_COMPANY_PRODUCTS = {{ company_products|tojson if company_products is defined else '[]' }};
   const EXISTING_ROWS = {{ form_rows|tojson if form_rows is defined else '[]' }};
-  function addLocationInput() {
+  const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
+
+  function addLocationRow() {
     const box = document.getElementById("locations-box");
+    const options = US_STATES.map(st =>
+      `<option value="${st}" ${st === "TX" ? "selected" : ""}>${st}</option>`
+    ).join("");
 
-    const input = document.createElement("input");
-    input.type = "text";
-    input.name = "locations[]";
-    input.className = "text-input mb-2";
-    input.placeholder = "Enter location name";
+    const row = document.createElement("div");
+    row.className = "location-row";
+    row.style.cssText = "display:flex; gap:8px; align-items:center;";
+    row.innerHTML = `
+      <input type="text" name="location_city[]" class="form-control form-control-sm" value="" placeholder="City">
+      <select name="location_state[]" class="form-control form-control-sm" style="max-width:120px;">${options}</select>
+      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
+    `;
+    box.appendChild(row);
+  }
 
-    box.appendChild(input);
+  function removeLocationRow(btn) {
+    const row = btn.closest(".location-row");
+    if (row) row.remove();
+    const box = document.getElementById("locations-box");
+    if (!box.querySelector(".location-row")) {
+      addLocationRow();
+    }
   }
 
   const rowsBody = document.getElementById("customer-rows-body");
@@ -498,6 +519,8 @@
     ).trim();
   }
 
+  const CUSTOM_PRODUCT_SENTINEL = "__custom__";
+
   function normalizedProducts() {
     const names = (Array.isArray(RAW_COMPANY_PRODUCTS) ? RAW_COMPANY_PRODUCTS : [])
       .map(extractProductName)
@@ -515,8 +538,10 @@
   }
 
   function getRowProduct(tr) {
-    const hidden = tr.querySelector('input[name="row_product"]');
-    return hidden ? String(hidden.value || "").trim() : "";
+    const input = tr.querySelector('input[name="row_product"]');
+    if (!input) return "";
+    // Custom rows store the sentinel as a data attribute so we can still identify them
+    return input.dataset.sentinel || String(input.value || "").trim();
   }
 
   function selectedProducts() {
@@ -588,6 +613,8 @@
       return;
     }
 
+    const hasCustomRows = getAllRows().some(tr => getRowProduct(tr) === CUSTOM_PRODUCT_SENTINEL);
+
     productOptions.innerHTML = products.map(product => `
       <label class="product-option" data-product-name="${escapeHtml(product.toLowerCase())}">
         <input
@@ -597,7 +624,16 @@
         >
         <span class="product-option-name">${escapeHtml(product)}</span>
       </label>
-    `).join("");
+    `).join("") + `
+      <label class="product-option" data-product-name="custom" style="border-top:1px solid #eaecf0; margin-top:4px; padding-top:6px;">
+        <input
+          type="checkbox"
+          value="${CUSTOM_PRODUCT_SENTINEL}"
+          ${hasCustomRows ? "checked" : ""}
+        >
+        <span class="product-option-name" style="font-style:italic; color:#667085;">+ Custom</span>
+      </label>
+    `;
 
     productOptions.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
       cb.addEventListener("change", function() {
@@ -652,17 +688,19 @@
     select.className = "table-select";
 
     const options = [
-      { value: "", label: "Select" },
       { value: "LB", label: "LB" },
       { value: "GAL", label: "GAL" },
       { value: "EACH", label: "EACH" }
     ];
 
+    const normalizedSelected = (selectedValue || "").toUpperCase();
     options.forEach(opt => {
       const option = document.createElement("option");
       option.value = opt.value;
       option.textContent = opt.label;
-      if ((selectedValue || "").toUpperCase() === opt.value) option.selected = true;
+      if (normalizedSelected ? normalizedSelected === opt.value : opt.value === "LB") {
+        option.selected = true;
+      }
       select.appendChild(option);
     });
 
@@ -692,18 +730,32 @@
     tr.className = "customer-product-row";
 
     const productTd = document.createElement("td");
+    const isCustom = product === CUSTOM_PRODUCT_SENTINEL;
 
-    const hiddenProduct = document.createElement("input");
-    hiddenProduct.type = "hidden";
-    hiddenProduct.name = "row_product";
-    hiddenProduct.value = product;
+    if (isCustom) {
+      // Custom row: editable product name input (no hidden, the input itself is named row_product)
+      const customInput = document.createElement("input");
+      customInput.type = "text";
+      customInput.name = "row_product";
+      customInput.className = "table-input";
+      customInput.value = data.custom_product_name || "";
+      customInput.placeholder = "Enter product name";
+      customInput.style.fontWeight = "600";
+      customInput.dataset.sentinel = CUSTOM_PRODUCT_SENTINEL;
+      productTd.appendChild(customInput);
+    } else {
+      const hiddenProduct = document.createElement("input");
+      hiddenProduct.type = "hidden";
+      hiddenProduct.name = "row_product";
+      hiddenProduct.value = product;
 
-    const productDisplay = document.createElement("div");
-    productDisplay.className = "readonly-product";
-    productDisplay.textContent = product;
+      const productDisplay = document.createElement("div");
+      productDisplay.className = "readonly-product";
+      productDisplay.textContent = product;
 
-    productTd.appendChild(hiddenProduct);
-    productTd.appendChild(productDisplay);
+      productTd.appendChild(hiddenProduct);
+      productTd.appendChild(productDisplay);
+    }
 
     const umTd = document.createElement("td");
     umTd.appendChild(createUmSelect(data.um || ""));
@@ -732,12 +784,14 @@
       const umValue = tr.querySelector('[name="row_um"]') ? tr.querySelector('[name="row_um"]').value : "";
       const packageValue = tr.querySelector('[name="row_package_type"]') ? tr.querySelector('[name="row_package_type"]').value : "";
       const descriptionValue = tr.querySelector('[name="row_description"]') ? tr.querySelector('[name="row_description"]').value : "";
+      const customProductName = isCustom && tr.querySelector('[name="row_product"]') ? tr.querySelector('[name="row_product"]').value : "";
 
       const newRow = buildRowElement({
         product: product,
         um: umValue,
         package_type: packageValue,
-        description: descriptionValue
+        description: descriptionValue,
+        custom_product_name: customProductName
       });
 
       const lastMatchingRow = findLastRowForProduct(product) || tr;
@@ -762,14 +816,20 @@
   }
 
   function addProductRow(productName) {
+    const isCustom = productName === CUSTOM_PRODUCT_SENTINEL;
     const tr = buildRowElement({
       product: productName,
       um: "",
       package_type: "",
-      description: ""
+      description: "",
+      custom_product_name: ""
     });
     if (!tr) return;
-    insertRowUnderProductGroup(tr, productName);
+    if (isCustom) {
+      rowsBody.appendChild(tr);
+    } else {
+      insertRowUnderProductGroup(tr, productName);
+    }
     updateEmptyState();
     renderProductOptions();
   }

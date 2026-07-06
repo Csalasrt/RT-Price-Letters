@@ -437,6 +437,15 @@
                     No products found for this month yet. Upload pricing first.
                   </div>
                 {% endif %}
+                <label class="product-option custom-product-option" data-product-name="custom" style="border-top:1px solid #eaecf0; margin-top:4px; padding-top:6px;">
+                  <input
+                    type="checkbox"
+                    id="custom-product-checkbox"
+                    value="__custom__"
+                    onchange="handleCustomProductToggle(this)"
+                  >
+                  <span class="product-option-name" style="font-style:italic; color:#667085;">+ Custom</span>
+                </label>
               </div>
             </div>
           </div>
@@ -1414,6 +1423,112 @@
     if (panel) {
       panel.classList.add("hidden");
     }
+  }
+
+  function handleCustomProductToggle(checkbox) {
+    if (checkbox.checked) {
+      addCustomRow();
+    } else {
+      // Remove all custom rows
+      const tbody = document.querySelector("#quote-table tbody");
+      if (tbody) {
+        tbody.querySelectorAll("tr[data-custom-row]").forEach(tr => tr.remove());
+      }
+    }
+  }
+
+  function addCustomRow() {
+    const tbody = document.querySelector("#quote-table tbody");
+    if (!tbody) return;
+
+    const tr = document.createElement("tr");
+    tr.setAttribute("data-custom-row", "1");
+    tr.setAttribute("data-source-cost", "0");
+    tr.setAttribute("data-source-price", "0");
+    tr.setAttribute("data-source-um", "");
+    tr.setAttribute("data-weight", "");
+
+    tr.innerHTML = `
+      <td class="selection-cell">
+        <div class="row-actions">
+          <input type="checkbox" name="delete_row" value="" class="delete-row-check" disabled>
+          <button type="button" class="duplicate-btn" title="Duplicate row" onclick="duplicateCustomRow(this)">⧉</button>
+        </div>
+      </td>
+
+      <td style="font-weight:700; text-align:center;">
+        <input
+          type="text"
+          name="row_product"
+          class="form-control form-control-sm"
+          placeholder="Enter product name"
+          style="font-weight:600; text-align:center;"
+        >
+        <input type="hidden" name="row_description" value="">
+        <input type="hidden" name="row_source_cost" value="0">
+        <input type="hidden" name="row_source_um" value="">
+        <input type="hidden" name="row_source_price" value="0">
+        <input type="hidden" name="row_weight" value="">
+      </td>
+
+      <td>
+        <select class="form-control form-control-sm um-select" name="row_um">
+          <option value="LB">LB</option>
+          <option value="GAL">GAL</option>
+          <option value="EACH">EACH</option>
+        </select>
+      </td>
+
+      <td>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <select class="form-control form-control-sm shipping-type-select" name="row_shipping_type" onchange="handleShippingTypeChange(this)" style="max-width:80px;">
+            <option value="">—</option>
+            <option value="DEL">DEL</option>
+            <option value="FOB">FOB</option>
+          </select>
+          <select class="form-control form-control-sm shipping-location-select" name="row_shipping_location" style="max-width:160px;" disabled>
+            <option value="">— Location —</option>
+            <option value="__custom__">Other...</option>
+          </select>
+          <input type="text" class="form-control form-control-sm shipping-custom-input" name="row_shipping_custom" placeholder="Type location..." value="" style="max-width:160px; display:none;">
+        </div>
+      </td>
+
+      <td>
+        <select class="form-control form-control-sm package-type" name="row_package_type">
+          <option value="">Select package type</option>
+          <option value="Drum">☐ Drum</option>
+          <option value="330gal Tote">☐ 330 GAL Tote</option>
+          <option value="275gal Tote">☐ 275 GAL Tote</option>
+          <option value="Pail">☐ Pail</option>
+          <option value="Bulk">☐ Bulk</option>
+          <option value="Bag">☐ Bag</option>
+        </select>
+      </td>
+
+      <td><input class="form-control form-control-sm cost" name="row_cost" value="0.0000" inputmode="decimal"></td>
+      <td><input class="form-control form-control-sm pre-packaging" name="row_pre_packaging" value="0.0000" inputmode="decimal"></td>
+      <td><input class="form-control form-control-sm pre-shipping" name="row_pre_shipping" value="0.0000" inputmode="decimal"></td>
+      <td><input class="form-control form-control-sm computed final-cost" name="row_final_cost" value="0.0000" inputmode="decimal" readonly tabindex="-1"></td>
+      <td class="price-section section-divider-left"><input class="form-control form-control-sm margin" name="row_margin" value="0.00" inputmode="decimal"></td>
+      <td class="price-section"><input class="form-control form-control-sm price" name="row_price" value="0.0000" inputmode="decimal"></td>
+      <td class="price-section"><input class="form-control form-control-sm add-shipping" name="row_add_shipping" value="0.0000" inputmode="decimal"></td>
+      <td class="price-section section-divider-right"><input class="form-control form-control-sm add-packaging" name="row_add_packaging" value="0.0000" inputmode="decimal"></td>
+      <td class="final-price-section section-divider-left section-divider-right"><input class="form-control form-control-sm computed final" name="row_final" value="0.0000" inputmode="decimal" readonly tabindex="-1"></td>
+    `;
+
+    tbody.appendChild(tr);
+  }
+
+  function duplicateCustomRow(btn) {
+    const origTr = btn.closest("tr");
+    if (!origTr) return;
+    const clone = origTr.cloneNode(true);
+    clone.setAttribute("data-custom-row", "1");
+    // Re-wire the duplicate button
+    const dupBtn = clone.querySelector(".duplicate-btn");
+    if (dupBtn) dupBtn.onclick = function() { duplicateCustomRow(this); };
+    origTr.insertAdjacentElement("afterend", clone);
   }
 
   function toggleProductPanel(e) {

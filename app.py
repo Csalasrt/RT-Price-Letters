@@ -1621,6 +1621,13 @@ def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fall
 
     built["description"] = saved_description
     built["package_type"] = package_type
+    # Always honour the UM the user chose in their customer defaults.
+    # build_printer_row_from_priced_product sets um from the pricing entry,
+    # but if the user saved GAL we must keep GAL regardless of which entry
+    # was matched (or whether a fallback entry was used).
+    if saved_um:
+        built["um"] = saved_um
+        built["source_um"] = saved_um
     built["pre_shipping"] = round(saved_shipping, 4)
     built["pre_packaging"] = round(saved_packaging, 4)
     built["add_shipping"] = 0.0
