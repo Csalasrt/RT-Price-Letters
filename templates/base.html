@@ -209,19 +209,19 @@
 
     <a href="{{ url_for('dashboard') }}" class="{% if page == 'dashboard' %}active{% endif %}">Home</a>
 
+    <a href="{{ url_for('customers_page') }}" class="{% if page == 'customers' %}active{% endif %}">Customers</a>
+
     <a href="{{ url_for('printer_page') }}" class="{% if page == 'printer' %}active{% endif %}">Build Letter</a>
 
     <a href="{{ url_for('printer_print') }}" class="{% if page == 'print' %}active{% endif %}">Print</a>
 
     <a href="{{ url_for('history_page') }}" class="{% if page == 'history' %}active{% endif %}">History</a>
 
-    <a href="{{ url_for('users_page') }}" class="{% if page == 'users' %}active{% endif %}">Users</a>
-
     <a href="{{ url_for('pricing_page') }}" class="{% if page == 'pricing' %}active{% endif %}">Prices</a>
 
-    <a href="{{ url_for('customers_page') }}" class="{% if page == 'customers' %}active{% endif %}">Customers</a>
-
     <a href="{{ url_for('todo_page') }}" class="{% if page == 'todos' %}active{% endif %}">To-Do List</a>
+    
+    <a href="{{ url_for('users_page') }}" class="{% if page == 'users' %}active{% endif %}">Users</a>
 
     <a href="{{ url_for('admin_users_page') }}" class="{% if page == 'admin' %}active{% endif %}">Admin</a>
 

@@ -4468,6 +4468,29 @@ def customer_profile_save(customer_id):
     flash("Customer profile updated.", "success")
     return redirect(url_for("customer_profile", customer_id=customer_id))
 
+@app.route("/customers/<customer_id>/delete", methods=["POST"])
+@login_required
+def customer_delete(customer_id):
+    customer = db.session.get(Customer, str(customer_id))
+
+    if not customer:
+        flash("Customer not found.", "error")
+        return redirect(url_for("customers_page"))
+
+    customer_name = customer.name or "Customer"
+
+    # Clean up related to-do data tied to this customer
+    TodoItem.query.filter_by(customer_id=str(customer_id)).delete()
+    TodoRecurringCustomer.query.filter_by(customer_id=str(customer_id)).delete()
+
+    # CustomerLocation and CustomerDefaultRow rows are removed automatically
+    # via the cascade="all, delete-orphan" relationship on Customer.
+    db.session.delete(customer)
+    db.session.commit()
+
+    flash(f'Customer "{customer_name}" deleted.', "success")
+    return redirect(url_for("customers_page"))
+
 @app.route("/printer/autosave", methods=["POST"])
 @login_required
 def printer_autosave():

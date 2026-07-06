@@ -4,10 +4,15 @@
 <div class="container-fluid">
 
   <!-- HEADER -->
-  <div style="margin-top:10px; margin-bottom:12px;">
-    <h3 style="font-weight:700;">
+  <div style="margin-top:10px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+    <h3 style="font-weight:700; margin:0;">
       {{ customer.name }}
     </h3>
+    <form id="deleteCustomerForm" method="POST" action="{{ url_for('customer_delete', customer_id=customer.id) }}" style="margin:0;">
+      <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirmDeleteCustomer('{{ customer.name|e }}')">
+        Delete Customer
+      </button>
+    </form>
   </div>
 
   <!-- TABS -->
@@ -630,6 +635,13 @@
 
   document.getElementById("template-tab-tbody")?.addEventListener("input", syncTemplateRowsToMain);
   document.getElementById("template-tab-tbody")?.addEventListener("change", syncTemplateRowsToMain);
+
+  function confirmDeleteCustomer(name) {
+    return confirm(
+      "Delete " + name + "? This will permanently remove this customer, " +
+      "their locations, and their default product setup. This cannot be undone."
+    );
+  }
 </script>
 
 {% endblock %}
