@@ -351,20 +351,7 @@
   {% endif %}
 {% endif %}
 
-{% set ns = namespace(selected_count=0) %}
-{% if products %}
-  {% for p in products %}
-    {% set row_match = namespace(found=false) %}
-    {% for r in quote_rows or [] %}
-      {% if r.product == p.product %}
-        {% set row_match.found = true %}
-      {% endif %}
-    {% endfor %}
-    {% if row_match.found %}
-      {% set ns.selected_count = ns.selected_count + 1 %}
-    {% endif %}
-  {% endfor %}
-{% endif %}
+{% set ns = namespace(selected_count=(quote_rows or [])|length) %}
 
 <div class="card section-card shadow-sm build-toolbar-card">
   <div class="card-body">
@@ -443,20 +430,13 @@
               <div class="product-options" id="product-options">
                 {% if products and products|length > 0 %}
                   {% for p in products %}
-                    {% set row_match = namespace(found=false) %}
-                    {% for r in quote_rows or [] %}
-                      {% if r.product == p.product %}
-                        {% set row_match.found = true %}
-                      {% endif %}
-                    {% endfor %}
-
                     <label class="product-option" data-product-name="{{ p.product|lower }}">
                       <input
                         type="checkbox"
                         name="product_key"
                         value="{{ p.key }}"
                         onchange="handleProductToggle(this)"
-                        {% if row_match.found %}checked{% endif %}
+                        {% if p.key in checked_product_keys %}checked{% endif %}
                       >
                       <span class="product-option-name">{{ p.product }}</span>
                     </label>
@@ -476,7 +456,7 @@
       </div>
 
       <div class="toolbar-helper">
-        Products already on the list show a checked box. Click products to add or remove them.
+        Products already on the list show a checked box. Check a new product to add it - nothing already on the list is ever changed. To remove a product, use its delete checkbox in the table below and click "Delete Selected."
       </div>
 
       <div style="height:1px; background:#e5e7eb; margin:14px 0;"></div>
@@ -605,6 +585,7 @@
                     <input type="hidden" name="row_source_price" value="{{ '%.4f'|format(r.get('source_price', r.get('price', 0)) or 0) }}">
                     <input type="hidden" name="row_weight" value="{{ r.get('weight', '') }}">
                     <input type="hidden" name="row_is_inquire" value="{{ '1' if r.get('is_inquire') else '0' }}">
+                    <input type="hidden" name="row_price_locked" value="{{ r.get('price_locked', '') }}">
                   </td>
 
                   <td>
@@ -792,6 +773,19 @@
   </div>
 
   <script>
+    // When true, a deliberate form submission (build/print/save/duplicate/
+    // delete/select-customer/etc.) is already in flight with correct,
+    // up-to-date data. The beforeunload autosave below must NOT also fire
+    // in that case - form.submit() triggers page navigation, which fires
+    // beforeunload, which was independently (and asynchronously) POSTing
+    // to /printer/autosave and overwriting the session's saved list. That
+    // created a race between two competing writes, and whichever one's
+    // response the browser processed last would win - sometimes clobbering
+    // the correct, just-submitted data with a stale snapshot. Skipping the
+    // autosave whenever we already know a real submission is underway
+    // removes that race entirely.
+    window.printerFormSubmitting = false;
+
     function toNum(v) {
       if (v === null || v === undefined) return 0;
       const s = String(v).replace(/\$/g, "").replace(/,/g, "").trim();
@@ -966,6 +960,7 @@
       const prePack     = toNum(prePackEl ? prePackEl.value : 0);
       const addShip     = toNum(addShipEl ? addShipEl.value : 0);
       const addPack     = toNum(addPackEl ? addPackEl.value : 0);
+      const priceLocked = isPriceLocked(tr);
 
       const convertedCost  = convertValueFromSource(sourceCost, sourceUM, targetUM, weight);
       const convertedPrice = convertValueFromSource(sourcePrice, sourceUM, targetUM, weight);
@@ -984,17 +979,47 @@
       const finalCost = cost + preShip + prePack;
       if (finalCostEl) finalCostEl.value = fmt4(finalCost);
 
-      let price = 0;
-      if (convertedPrice !== null) {
-        price = convertedPrice;
-        priceEl.value = fmt4(price);
-      } else {
-        price = finalCost * (1 + margin / 100);
-        priceEl.value = fmt4(price);
+      let price = toNum(priceEl.value);
+      if (!priceLocked) {
+        if (convertedPrice !== null) {
+          price = convertedPrice;
+          priceEl.value = fmt4(price);
+        } else {
+          price = finalCost * (1 + margin / 100);
+          priceEl.value = fmt4(price);
+        }
       }
 
       if (finalEl) finalEl.value = fmt4(price + addShip + addPack);
       return true;
+    }
+
+    function isPriceLocked(tr) {
+      if (!tr) return false;
+      const lockEl = tr.querySelector('input[name="row_price_locked"]');
+      return (lockEl && lockEl.value === "1") || tr.dataset.priceLocked === "1";
+    }
+
+    function lockPrice(tr) {
+      if (!tr) return;
+      let lockEl = tr.querySelector('input[name="row_price_locked"]');
+      if (!lockEl) {
+        lockEl = document.createElement("input");
+        lockEl.type = "hidden";
+        lockEl.name = "row_price_locked";
+        const productCell = tr.querySelector('td:nth-child(2)');
+        if (productCell) productCell.appendChild(lockEl);
+        else tr.appendChild(lockEl);
+      }
+      lockEl.value = "1";
+      tr.dataset.priceLocked = "1";
+    }
+
+    function unlockPrice(tr) {
+      if (!tr) return;
+      const lockEl = tr.querySelector('input[name="row_price_locked"]');
+      if (lockEl) lockEl.value = "";
+      tr.dataset.priceLocked = "";
     }
 
     /**
@@ -1036,6 +1061,7 @@
       }
 
       const isInquireRow = tr.dataset.inquire === "1";
+      const priceLocked = isPriceLocked(tr);
 
       let cost    = toNum(costEl.value);
       let preShip = toNum(preShipEl ? preShipEl.value : 0);
@@ -1087,7 +1113,13 @@
       }
 
       if (changed === "cost" || changed === "pre-shipping" || changed === "pre-packaging") {
-        price  = finalCost * (1 + margin / 100);
+        if (!priceLocked) {
+          price = finalCost * (1 + margin / 100);
+          priceEl.value = fmt4(price);
+        } else {
+          price = toNum(priceEl.value);
+        }
+
         finalP = price + addShip + addPack;
 
         if (!liveEdit) {
@@ -1095,22 +1127,28 @@
           if (changed === "pre-shipping") preShipEl.value = fmt4(preShip);
           if (changed === "pre-packaging") prePackEl.value = fmt4(prePack);
         }
-        priceEl.value = fmt4(price);
+
         finalEl.value = fmt4(finalP);
         return;
       }
 
       if (changed === "margin") {
-        price  = finalCost * (1 + margin / 100);
+        if (!priceLocked) {
+          price = finalCost * (1 + margin / 100);
+          priceEl.value = fmt4(price);
+        } else {
+          price = toNum(priceEl.value);
+        }
+
         finalP = price + addShip + addPack;
 
         if (!liveEdit) marginEl.value = fmt2(margin);
-        priceEl.value = fmt4(price);
         finalEl.value = fmt4(finalP);
         return;
       }
 
       if (changed === "price") {
+        lockPrice(tr);
         // Price field was just committed (blur/Enter already resolved
         // whether it's "Inquire" or a real number via restoreZeroOnBlur).
         if (tr.dataset.inquire === "1") {
@@ -1283,6 +1321,9 @@
       table.addEventListener("input", function(e) {
         const tr = e.target.closest("tr");
         if (!tr) return;
+        if (e.target.classList && e.target.classList.contains("price")) {
+          lockPrice(tr);
+        }
         updateRowFromElement(tr, e.target, true);
       });
 
@@ -1349,7 +1390,18 @@
       });
 
       table.querySelectorAll("tbody tr").forEach(function(tr) {
-        updateRow(tr, "margin", false);
+        const costEl = tr.querySelector(".cost");
+        const preShipEl = tr.querySelector(".pre-shipping");
+        const prePackEl = tr.querySelector(".pre-packaging");
+        const finalCostEl = tr.querySelector(".final-cost");
+
+        const cost = toNum(costEl ? costEl.value : 0);
+        const preShip = toNum(preShipEl ? preShipEl.value : 0);
+        const prePack = toNum(prePackEl ? prePackEl.value : 0);
+
+        if (finalCostEl) {
+          finalCostEl.value = fmt4(cost + preShip + prePack);
+        }
       });
     }
 
@@ -1417,6 +1469,7 @@
       const shippingLocationInput = tr.querySelector('select[name="row_shipping_location"]');
       const shippingCustomInput   = tr.querySelector('input[name="row_shipping_custom"]');
       const isInquireInput        = tr.querySelector('input[name="row_is_inquire"]');
+      const priceLockedInput      = tr.querySelector('input[name="row_price_locked"]');
 
       appendHidden(holder, "row_product",          productInput         ? productInput.value         : "");
       appendHidden(holder, "row_description",      descriptionInput     ? descriptionInput.value     : "");
@@ -1434,6 +1487,7 @@
       appendHidden(holder, "row_shipping_location",shippingLocationInput? shippingLocationInput.value: "");
       appendHidden(holder, "row_shipping_custom",  shippingCustomInput  ? shippingCustomInput.value  : "");
       appendHidden(holder, "row_is_inquire",       isInquireInput       ? isInquireInput.value       : (tr.dataset.inquire === "1" ? "1" : "0"));
+      appendHidden(holder, "row_price_locked",     priceLockedInput     ? priceLockedInput.value     : (tr.dataset.priceLocked === "1" ? "1" : ""));
     });
   }
 
@@ -1454,6 +1508,7 @@
 
     const form = document.getElementById("printer-form");
     if (form) {
+      window.printerFormSubmitting = true;
       form.submit();
     }
   }
@@ -1540,7 +1595,30 @@
     }
   }
 
+  function lockCurrentTableState() {
+    // Finish any active edit before saving/submitting
+    const active = document.activeElement;
+    if (active && active.closest && active.closest("#quote-table")) {
+      active.blur();
+    }
+
+    // Recalculate every row one last time
+    document.querySelectorAll("#quote-table tbody tr").forEach(function(tr) {
+      const marginInput = tr.querySelector(".margin");
+      if (marginInput && typeof updateRowFromElement === "function") {
+        updateRowFromElement(tr, marginInput, false);
+      }
+    });
+
+    // Save exact current table into browser session storage
+    if (typeof savePrinterDraftState === "function") {
+      savePrinterDraftState();
+    }
+  }
+
   function addCustomRow() {
+    lockCurrentTableState();
+
     const tbody = document.querySelector("#quote-table tbody");
     if (!tbody) return;
 
@@ -1561,19 +1639,14 @@
       </td>
 
       <td style="font-weight:700; text-align:center;">
-        <input
-          type="text"
-          name="row_product"
-          class="form-control form-control-sm"
-          placeholder="Enter product name"
-          style="font-weight:600; text-align:center;"
-        >
+        <input type="text" name="row_product" class="form-control form-control-sm" placeholder="Enter product name" style="font-weight:600; text-align:center;">
         <input type="hidden" name="row_description" value="">
         <input type="hidden" name="row_source_cost" value="0">
         <input type="hidden" name="row_source_um" value="">
         <input type="hidden" name="row_source_price" value="0">
         <input type="hidden" name="row_weight" value="">
         <input type="hidden" name="row_is_inquire" value="0">
+        <input type="hidden" name="row_price_locked" value="">
       </td>
 
       <td>
@@ -1614,16 +1687,18 @@
       <td><input class="form-control form-control-sm cost" name="row_cost" value="0.0000" inputmode="decimal"></td>
       <td><input class="form-control form-control-sm pre-packaging" name="row_pre_packaging" value="0.0000" inputmode="decimal"></td>
       <td><input class="form-control form-control-sm pre-shipping" name="row_pre_shipping" value="0.0000" inputmode="decimal"></td>
-      <td><input class="form-control form-control-sm computed final-cost" name="row_final_cost" value="0.0000" inputmode="decimal" readonly tabindex="-1"></td>
+      <td><input class="form-control form-control-sm computed final-cost" name="row_final_cost" value="0.0000" readonly tabindex="-1"></td>
       <td class="price-section section-divider-left"><input class="form-control form-control-sm margin" name="row_margin" value="0.00" inputmode="decimal"></td>
       <td class="price-section"><input class="form-control form-control-sm price" name="row_price" value="0.0000" inputmode="decimal"></td>
       <td class="price-section"><input class="form-control form-control-sm add-shipping" name="row_add_shipping" value="0.0000" inputmode="decimal"></td>
       <td class="price-section section-divider-right"><input class="form-control form-control-sm add-packaging" name="row_add_packaging" value="0.0000" inputmode="decimal"></td>
-      <td class="final-price-section section-divider-left section-divider-right"><input class="form-control form-control-sm computed final" name="row_final" value="0.0000" inputmode="decimal" readonly tabindex="-1"></td>
+      <td class="final-price-section section-divider-left section-divider-right"><input class="form-control form-control-sm computed final" name="row_final" value="0.0000" readonly tabindex="-1"></td>
     `;
 
     tbody.appendChild(tr);
-    // Focus the product name field so the user can start typing immediately
+
+    savePrinterDraftState();
+
     const nameInput = tr.querySelector('[name="row_product"]');
     if (nameInput) nameInput.focus();
   }
@@ -1658,21 +1733,41 @@
     });
   }
 
-  function handleProductToggle() {
-    const actionInput = document.getElementById("printer-action");
-    const form = document.getElementById("printer-form");
-
-    if (!form) return;
-
-    if (actionInput) {
-      actionInput.value = "build";
+  function handleProductToggle(cb) {
+    if (cb && cb.checked === false) {
+      cb.checked = true;
+      return;
     }
 
-    syncCurrentRowsToToolbarForm();
-    savePrinterDraftState();
+    lockCurrentTableState();
+
+    const priceListForm = document.getElementById("price-list-form");
+    if (!priceListForm) return;
+
+    let actionInput = priceListForm.querySelector('input[name="action"][data-dynamic-action]');
+    if (!actionInput) {
+      actionInput = document.createElement("input");
+      actionInput.type = "hidden";
+      actionInput.name = "action";
+      actionInput.setAttribute("data-dynamic-action", "1");
+      priceListForm.appendChild(actionInput);
+    }
+
+    actionInput.value = "build";
+
+    const oldProductKey = priceListForm.querySelector('input[name="product_key"][data-added-product]');
+    if (oldProductKey) oldProductKey.remove();
+
+    const productKeyInput = document.createElement("input");
+    productKeyInput.type = "hidden";
+    productKeyInput.name = "product_key";
+    productKeyInput.value = cb ? cb.value : "";
+    productKeyInput.setAttribute("data-added-product", "1");
+    priceListForm.appendChild(productKeyInput);
 
     sessionStorage.setItem("keep_product_panel_open", "1");
-    form.submit();
+    window.printerFormSubmitting = true;
+    priceListForm.submit();
   }
 
   document.addEventListener("click", function(e) {
@@ -1715,6 +1810,11 @@
   document.querySelectorAll("form").forEach(form => {
     form.addEventListener("submit", () => {
       sessionStorage.setItem("printer_scroll", window.scrollY);
+      // Any real form submission (native button click, Enter key, or a
+      // JS-triggered .submit()) already carries correct, up-to-date data
+      // to the server. Mark it so the beforeunload autosave below skips
+      // its own redundant/racy write.
+      window.printerFormSubmitting = true;
     });
   });
 
@@ -1769,6 +1869,7 @@
         shipping_location: tr.querySelector('select[name="row_shipping_location"]')?.value || "",
         shipping_custom:   tr.querySelector('input[name="row_shipping_custom"]')?.value    || "",
         is_inquire: tr.querySelector('input[name="row_is_inquire"]')?.value || (tr.dataset.inquire === "1" ? "1" : "0"),
+        price_locked: tr.querySelector('input[name="row_price_locked"]')?.value || (tr.dataset.priceLocked === "1" ? "1" : ""),
       };
     });
   }
@@ -1808,6 +1909,65 @@
       appendHidden(holder, "row_shipping_location", row.shipping_location || "");
       appendHidden(holder, "row_shipping_custom",   row.shipping_custom   || "");
       appendHidden(holder, "row_is_inquire",        row.is_inquire        || "0");
+      appendHidden(holder, "row_price_locked",      row.price_locked      || "");
+    });
+  }
+
+  function setRowField(tr, selector, value) {
+    const el = tr.querySelector(selector);
+    if (el && value !== undefined && value !== null) {
+      el.value = value;
+    }
+  }
+
+  function restoreVisibleRowsFromDraft(state) {
+    const table = document.getElementById("quote-table");
+    if (!table || !state || !Array.isArray(state.rows) || !state.rows.length) return;
+
+    const draftRows = state.rows.slice();
+    const used = new Set();
+
+    Array.from(table.querySelectorAll("tbody tr")).forEach(function(tr, index) {
+      const productVal = tr.querySelector('input[name="row_product"]')?.value || "";
+      let draftIndex = draftRows.findIndex(function(row, i) {
+        return !used.has(i) && (row.product || "") === productVal;
+      });
+
+      if (draftIndex === -1 && index < draftRows.length && !used.has(index)) {
+        draftIndex = index;
+      }
+
+      if (draftIndex === -1) return;
+
+      used.add(draftIndex);
+      const row = draftRows[draftIndex];
+
+      setRowField(tr, 'select[name="row_um"]', row.um);
+      setRowField(tr, 'select[name="row_package_type"]', row.package_type);
+      setRowField(tr, 'input[name="row_cost"]', row.cost);
+      setRowField(tr, 'input[name="row_pre_shipping"]', row.pre_shipping);
+      setRowField(tr, 'input[name="row_pre_packaging"]', row.pre_packaging);
+      setRowField(tr, 'input[name="row_final_cost"]', row.final_cost);
+      setRowField(tr, 'input[name="row_margin"]', row.margin);
+      setRowField(tr, 'input[name="row_price"]', row.price);
+      setRowField(tr, 'input[name="row_add_shipping"]', row.add_shipping);
+      setRowField(tr, 'input[name="row_add_packaging"]', row.add_packaging);
+      setRowField(tr, 'input[name="row_final"]', row.final || row.final_price);
+      setRowField(tr, 'select[name="row_shipping_type"]', row.shipping_type);
+      setRowField(tr, 'select[name="row_shipping_location"]', row.shipping_location);
+      setRowField(tr, 'input[name="row_shipping_custom"]', row.shipping_custom);
+      setRowField(tr, 'input[name="row_is_inquire"]', row.is_inquire || "0");
+      setRowField(tr, 'input[name="row_price_locked"]', row.price_locked || "");
+
+      if (row.is_inquire === "1") {
+        tr.dataset.inquire = "1";
+        tr.setAttribute("data-inquire", "1");
+      }
+
+      if (row.price_locked === "1") {
+        tr.dataset.priceLocked = "1";
+        tr.setAttribute("data-price-locked", "1");
+      }
     });
   }
 
@@ -1837,6 +1997,7 @@
 
     if (state.rows && state.rows.length) {
       rebuildRowsFromDraft(state);
+      restoreVisibleRowsFromDraft(state);
     }
   }
 
@@ -1864,6 +2025,18 @@
   });
 
 window.addEventListener("beforeunload", function () {
+  // A real form submission (checkbox toggle, Go to Print, Delete Selected,
+  // Save List, etc.) already sends correct, up-to-date data to the server
+  // as part of that submission. If we ALSO fire this autosave here, it
+  // races against that submission - both write to the same session data,
+  // and whichever response the browser processes last wins. That race is
+  // exactly what was causing prices to intermittently revert/reset when
+  // adding a product. Only run this autosave for genuinely unplanned
+  // navigation (closing the tab, clicking away to a different page).
+  if (window.printerFormSubmitting) {
+    return;
+  }
+
   const state = {
     pricing_period:  getToolbarFieldValue("pricing_period"),
     customer_id:     getToolbarFieldValue("customer_id"),

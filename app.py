@@ -5051,17 +5051,12 @@ def printer_page():
                 selected_product_name_keys.add(normalized_name)
                 selected_product_names.append(product_name)
 
-            # Every product that actually has a checkbox in the picker for
-            # this month. Checkbox toggling should only ever add/remove rows
-            # for products in THIS set - a custom/free-typed product (added
-            # via "+ Custom") was never represented by a checkbox, so it
-            # must never be dropped just because some other box was toggled.
-            known_picker_keys = {
-                normalize_product_name(p.get("product"))
-                for p in products
-                if (p.get("product") or "").strip()
-            }
-
+            # PURELY ADDITIVE: checking a box in the product picker only
+            # ever ADDS a product to the list - it never removes anything,
+            # no matter what. Every row already on the list is preserved
+            # exactly as posted, regardless of checkbox state. Removing a
+            # product is only ever done explicitly, via the delete
+            # checkbox + "Delete Selected" button below the table.
             preserved_rows = []
             preserved_product_keys = set()
 
@@ -5072,12 +5067,8 @@ def printer_page():
                 if not product_key:
                     continue
 
-                is_known_picker_product = product_key in known_picker_keys
-                is_checked = product_key in selected_product_name_keys
-
-                if is_checked or not is_known_picker_product:
-                    preserved_rows.append(normalized_row)
-                    preserved_product_keys.add(product_key)
+                preserved_rows.append(normalized_row)
+                preserved_product_keys.add(product_key)
 
             added_rows = []
 
@@ -5098,9 +5089,7 @@ def printer_page():
 
             rebuilt_rows = preserved_rows + added_rows
 
-            kept_count = len(preserved_rows)
             added_count = len(added_rows)
-            removed_count = max(len(existing_rows) - kept_count, 0)
 
             quote_rows = rebuilt_rows
 
@@ -5112,17 +5101,10 @@ def printer_page():
                 "rows": quote_rows,
             }
 
-            if added_count and removed_count:
-                flash(
-                    f"Updated list: added {added_count} product(s) and removed {removed_count} product(s).",
-                    "success"
-                )
-            elif added_count:
+            if added_count:
                 flash(f"Added {added_count} product(s) to the list.", "success")
-            elif removed_count:
-                flash(f"Removed {removed_count} product(s) from the list.", "success")
             else:
-                flash("List updated.", "info")
+                flash("That product is already on the list.", "info")
 
         elif action == "delete_selected":
             draft = session.get("printer_draft") or {}
@@ -5624,6 +5606,22 @@ def printer_page():
     customer_locations = [loc for loc in (selected_customer.get("locations") or [])] if selected_customer else []
     pickup_locations = load_pickup_locations()
 
+    # Used by the product picker to decide which checkboxes show as checked.
+    # Must use the same normalized (case/spacing-insensitive) comparison the
+    # backend uses everywhere else - an exact string match here was the
+    # cause of checkboxes silently drifting out of sync with the actual
+    # list.
+    quote_row_product_keys = {
+        normalize_product_name(r.get("product"))
+        for r in quote_rows
+        if (r.get("product") or "").strip()
+    }
+    checked_product_keys = {
+        p.get("key")
+        for p in products
+        if normalize_product_name(p.get("product")) in quote_row_product_keys
+    }
+
     return render_template(
         "printer.html",
         month_key=month_key,
@@ -5631,6 +5629,7 @@ def printer_page():
         sales_people=sales_people,
         products=products,
         quote_rows=quote_rows,
+        checked_product_keys=checked_product_keys,
         errors=errors,
         form=form,
         customer_name=customer_name,
