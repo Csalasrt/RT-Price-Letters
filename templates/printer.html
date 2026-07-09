@@ -116,6 +116,58 @@
     width: 100%;
   }
 
+  /* Frozen header row - stays visible while scrolling down the page */
+  #quote-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #f8f9fa;
+    box-shadow: inset 0 -1px 0 #dee2e6, 0 2px 3px rgba(0,0,0,0.05);
+  }
+
+  /* Frozen first two columns (row actions + Product) - stay visible while
+     scrolling horizontally so users always know which product they're on */
+  #quote-table th.selection-header-cell,
+  #quote-table td.selection-cell {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: #fff;
+  }
+
+  #quote-table thead th.selection-header-cell {
+    z-index: 4;
+    background: #f8f9fa;
+  }
+
+  #quote-table th.product-col-frozen,
+  #quote-table td.product-col-frozen {
+    position: sticky;
+    left: 74px;
+    z-index: 1;
+    background: #fff;
+    box-shadow: 2px 0 3px rgba(0,0,0,0.06);
+  }
+
+  #quote-table thead th.product-col-frozen {
+    z-index: 4;
+    background: #f8f9fa;
+  }
+
+  /* Keep the frozen product cell readable when its row is highlighted */
+  #quote-table tbody tr:focus-within td.selection-cell,
+  #quote-table tbody tr:focus-within td.product-col-frozen {
+    background: #eef4ff;
+  }
+
+  /* Simple highlight for whichever row the user is currently working in */
+  #quote-table tbody tr:focus-within {
+    background: #eef4ff;
+  }
+
+  #quote-table tbody tr:focus-within td {
+    background: #eef4ff;
+  }
 
   /* Readonly / computed cells */
   #quote-table input.computed {
@@ -528,7 +580,7 @@
                     <span style="width:28px; height:28px; display:block;"></span>
                   </div>
                 </th>
-                <th style="min-width:220px;">Product</th>
+                <th class="product-col-frozen" style="min-width:220px;">Product</th>
                 <th style="min-width:90px;">UM</th>
                 <th style="min-width:320px;">Shipping Details</th>
                 <th style="min-width:160px;">Package Type</th>
@@ -576,7 +628,7 @@
                     </div>
                   </td>
 
-                  <td style="font-weight:700; text-align:center;">
+                  <td class="product-col-frozen" style="font-weight:700; text-align:center;">
                     {{ r.product }}
                     <input type="hidden" name="row_product" value="{{ r.product }}">
                     <input type="hidden" name="row_description" value="{{ r.get('description', '') }}">
@@ -1638,7 +1690,7 @@
         </div>
       </td>
 
-      <td style="font-weight:700; text-align:center;">
+      <td class="product-col-frozen" style="font-weight:700; text-align:center;">
         <input type="text" name="row_product" class="form-control form-control-sm" placeholder="Enter product name" style="font-weight:600; text-align:center;">
         <input type="hidden" name="row_description" value="">
         <input type="hidden" name="row_source_cost" value="0">
