@@ -116,6 +116,20 @@
     width: 100%;
   }
 
+  /* Bound the table wrapper's height so it becomes a genuine internal
+     scroll container. Without this, .table-responsive's overflow-x:auto
+     silently forces overflow-y to auto as well (per the CSS spec), but
+     with no set height it never actually scrolls internally - the whole
+     page scrolls instead, and the sticky header has no container to
+     stick within. Giving it a bounded height + explicit overflow fixes
+     both the frozen header and frozen column behavior at once. */
+  #quote-table-wrap {
+    max-height: 70vh;
+    overflow: auto;
+    border: 1px solid #eaecf0;
+    border-radius: 8px;
+  }
+
   /* Frozen header row - stays visible while scrolling down the page */
   #quote-table thead th {
     position: sticky;
@@ -570,7 +584,7 @@
         <input type="hidden" name="default_margin" value="{{ form.default_margin }}">
         <input type="hidden" name="pricing_period" value="{{ month_key }}">
 
-        <div class="table-responsive" style="margin-top:10px;">
+        <div class="table-responsive" id="quote-table-wrap" style="margin-top:10px;">
           <table class="table table-sm align-middle" id="quote-table">
             <thead>
               <tr>
