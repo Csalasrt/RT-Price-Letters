@@ -1832,14 +1832,30 @@ def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fall
 
     built["description"] = saved_description
     built["package_type"] = package_type
-    # Always honour the UM the user saved in their customer defaults.
-    # build_printer_row_from_priced_product takes um from the pricing entry,
-    # and build_printer_row_from_name_only (used for custom products with no
-    # pricing match) sets um to "". Either way, overwrite with saved_um so
-    # the printer always reflects what the customer setup actually specified.
+
+    # Always honour the UM the customer's default setup specified. If the
+    # matched pricing entry was entered in a different UM (e.g. this
+    # month's pricing is only in LB but the customer's letter shows GAL),
+    # convert the cost using the product's LB/GAL weight rather than just
+    # relabeling it - relabeling without converting would silently show
+    # the LB dollar figure mislabeled as a GAL price.
     if saved_um:
+        source_um = normalize_um(built.get("source_um") or built.get("um") or "")
+        source_cost = to_float(built.get("cost", 0.0), 0.0)
+
+        if source_um and source_um != saved_um and source_cost > 0:
+            converted_cost = convert_printer_cost_between_ums(
+                source_cost, source_um, saved_um, product_name
+            )
+            if converted_cost is not None:
+                built["cost"] = round(converted_cost, 4)
+            else:
+                # No weight on file for this product - can't convert safely,
+                # so keep the original UM instead of mislabeling the cost.
+                saved_um = source_um
+
         built["um"] = saved_um
-        built["source_um"] = saved_um
+        built["source_um"] = source_um or saved_um
     built["pre_shipping"] = round(saved_shipping, 4)
     built["pre_packaging"] = round(saved_packaging, 4)
     built["add_shipping"] = 0.0
