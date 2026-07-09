@@ -301,6 +301,34 @@
   #quote-table td.section-divider-right {
     border-right: 3px solid #98a2b3 !important;
   }
+  /* Make editable boxes visually distinct from read-only/computed ones */
+  #quote-table input.form-control:not(.computed),
+  #quote-table select.form-control,
+  .build-toolbar-card .form-control,
+  .build-toolbar-card select {
+    border: 1.5px solid #9cb8f2 !important;
+  }
+
+  #quote-table input.form-control:not(.computed):focus,
+  #quote-table select.form-control:focus {
+    border-color: #4f7fe0 !important;
+    box-shadow: 0 0 0 2px rgba(79,127,224,0.15);
+    outline: none;
+  }
+
+  #quote-table input.computed {
+    border: 1px solid #e5e7eb;
+  }
+
+  /* Rows marked as "Inquire" get a subtle highlight so they're easy to spot */
+  #quote-table tr[data-inquire="1"] .price,
+  #quote-table tr[data-inquire="1"] .final {
+    color: #b54708;
+    font-weight: 700;
+    font-style: italic;
+    border-color: #f0b366 !important;
+    background: #fffaf0;
+  }
 </style>
 
 <div class="text-muted-small" style="margin-bottom:12px;">
@@ -545,6 +573,7 @@
                   data-source-price="{{ '%.4f'|format(r.get('source_price', r.get('price', 0)) or 0) }}"
                   data-source-um="{{ (r.get('source_um', r.get('um', '')))|upper }}"
                   data-weight="{{ r.get('weight', '') }}"
+                  data-inquire="{{ '1' if r.get('is_inquire') else '0' }}"
                 >
                   <td class="selection-cell">
                     <div class="row-actions">
@@ -575,6 +604,7 @@
                     <input type="hidden" name="row_source_um" value="{{ r.get('source_um', r.get('um', '')) }}">
                     <input type="hidden" name="row_source_price" value="{{ '%.4f'|format(r.get('source_price', r.get('price', 0)) or 0) }}">
                     <input type="hidden" name="row_weight" value="{{ r.get('weight', '') }}">
+                    <input type="hidden" name="row_is_inquire" value="{{ '1' if r.get('is_inquire') else '0' }}">
                   </td>
 
                   <td>
@@ -701,7 +731,7 @@
                     <input
                       class="form-control form-control-sm price"
                       name="row_price"
-                      value="{{ '%.4f'|format(r.price or 0) }}"
+                      value="{{ 'Inquire' if r.get('is_inquire') else '%.4f'|format(r.price or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
@@ -731,7 +761,7 @@
                     <input
                       class="form-control form-control-sm computed final"
                       name="row_final"
-                      value="{{ '%.4f'|format(r.final_price or 0) }}"
+                      value="{{ 'Inquire' if r.get('is_inquire') else '%.4f'|format(r.final_price or 0) }}"
                       inputmode="decimal"
                       readonly
                       tabindex="-1"
@@ -745,7 +775,7 @@
         </div>
 
         <div class="text-muted-small" style="margin-top:8px;">
-          Tip: Edit cost, pre-margin packaging/shipping, margin, price, or additional shipping/packaging. Final Cost and Final Price update automatically.
+          Tip: Edit cost, pre-margin packaging/shipping, margin, price, or additional shipping/packaging. Final Cost and Final Price update automatically. Type <strong>IQ</strong> in the Price box and press Enter to mark a product as "Inquire" instead of a set price.
         </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
@@ -782,6 +812,32 @@
       return String(v || "").trim().toUpperCase();
     }
 
+    function isInquireValue(v) {
+      const s = String(v || "").trim().toLowerCase();
+      return s === "iq" || s === "inquire";
+    }
+
+    function applyInquire(tr) {
+      if (!tr) return;
+      const priceEl = tr.querySelector(".price");
+      const finalEl = tr.querySelector(".final");
+      const flagEl = tr.querySelector('input[name="row_is_inquire"]');
+
+      if (priceEl) priceEl.value = "Inquire";
+      if (finalEl) finalEl.value = "Inquire";
+      tr.dataset.inquire = "1";
+      tr.setAttribute("data-inquire", "1");
+      if (flagEl) flagEl.value = "1";
+    }
+
+    function clearInquireFlag(tr) {
+      if (!tr) return;
+      tr.dataset.inquire = "0";
+      tr.setAttribute("data-inquire", "0");
+      const flagEl = tr.querySelector('input[name="row_is_inquire"]');
+      if (flagEl) flagEl.value = "0";
+    }
+
     function isCalcInput(el) {
       return !!(
         el &&
@@ -804,6 +860,12 @@
       if (el.classList.contains("computed")) return;
 
       const raw = String(el.value || "").trim();
+
+      if (el.classList.contains("price") && isInquireValue(raw)) {
+        el.value = "";
+        return;
+      }
+
       const n = toNum(raw);
 
       const isEffectivelyEmpty =
@@ -823,7 +885,22 @@
       if (!isCalcInput(el)) return;
       if (el.classList.contains("computed")) return;
 
+      const tr = el.closest("tr");
       const raw = String(el.value || "").trim();
+
+      if (el.classList.contains("price")) {
+        if (isInquireValue(raw)) {
+          applyInquire(tr);
+          return;
+        }
+        if (raw === "" && tr && tr.dataset.inquire === "1") {
+          applyInquire(tr);
+          return;
+        }
+        if (raw !== "") {
+          clearInquireFlag(tr);
+        }
+      }
 
       if (raw === "" || raw === "." || raw === "-" || raw === "-.") {
         if (el.classList.contains("margin")) {
@@ -944,6 +1021,22 @@
 
       if (!costEl || !marginEl || !priceEl || !finalEl) return;
 
+      // If the user is actively typing a new value into Price while the row
+      // is still flagged Inquire, release the flag immediately so their
+      // keystrokes aren't fought/reverted on every input event. The final
+      // commit (blur/Enter) re-evaluates the finished value as usual via
+      // restoreZeroOnBlur, so retyping "iq" still re-applies Inquire.
+      if (
+        changed === "price" &&
+        liveEdit &&
+        tr.dataset.inquire === "1" &&
+        !isInquireValue(priceEl.value)
+      ) {
+        clearInquireFlag(tr);
+      }
+
+      const isInquireRow = tr.dataset.inquire === "1";
+
       let cost    = toNum(costEl.value);
       let preShip = toNum(preShipEl ? preShipEl.value : 0);
       let prePack = toNum(prePackEl ? prePackEl.value : 0);
@@ -954,6 +1047,14 @@
       let finalP  = toNum(finalEl.value);
 
       if (changed === "um") {
+        if (isInquireRow) {
+          const finalCost = cost + preShip + prePack;
+          if (finalCostEl) finalCostEl.value = fmt4(finalCost);
+          priceEl.value = "Inquire";
+          finalEl.value = "Inquire";
+          return;
+        }
+
         const didConvert = applyUMConversion(tr);
         if (!didConvert) {
           cost    = toNum(costEl.value);
@@ -975,6 +1076,15 @@
       // For any change, recompute finalCost first
       const finalCost = cost + preShip + prePack;
       if (finalCostEl) finalCostEl.value = fmt4(finalCost);
+
+      // A row flagged Inquire keeps showing "Inquire" in Price/Final for any
+      // edit that isn't the Price field itself being committed - Final Cost
+      // above still updates normally since it's independent information.
+      if (isInquireRow && changed !== "price") {
+        priceEl.value = "Inquire";
+        finalEl.value = "Inquire";
+        return;
+      }
 
       if (changed === "cost" || changed === "pre-shipping" || changed === "pre-packaging") {
         price  = finalCost * (1 + margin / 100);
@@ -1001,6 +1111,14 @@
       }
 
       if (changed === "price") {
+        // Price field was just committed (blur/Enter already resolved
+        // whether it's "Inquire" or a real number via restoreZeroOnBlur).
+        if (tr.dataset.inquire === "1") {
+          priceEl.value = "Inquire";
+          finalEl.value = "Inquire";
+          return;
+        }
+
         // back-calc margin from finalCost
         if (finalCost > 0) {
           margin = ((price - finalCost) / finalCost) * 100;
@@ -1298,6 +1416,7 @@
       const shippingTypeInput     = tr.querySelector('select[name="row_shipping_type"]');
       const shippingLocationInput = tr.querySelector('select[name="row_shipping_location"]');
       const shippingCustomInput   = tr.querySelector('input[name="row_shipping_custom"]');
+      const isInquireInput        = tr.querySelector('input[name="row_is_inquire"]');
 
       appendHidden(holder, "row_product",          productInput         ? productInput.value         : "");
       appendHidden(holder, "row_description",      descriptionInput     ? descriptionInput.value     : "");
@@ -1314,6 +1433,7 @@
       appendHidden(holder, "row_shipping_type",    shippingTypeInput    ? shippingTypeInput.value    : "");
       appendHidden(holder, "row_shipping_location",shippingLocationInput? shippingLocationInput.value: "");
       appendHidden(holder, "row_shipping_custom",  shippingCustomInput  ? shippingCustomInput.value  : "");
+      appendHidden(holder, "row_is_inquire",       isInquireInput       ? isInquireInput.value       : (tr.dataset.inquire === "1" ? "1" : "0"));
     });
   }
 
@@ -1430,6 +1550,7 @@
     tr.setAttribute("data-source-price", "0");
     tr.setAttribute("data-source-um", "");
     tr.setAttribute("data-weight", "");
+    tr.setAttribute("data-inquire", "0");
 
     tr.innerHTML = `
       <td class="selection-cell">
@@ -1452,6 +1573,7 @@
         <input type="hidden" name="row_source_um" value="">
         <input type="hidden" name="row_source_price" value="0">
         <input type="hidden" name="row_weight" value="">
+        <input type="hidden" name="row_is_inquire" value="0">
       </td>
 
       <td>
@@ -1646,6 +1768,7 @@
         shipping_type:     tr.querySelector('select[name="row_shipping_type"]')?.value     || "",
         shipping_location: tr.querySelector('select[name="row_shipping_location"]')?.value || "",
         shipping_custom:   tr.querySelector('input[name="row_shipping_custom"]')?.value    || "",
+        is_inquire: tr.querySelector('input[name="row_is_inquire"]')?.value || (tr.dataset.inquire === "1" ? "1" : "0"),
       };
     });
   }
@@ -1684,6 +1807,7 @@
       appendHidden(holder, "row_shipping_type",     row.shipping_type     || "");
       appendHidden(holder, "row_shipping_location", row.shipping_location || "");
       appendHidden(holder, "row_shipping_custom",   row.shipping_custom   || "");
+      appendHidden(holder, "row_is_inquire",        row.is_inquire        || "0");
     });
   }
 

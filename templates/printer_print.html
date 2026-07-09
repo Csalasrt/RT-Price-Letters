@@ -315,8 +315,12 @@
                     </td>
 
                     <td style="text-align:center; font-weight:700; white-space:nowrap;">
-                      ${{ '%.4f'|format(r.get("final_price",0) or 0) }}
-                      {% if r.get("um") %} / {{ r.get("um")|upper }}{% endif %}
+                      {% if r.get("is_inquire") %}
+                        Inquire
+                      {% else %}
+                        ${{ '%.4f'|format(r.get("final_price",0) or 0) }}
+                        {% if r.get("um") %} / {{ r.get("um")|upper }}{% endif %}
+                      {% endif %}
                     </td>
 
                     <td style="text-align:center;">

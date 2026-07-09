@@ -1982,6 +1982,8 @@ def normalize_printer_row(row):
         except Exception:
             weight = get_product_weight(product_name)
 
+    is_inquire = str(row.get("is_inquire", "")).strip().lower() in ("1", "true", "yes", "on")
+
     return {
         "product": product_name,
         "description": (row.get("description") or "").strip(),
@@ -2003,6 +2005,7 @@ def normalize_printer_row(row):
         "shipping_type":     (row.get("shipping_type") or "").strip(),
         "shipping_location": (row.get("shipping_location") or "").strip(),
         "shipping_custom":   (row.get("shipping_custom") or "").strip(),
+        "is_inquire": is_inquire,
     }
 
 def save_printer_working_draft(month_key, customer_id, sales_person_id, default_margin, rows):
@@ -2477,6 +2480,7 @@ def get_posted_printer_rows(form):
     posted_shipping_types = form.getlist("row_shipping_type")
     posted_shipping_locations = form.getlist("row_shipping_location")
     posted_shipping_customs = form.getlist("row_shipping_custom")
+    posted_is_inquire = form.getlist("row_is_inquire")
 
     row_count = len(posted_products)
     rows = []
@@ -2509,6 +2513,7 @@ def get_posted_printer_rows(form):
             "shipping_type":     posted_shipping_types[i]     if i < len(posted_shipping_types)     else "",
             "shipping_location": posted_shipping_locations[i] if i < len(posted_shipping_locations) else "",
             "shipping_custom":   posted_shipping_customs[i]   if i < len(posted_shipping_customs)   else "",
+            "is_inquire":        posted_is_inquire[i]         if i < len(posted_is_inquire)         else "0",
         }
         
 
