@@ -103,6 +103,11 @@ class CompanyProduct(db.Model):
     lb_per_gal = db.Column(db.Float, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Optional link to another product's id. When set, pricing entered
+    # for either product applies to both - see expand_products_with_shared_pricing().
+    # When not set, a product's own id is its own pricing group.
+    pricing_id = db.Column(db.String(32), default=None, nullable=True, index=True)
+
 
 class SalesPerson(db.Model):
     __tablename__ = "sales_people"
@@ -158,6 +163,10 @@ class CustomerDefaultRow(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     customer_id = db.Column(db.String(32), db.ForeignKey("customers.id"), nullable=False, index=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    # Soft link to CompanyProduct.id. Lets a product rename cascade reliably
+    # to every customer's default row instead of matching on name text.
+    product_id = db.Column(db.String(32), nullable=True, index=True)
 
     product = db.Column(db.String(255), nullable=False, default="")
     description = db.Column(db.Text, nullable=False, default="")
@@ -417,6 +426,7 @@ def load_customers():
         for row in c.default_rows:
             row_dict = {
                 "product": row.product or "",
+                "product_id": row.product_id or "",
                 "description": row.description or "",
                 "package_type": row.package_type or "",
                 "um": row.um or "",
@@ -449,6 +459,22 @@ def save_customers(customers: list):
     CustomerLocation.query.delete()
     CustomerDefaultRow.query.delete()
     Customer.query.delete()
+
+    # Make sure every product name referenced by any customer's default
+    # rows exists in the master Products list, then build a name->id map
+    # once so product_id can be attached to every row below.
+    all_product_names = [
+        (row.get("product") or "").strip()
+        for c in (customers or [])
+        for row in (c.get("default_letter_rows") or [])
+        if (row.get("product") or "").strip()
+    ]
+    ensure_products_exist(all_product_names)
+
+    name_to_product_id = {
+        normalize_product_name(p.get("product")): p.get("id")
+        for p in load_company_products()
+    }
 
     for c in customers or []:
         name = (c.get("name") or "").strip()
@@ -498,10 +524,14 @@ def save_customers(customers: list):
             ]
 
         for i, row in enumerate(default_rows):
+            product_name = (row.get("product") or "").strip()
+            product_id = row.get("product_id") or name_to_product_id.get(normalize_product_name(product_name))
+
             db.session.add(CustomerDefaultRow(
                 customer_id=customer.id,
                 sort_order=i,
-                product=(row.get("product") or "").strip(),
+                product_id=product_id,
+                product=product_name,
                 description=(row.get("description") or "").strip(),
                 package_type=(row.get("package_type") or "").strip(),
                 um=normalize_um(row.get("um", "")),
@@ -1240,6 +1270,8 @@ def get_product_costs_for_month(month_key: str):
             "cost": cost
         })
 
+    products = expand_products_with_shared_pricing(products)
+
     products.sort(key=lambda x: (x["product"].lower(), x["um"].lower()))
     return month_key, products
 
@@ -1323,11 +1355,181 @@ def load_company_products():
             "id": p.id,
             "product": p.product or "",
             "description": p.description or "",
-            "lb_per_gal": float(p.lb_per_gal or 0.0),
+            "lb_per_gal": (float(p.lb_per_gal) if p.lb_per_gal is not None else None),
+            "pricing_id": p.pricing_id or "",
             "created_at": p.created_at.isoformat() if p.created_at else datetime.now(timezone.utc).isoformat()
         }
         for p in products
     ]
+
+def ensure_products_exist(product_names):
+    """
+    Make sure every product name passed in exists in the master Products
+    list. Anything not already there (matched case/spacing-insensitively)
+    gets added with a blank description and a blank LB/GAL, so it shows
+    up on the Products page ready to be filled in later.
+
+    Called whenever a custom/free-typed product name is used to build a
+    list (printer page, new customer page, customer default setup) so
+    the master product list always stays in sync.
+    """
+    names = [str(n or "").strip() for n in (product_names or [])]
+    names = [n for n in names if n]
+    if not names:
+        return
+
+    existing_keys = {
+        normalize_product_name(p.product)
+        for p in CompanyProduct.query.all()
+    }
+
+    added_any = False
+    seen_this_batch = set()
+
+    for name in names:
+        key = normalize_product_name(name)
+        if not key or key in existing_keys or key in seen_this_batch:
+            continue
+
+        seen_this_batch.add(key)
+        db.session.add(CompanyProduct(
+            id=uuid.uuid4().hex[:10],
+            product=name,
+            description="",
+            lb_per_gal=None,
+        ))
+        added_any = True
+
+    if added_any:
+        db.session.commit()
+
+
+def cascade_product_rename(product_id, old_name, new_name):
+    """
+    When a product's name changes in the master Products list, update
+    that same product everywhere it's referenced on customers' default
+    product setups. Matched primarily by product_id now (reliable even
+    if names collide or shift), with a name-based fallback for older
+    rows saved before product_id existed - those get backfilled with
+    the id as they're touched.
+    """
+    product_id = str(product_id or "").strip()
+    old_name = (old_name or "").strip()
+    new_name = (new_name or "").strip()
+
+    if not new_name or (not product_id and not old_name):
+        return
+
+    old_key = normalize_product_name(old_name)
+    new_key = normalize_product_name(new_name)
+
+    changed = False
+
+    if product_id:
+        for row in CustomerDefaultRow.query.filter_by(product_id=product_id).all():
+            if row.product != new_name:
+                row.product = new_name
+                changed = True
+
+    if old_key and old_key != new_key:
+        legacy_rows = (
+            CustomerDefaultRow.query
+            .filter(CustomerDefaultRow.product_id.is_(None))
+            .all()
+        )
+        for row in legacy_rows:
+            if normalize_product_name(row.product) == old_key:
+                row.product = new_name
+                if product_id:
+                    row.product_id = product_id
+                changed = True
+
+    if changed:
+        db.session.commit()
+
+
+def resolve_product_id(product_name):
+    """
+    Finds the CompanyProduct id matching this product name (case/spacing
+    insensitive). Returns None if no matching product exists yet.
+    """
+    key = normalize_product_name(product_name)
+    if not key:
+        return None
+
+    for p in load_company_products():
+        if normalize_product_name(p.get("product")) == key:
+            return p.get("id")
+
+    return None
+
+
+def get_pricing_group_map():
+    """
+    Builds a map of pricing-group-id -> list of product names sharing
+    that group. A product's pricing group is whatever id its
+    `pricing_id` points to, or its own id if it isn't linked to anything.
+    """
+    company_products = load_company_products() or []
+
+    group_to_names = {}
+    name_to_group = {}
+
+    for p in company_products:
+        name = (p.get("product") or "").strip()
+        if not name:
+            continue
+
+        group_id = p.get("pricing_id") or p.get("id")
+        name_to_group[normalize_product_name(name)] = group_id
+        group_to_names.setdefault(group_id, []).append(name)
+
+    return group_to_names, name_to_group
+
+
+def expand_products_with_shared_pricing(priced_products):
+    """
+    If two or more products are linked to share pricing (via
+    CompanyProduct.pricing_id), a price entered under any one of their
+    names should apply to all of them. Takes the priced-products list
+    built straight from PricingEntry rows and synthesizes matching
+    entries for every other product name in the same pricing group.
+    """
+    group_to_names, name_to_group = get_pricing_group_map()
+    if not group_to_names:
+        return priced_products
+
+    existing_keys = {
+        (normalize_product_name(x["product"]), (x.get("um") or "").upper())
+        for x in priced_products
+    }
+
+    extra = []
+    for entry in priced_products:
+        entry_key = normalize_product_name(entry["product"])
+        group_id = name_to_group.get(entry_key)
+        if not group_id:
+            continue
+
+        for sibling_name in group_to_names.get(group_id, []):
+            sibling_key = normalize_product_name(sibling_name)
+            if sibling_key == entry_key:
+                continue
+
+            dedup_key = (sibling_key, (entry.get("um") or "").upper())
+            if dedup_key in existing_keys:
+                continue
+
+            existing_keys.add(dedup_key)
+            extra.append({
+                "key": f"{sibling_name}||{entry.get('um','')}",
+                "product": sibling_name,
+                "um": entry.get("um", ""),
+                "cost": entry.get("cost", 0.0),
+            })
+
+    return priced_products + extra
+
 
 def get_product_description_map():
     products = load_company_products() or []
@@ -1389,10 +1591,15 @@ def save_company_products(products):
                 continue
             seen.add(key)
 
-            lb_per_gal = to_float(item.get("lb_per_gal", 0.0), 0.0)
+            raw_lb_per_gal = item.get("lb_per_gal", None)
+            if raw_lb_per_gal in (None, ""):
+                lb_per_gal = None
+            else:
+                lb_per_gal = to_float(raw_lb_per_gal, 0.0)
 
             # 🔥 ADD THIS LINE RIGHT HERE
             description = (item.get("description") or "").strip()
+            pricing_id = (item.get("pricing_id") or "").strip() or None
 
             # 🔥 AND THIS BLOCK RIGHT AFTER
             cleaned.append(
@@ -1400,7 +1607,8 @@ def save_company_products(products):
                     id=item.get("id") or uuid.uuid4().hex[:10],
                     product=product_name,
                     description=description,
-                    lb_per_gal=lb_per_gal
+                    lb_per_gal=lb_per_gal,
+                    pricing_id=pricing_id
                 )
             )
 
@@ -1426,6 +1634,7 @@ def find_customer_by_id(customer_id):
     for row in sorted(c.default_rows, key=lambda r: r.sort_order or 0):
         row_dict = {
             "product": row.product or "",
+            "product_id": row.product_id or "",
             "description": row.description or "",
             "package_type": row.package_type or "",
             "um": row.um or "",
@@ -1469,6 +1678,7 @@ def _clean_default_products(values):
 def _blank_default_letter_row():
     return {
         "product": "",
+        "product_id": "",
         "description": "",
         "package_type": "",
         "um": "",
@@ -1483,6 +1693,7 @@ def _normalize_default_letter_row(row):
 
     return {
         "product": (row.get("product") or "").strip(),
+        "product_id": (row.get("product_id") or "").strip(),
         "description": (row.get("description") or "").strip(),
         "package_type": (row.get("package_type") or "").strip(),
         "um": normalize_um(row.get("um", "")),
@@ -3264,6 +3475,13 @@ def save_customer_template_from_quote(customer_id, rows):
     if not customer:
         return False
 
+    ensure_products_exist([row.get("product") for row in (rows or [])])
+
+    name_to_product_id = {
+        normalize_product_name(p.get("product")): p.get("id")
+        for p in load_company_products()
+    }
+
     # clear existing template rows for this customer
     CustomerDefaultRow.query.filter_by(customer_id=customer_id).delete()
 
@@ -3275,6 +3493,7 @@ def save_customer_template_from_quote(customer_id, rows):
 
         cleaned_rows.append({
             "product": product,
+            "product_id": name_to_product_id.get(normalize_product_name(product)),
             "description": (row.get("description") or "").strip(),
             "package_type": (row.get("package_type") or "").strip(),
             "um": normalize_um(row.get("um", "")),
@@ -3287,6 +3506,7 @@ def save_customer_template_from_quote(customer_id, rows):
         db.session.add(CustomerDefaultRow(
             customer_id=customer_id,
             sort_order=i,
+            product_id=row["product_id"],
             product=row["product"],
             description=row["description"],
             package_type=row["package_type"],
@@ -4373,6 +4593,35 @@ def customer_locations_save(customer_id):
     flash("Customer locations updated.", "success")
     return redirect(url_for("customer_profile", customer_id=customer_id))
 
+@app.route("/customers/<customer_id>/name/save", methods=["POST"])
+@login_required
+def customer_name_save(customer_id):
+    customer = db.session.get(Customer, str(customer_id))
+
+    if not customer:
+        return jsonify({"ok": False, "error": "Customer not found."}), 404
+
+    new_name = (request.form.get("customer_name") or "").strip()
+
+    if not new_name:
+        return jsonify({"ok": False, "error": "Name cannot be blank."}), 400
+
+    duplicate = (
+        Customer.query
+        .filter(Customer.id != customer.id)
+        .filter(db.func.lower(Customer.name) == new_name.lower())
+        .first()
+    )
+
+    if duplicate:
+        return jsonify({"ok": False, "error": "A customer with that name already exists."}), 400
+
+    customer.name = new_name
+    db.session.commit()
+
+    return jsonify({"ok": True, "name": new_name})
+
+
 @app.route("/customers/<customer_id>/template/save", methods=["POST"])
 @login_required
 def customer_template_save(customer_id):
@@ -4466,6 +4715,8 @@ def customer_profile_save(customer_id):
         for row in default_letter_rows
         if (row.get("product") or "").strip()
     ])
+
+    ensure_products_exist(default_products)
 
     target["name"] = name
     target["notes"] = notes
@@ -4779,6 +5030,17 @@ def printer_page():
                 selected_product_name_keys.add(normalized_name)
                 selected_product_names.append(product_name)
 
+            # Every product that actually has a checkbox in the picker for
+            # this month. Checkbox toggling should only ever add/remove rows
+            # for products in THIS set - a custom/free-typed product (added
+            # via "+ Custom") was never represented by a checkbox, so it
+            # must never be dropped just because some other box was toggled.
+            known_picker_keys = {
+                normalize_product_name(p.get("product"))
+                for p in products
+                if (p.get("product") or "").strip()
+            }
+
             preserved_rows = []
             preserved_product_keys = set()
 
@@ -4786,7 +5048,13 @@ def printer_page():
                 normalized_row = normalize_printer_row(row)
                 product_key = normalize_product_name(normalized_row.get("product"))
 
-                if product_key and product_key in selected_product_name_keys:
+                if not product_key:
+                    continue
+
+                is_known_picker_product = product_key in known_picker_keys
+                is_checked = product_key in selected_product_name_keys
+
+                if is_checked or not is_known_picker_product:
                     preserved_rows.append(normalized_row)
                     preserved_product_keys.add(product_key)
 
@@ -5177,6 +5445,8 @@ def printer_page():
                 errors.append("Selected salesperson was not found.")
 
             print_rows = get_posted_printer_rows(request.form)
+
+            ensure_products_exist([r.get("product") for r in print_rows])
 
             save_printer_working_draft(
                 month_key=month_key,
@@ -5999,6 +6269,7 @@ def products_page():
     single_product_name = ""
     single_description = ""
     single_lb_per_gal = ""
+    single_pricing_link = ""
     mass_product_data = ""
 
     if request.method == "POST":
@@ -6008,10 +6279,12 @@ def products_page():
             product_name = (request.form.get("product_name") or "").strip()
             description = (request.form.get("description") or "").strip()
             lb_raw = (request.form.get("lb_per_gal") or "").strip()
+            pricing_link_name = (request.form.get("pricing_link") or "").strip()
 
             single_product_name = product_name
             single_description = description
             single_lb_per_gal = lb_raw
+            single_pricing_link = pricing_link_name
 
             if not product_name:
                 errors.append("Product name is required.")
@@ -6030,10 +6303,25 @@ def products_page():
 
                 key = normalize_product_name(product_name)
 
+                renamed_pair = None
+                renamed_product_id = None
+
+                linked_product = existing_map.get(normalize_product_name(pricing_link_name)) if pricing_link_name else None
+                pricing_id = linked_product.get("id") if linked_product else None
+
                 if key in existing_map:
+                    old_name = existing_map[key].get("product", "")
+                    if normalize_product_name(old_name) == key and old_name.strip() != product_name.strip():
+                        renamed_pair = (old_name, product_name)
+                        renamed_product_id = existing_map[key].get("id")
+
+                    if pricing_id == existing_map[key].get("id"):
+                        pricing_id = None
+
                     existing_map[key]["product"] = product_name
                     existing_map[key]["description"] = description
                     existing_map[key]["lb_per_gal"] = lb_per_gal
+                    existing_map[key]["pricing_id"] = pricing_id
                     flash("Product updated.", "success")
                 else:
                     products.append({
@@ -6041,12 +6329,17 @@ def products_page():
                         "product": product_name,
                         "description": description,
                         "lb_per_gal": lb_per_gal,
+                        "pricing_id": pricing_id,
                         "created_at": datetime.now(timezone.utc).isoformat()
                     })
                     flash("Product added.", "success")
 
                 products.sort(key=lambda x: normalize_product_name(x.get("product")))
                 save_company_products(products)
+
+                if renamed_pair:
+                    cascade_product_rename(renamed_product_id, renamed_pair[0], renamed_pair[1])
+
                 return redirect(url_for("products_page"))
 
         elif action == "mass_add_products":
@@ -6063,6 +6356,7 @@ def products_page():
                 lines = [ln.strip() for ln in mass_product_data.splitlines() if ln.strip()]
                 added_count = 0
                 updated_count = 0
+                renamed_pairs = []
 
                 for i, line in enumerate(lines, start=1):
                     if "\t" in line:
@@ -6088,6 +6382,10 @@ def products_page():
 
                     key = normalize_product_name(product_name)
                     if key in existing_map:
+                        old_name = existing_map[key].get("product", "")
+                        if old_name.strip() != product_name.strip():
+                            renamed_pairs.append((existing_map[key].get("id"), old_name, product_name))
+
                         existing_map[key]["product"] = product_name
                         existing_map[key]["description"] = existing_map[key].get("description", "")
                         existing_map[key]["lb_per_gal"] = lb_per_gal
@@ -6105,6 +6403,10 @@ def products_page():
                 if not errors:
                     products.sort(key=lambda x: normalize_product_name(x.get("product")))
                     save_company_products(products)
+
+                    for product_id, old_name, new_name in renamed_pairs:
+                        cascade_product_rename(product_id, old_name, new_name)
+
                     flash(f"Saved {added_count} new product(s) and updated {updated_count} existing product(s).", "success")
                     return redirect(url_for("products_page"))
 
@@ -6113,36 +6415,65 @@ def products_page():
             row_product_names = request.form.getlist("row_product_name")
             row_descriptions = request.form.getlist("row_description")
             row_lb_values = request.form.getlist("row_lb_per_gal")
+            row_pricing_links = request.form.getlist("row_pricing_link")
 
             updated_rows = []
+            renamed_pairs = []
 
             for i, product_id in enumerate(product_ids):
                 product_name = (row_product_names[i] if i < len(row_product_names) else "").strip()
                 description = (row_descriptions[i] if i < len(row_descriptions) else "").strip()
                 lb_raw = (row_lb_values[i] if i < len(row_lb_values) else "").strip()
+                pricing_link_name = (row_pricing_links[i] if i < len(row_pricing_links) else "").strip()
 
                 if not product_name:
                     errors.append(f"Row {i+1}: product name is required.")
                     continue
 
-                try:
-                    lb_per_gal = float(lb_raw.replace(",", ""))
-                except Exception:
-                    errors.append(f"Row {i+1}: LB/GAL must be numeric.")
-                    continue
-
                 existing = next((p for p in products if str(p.get("id")) == str(product_id)), {})
+
+                if not lb_raw:
+                    lb_per_gal = None
+                else:
+                    try:
+                        lb_per_gal = float(lb_raw.replace(",", ""))
+                    except Exception:
+                        errors.append(f"Row {i+1}: LB/GAL must be numeric.")
+                        continue
+
+                old_name = (existing.get("product") or "").strip()
+                if old_name and old_name != product_name.strip():
+                    renamed_pairs.append((product_id, old_name, product_name))
+
                 updated_rows.append({
                     "id": product_id,
                     "product": product_name,
                     "description": description,
                     "lb_per_gal": lb_per_gal,
+                    "pricing_link_name": pricing_link_name,
                     "created_at": existing.get("created_at") or datetime.now(timezone.utc).isoformat()
                 })
 
             if not errors:
+                # Resolve "shares pricing with" links now that every row's
+                # final id/name in this save is known (handles the case
+                # where the linked-to product is also being renamed here).
+                name_to_id = {
+                    normalize_product_name(r["product"]): r["id"]
+                    for r in updated_rows
+                }
+
+                for r in updated_rows:
+                    link_name = r.pop("pricing_link_name", "")
+                    linked_id = name_to_id.get(normalize_product_name(link_name)) if link_name else None
+                    r["pricing_id"] = linked_id if linked_id and linked_id != r["id"] else None
+
                 updated_rows.sort(key=lambda x: normalize_product_name(x.get("product")))
                 save_company_products(updated_rows)
+
+                for product_id, old_name, new_name in renamed_pairs:
+                    cascade_product_rename(product_id, old_name, new_name)
+
                 flash("Products updated.", "success")
                 return redirect(url_for("products_page"))
 
@@ -6167,6 +6498,7 @@ def products_page():
         single_product_name=single_product_name,
         single_description=single_description,
         single_lb_per_gal=single_lb_per_gal,
+        single_pricing_link=single_pricing_link,
         mass_product_data=mass_product_data,
         page="app",
         page_title="Products"
@@ -6710,6 +7042,8 @@ def customer_new_page():
                 (row.get("product") or "").strip()
                 for row in default_letter_rows
             ])
+
+            ensure_products_exist(default_products)
 
             existing_customers.append({
                 "id": uuid.uuid4().hex[:10],

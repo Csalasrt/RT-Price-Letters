@@ -18,24 +18,37 @@
   }
 
   .print-letter-inner {
-    padding: 28px 34px 18px 34px;
+    padding: 14px 16px 10px 16px;
   }
 
-  .print-description-input {
+  .print-edit-cell {
     width: 100%;
+    min-height: 1em;
     border: none;
     outline: none;
     background: transparent;
-    padding: 4px 6px;
-    text-align: center;
-    font-size: 14px;
+    padding: 3px 4px;
+    font-size: 13px;
+    line-height: 1.25;
     box-sizing: border-box;
+    text-align: left;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: none;
   }
 
-  .print-description-input:focus {
+  .print-edit-cell:focus {
     background: #fff;
     border: 1px solid #d0d5dd;
     border-radius: 6px;
+  }
+
+  .print-letter-table th,
+  .print-letter-table td {
+    padding: 4px 6px;
+    font-size: 13px;
+    vertical-align: top;
   }
 
   .preview-toolbar {
@@ -139,7 +152,7 @@
 
     th,
     td {
-      word-wrap: break-word !important;
+      word-break: normal !important;
       overflow-wrap: break-word !important;
     }
 
@@ -266,30 +279,29 @@
 
           {% if rows and rows|length > 0 %}
             <div class="table-responsive">
-              <table class="table table-sm align-middle"
+              <table class="table table-sm align-middle print-letter-table"
                      style="table-layout:fixed; width:100%; border-collapse:collapse;">
 
                 <thead>
                   <tr>
-                    <th style="width:22%; text-align:center;">Product</th>
-                    <th style="width:16%; text-align:center;">Package</th>
-                    <th style="width:18%; text-align:center;">Price</th>
-                    <th style="width:24%; text-align:center;">Shipping</th>
-                    <th style="width:20%; text-align:center;">Description</th>
+                    <th style="width:20%; text-align:left;">Product</th>
+                    <th style="width:11%; text-align:center;">Package</th>
+                    <th style="width:13%; text-align:center;">Price</th>
+                    <th style="width:20%; text-align:center;">Shipping</th>
+                    <th style="width:36%; text-align:left;">Description</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {% for r in rows %}
                   <tr>
-                    <td style="text-align:center; padding-left:14px;">
-                      <input
-                        type="text"
-                        name="row_display_product"
-                        value="{{ r.get('product','') }}"
-                        class="print-description-input"
+                    <td style="text-align:left;">
+                      <div
+                        contenteditable="true"
+                        data-field="row_display_product"
+                        class="print-edit-cell"
                         style="font-weight:850;"
-                      >
+                      >{{ r.get('product','') }}</div>
                     </td>
 
                     <td style="text-align:center;">
@@ -302,7 +314,7 @@
                       {% endif %}
                     </td>
 
-                    <td style="text-align:center; font-weight:700;">
+                    <td style="text-align:center; font-weight:700; white-space:nowrap;">
                       ${{ '%.4f'|format(r.get("final_price",0) or 0) }}
                       {% if r.get("um") %} / {{ r.get("um")|upper }}{% endif %}
                     </td>
@@ -316,13 +328,12 @@
                       {% endif %}
                     </td>
 
-                    <td style="text-align:center;">
-                      <input
-                        type="text"
-                        name="row_description"
-                        value="{{ (r.get('description') or '').strip() or (r.get('print_description') or '').strip() or r.get('product','') }}"
-                        class="print-description-input"
-                      >
+                    <td style="text-align:left;">
+                      <div
+                        contenteditable="true"
+                        data-field="row_description"
+                        class="print-edit-cell"
+                      >{{ (r.get('description') or '').strip() or (r.get('print_description') or '').strip() or r.get('product','') }}</div>
                     </td>
                   </tr>
                   {% endfor %}
@@ -356,8 +367,6 @@
       backgroundColor: "#ffffff"
     });
 
-    const imgData = canvas.toDataURL("image/png");
-
     const customerName = `{{ quote.get("customer_name", "") }}`;
     const displayDate = `{{ display_date }}`;
     const safeCustomer = customerName.replace(/[^\w\s-]/g, "").trim() || "PriceLetter";
@@ -372,25 +381,47 @@
       format: "letter"
     });
 
+    // Minimal margin so the content fills the page instead of being
+    // squeezed narrow to fit a single page's height.
+    const margin = 18; // ~0.25in
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 36;
+    const maxWidth = pageWidth - margin * 2;
+    const maxHeight = pageHeight - margin * 2;
 
-    const maxWidth = pageWidth - (margin * 2);
-    const maxHeight = pageHeight - (margin * 2);
+    // Always render at full page width. Never shrink width to force
+    // a tall table onto one page - instead, tile across multiple pages.
+    const scaleFactor = maxWidth / canvas.width;
+    const pageSliceHeightPx = maxHeight / scaleFactor;
 
-    let imgWidth = maxWidth;
-    let imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let renderedHeightPx = 0;
+    let pageIndex = 0;
 
-    if (imgHeight > maxHeight) {
-      imgHeight = maxHeight;
-      imgWidth = (canvas.width * imgHeight) / canvas.height;
+    while (renderedHeightPx < canvas.height) {
+      const sliceHeightPx = Math.min(pageSliceHeightPx, canvas.height - renderedHeightPx);
+
+      const sliceCanvas = document.createElement("canvas");
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceHeightPx;
+
+      const ctx = sliceCanvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      ctx.drawImage(
+        canvas,
+        0, renderedHeightPx, canvas.width, sliceHeightPx,
+        0, 0, canvas.width, sliceHeightPx
+      );
+
+      const sliceImgData = sliceCanvas.toDataURL("image/png");
+      const sliceImgHeightPt = sliceHeightPx * scaleFactor;
+
+      if (pageIndex > 0) pdf.addPage();
+      pdf.addImage(sliceImgData, "PNG", margin, margin, maxWidth, sliceImgHeightPt);
+
+      renderedHeightPx += sliceHeightPx;
+      pageIndex++;
     }
-
-    const x = (pageWidth - imgWidth) / 2;
-    const y = margin;
-
-    pdf.addImage(imgData, "PNG", x, y, imgWidth, imgHeight);
 
     return {
       pdf,
@@ -430,26 +461,11 @@
         link.click();
 
       } else {
-        // ── PDF branch (default) ─────────────────────────────────
-        const imgData = canvas.toDataURL("image/png");
-        const { jsPDF } = window.jspdf;
-
-        const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
-        const pageWidth  = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const margin = 36;
-        const maxWidth  = pageWidth  - margin * 2;
-        const maxHeight = pageHeight - margin * 2;
-
-        let imgWidth  = maxWidth;
-        let imgHeight = (canvas.height * imgWidth) / canvas.width;
-        if (imgHeight > maxHeight) {
-          imgHeight = maxHeight;
-          imgWidth  = (canvas.width * imgHeight) / canvas.height;
-        }
-
-        pdf.addImage(imgData, "PNG", (pageWidth - imgWidth) / 2, margin, imgWidth, imgHeight);
-        pdf.save(`${fileBase}.pdf`);
+        // ── PDF branch (default) - reuse the tiling builder so the
+        // page is never squeezed narrow to force a fit ─────────────
+        const built = await buildPriceLetterPdf();
+        if (!built) return;
+        built.pdf.save(built.fileName);
       }
 
       // ── Post-download housekeeping (same as before) ───────────

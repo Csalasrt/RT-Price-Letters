@@ -5,11 +5,28 @@
 
   <!-- HEADER -->
   <div style="margin-top:10px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
-    <h3 style="font-weight:700; margin:0;">
-      {{ customer.name }}
-    </h3>
+    <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+      <input
+        type="text"
+        id="customer-name-input"
+        value="{{ customer.name }}"
+        style="
+          font-weight:700;
+          font-size:22px;
+          border:1px solid transparent;
+          border-radius:8px;
+          padding:4px 8px;
+          background:transparent;
+          min-width:0;
+          flex:1;
+          max-width:520px;
+        "
+        onfocus="this.style.background='#fff'; this.style.borderColor='#d0d5dd';"
+      >
+      <span id="customer-name-save-indicator" style="font-size:12px; color:#067647; opacity:0; transition:opacity 0.4s;">✓ Saved</span>
+    </div>
     <form id="deleteCustomerForm" method="POST" action="{{ url_for('customer_delete', customer_id=customer.id) }}" style="margin:0;">
-      <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirmDeleteCustomer('{{ customer.name|e }}')">
+      <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirmDeleteCustomer(document.getElementById('customer-name-input').value || '{{ customer.name|e }}')">
         Delete Customer
       </button>
     </form>
@@ -327,6 +344,58 @@
 <!-- SCRIPT -->
 <!-- ========================= -->
 <script>
+  // ── Customer name (auto-save on blur, same pattern as locations) ──
+  const customerNameInput = document.getElementById("customer-name-input");
+
+  if (customerNameInput) {
+    let lastSavedName = customerNameInput.value;
+
+    customerNameInput.addEventListener("blur", function() {
+      const newName = customerNameInput.value.trim();
+
+      if (!newName || newName === lastSavedName) {
+        customerNameInput.value = lastSavedName;
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("customer_name", newName);
+
+      fetch("{{ url_for('customer_name_save', customer_id=customer.id) }}", {
+        method: "POST",
+        body: formData
+      })
+        .then(resp => resp.json())
+        .then(data => {
+          if (data.ok) {
+            lastSavedName = data.name;
+            customerNameInput.value = data.name;
+            document.title = data.name;
+
+            const indicator = document.getElementById("customer-name-save-indicator");
+            if (indicator) {
+              indicator.style.opacity = "1";
+              setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+            }
+          } else {
+            alert(data.error || "Could not save the name change.");
+            customerNameInput.value = lastSavedName;
+          }
+        })
+        .catch(() => {
+          alert("Could not save the name change. Please try again.");
+          customerNameInput.value = lastSavedName;
+        });
+    });
+
+    customerNameInput.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        customerNameInput.blur();
+      }
+    });
+  }
+
   const tabs = {
     info: document.getElementById("tab-info"),
     template: document.getElementById("tab-template"),
