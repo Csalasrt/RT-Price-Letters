@@ -5,10 +5,12 @@ import json
 import uuid
 import re
 import base64
+import csv
+import io
 from datetime import datetime, timezone, timedelta
 
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, Response
 from flask_wtf import FlaskForm
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -410,6 +412,37 @@ def current_month_key_central():
     y = str(now.year)
     m = now.strftime("%b").upper()
     return f"{y}-{m}"
+
+
+EXPORT_MONTH_CHOICES = [
+    ("JAN", "January"),
+    ("FEB", "February"),
+    ("MAR", "March"),
+    ("APR", "April"),
+    ("MAY", "May"),
+    ("JUN", "June"),
+    ("JUL", "July"),
+    ("AUG", "August"),
+    ("SEP", "September"),
+    ("OCT", "October"),
+    ("NOV", "November"),
+    ("DEC", "December"),
+]
+
+
+def get_export_year_choices():
+    """Years available for the admin CSV export dropdown: the current year,
+    a couple of years back for history, and any year that already has
+    pricing data saved, even if outside that default range."""
+    current_year = datetime.now().year
+    years = {str(y) for y in range(current_year - 3, current_year + 1)}
+
+    store = load_pricing_store()
+    for month_key in (store.get("by_month") or {}).keys():
+        if "-" in str(month_key):
+            years.add(str(month_key).split("-")[0])
+
+    return sorted(years, reverse=True)
 
 
 def maybe_auto_reset_month(store: dict):
@@ -5987,9 +6020,96 @@ def admin_users_page():
         company_info=company_info,
         company_products=company_products,
         pickup_locations=pickup_locations,
+        export_months=EXPORT_MONTH_CHOICES,
+        export_years=get_export_year_choices(),
+        export_default_month=current_month_key_central().split("-")[1],
+        export_default_year=current_month_key_central().split("-")[0],
         page="admin",
         page_title="Admin"
     )
+
+
+def _csv_response(rows, header, filename):
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(header)
+    for row in rows:
+        writer.writerow(row)
+
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@app.route("/admin/export/products.csv", methods=["GET"])
+@login_required
+@admin_required
+def export_products_csv():
+    products = load_company_products()
+    products = sorted(products, key=lambda p: normalize_product_name(p.get("product")))
+
+    rows = []
+    for p in products:
+        created_at = (p.get("created_at") or "")
+        created_display = created_at[:10] if created_at else ""
+        rows.append([
+            p.get("product", "") or "",
+            p.get("description", "") or "",
+            f"{to_float(p.get('lb_per_gal'), 0.0):.4f}",
+            created_display,
+        ])
+
+    return _csv_response(
+        rows,
+        ["Product Name", "Description", "LB/GAL", "Date Added"],
+        "products_export.csv"
+    )
+
+
+@app.route("/admin/export/pricing.csv", methods=["GET"])
+@login_required
+@admin_required
+def export_pricing_csv():
+    month = (request.args.get("month") or "").strip().upper()
+    year = (request.args.get("year") or "").strip()
+
+    if not month or not year:
+        flash("Please select a month and year to export pricing.", "error")
+        return redirect(url_for("admin_users_page"))
+
+    month_key = month_key_from(year, month)
+
+    store = load_pricing_store()
+    entries = (store.get("by_month") or {}).get(month_key, []) or []
+    entries = sorted(
+        entries,
+        key=lambda r: (normalize_product_name(r.get("product")), r.get("um", ""))
+    )
+
+    if not entries:
+        flash(f"No pricing found for {month_label_from_key(month_key)}.", "error")
+        return redirect(url_for("admin_users_page"))
+
+    rows = []
+    for r in entries:
+        rows.append([
+            r.get("product", "") or "",
+            r.get("um", "") or "",
+            f"{to_float(r.get('price'), 0.0):.4f}",
+            f"{to_float(r.get('freight_tax'), 0.0):.4f}",
+            f"{to_float(r.get('final_price'), 0.0):.4f}",
+        ])
+
+    filename = f"pricing_{month_key}.csv"
+
+    return _csv_response(
+        rows,
+        ["Product", "UM", "Price", "Freight/Tax", "Final Price"],
+        filename
+    )
+
 
 @app.route("/printer/print", methods=["GET", "POST"])
 @login_required

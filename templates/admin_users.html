@@ -123,6 +123,51 @@
 
 <div class="card section-card shadow-sm" style="margin-top:12px;">
   <div class="card-body">
+    <div style="font-weight:700; margin-bottom:10px;">Export Data</div>
+    <div class="text-muted-small" style="margin-bottom:10px;">
+      Products CSV always includes your full current product list (products aren't tied to a month).
+      Pricing CSV exports the pricing entered for the month and year selected below.
+    </div>
+
+    <form method="GET" id="exportForm">
+      <div class="row-form" style="gap:8px; flex-wrap:wrap;">
+        <label>Month</label>
+        <select name="month" class="form-control form-control-sm" style="max-width:160px;">
+          {% for abbr, label in export_months %}
+            <option value="{{ abbr }}" {% if abbr == export_default_month %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Year</label>
+        <select name="year" class="form-control form-control-sm" style="max-width:120px;">
+          {% for yr in export_years %}
+            <option value="{{ yr }}" {% if yr == export_default_year %}selected{% endif %}>{{ yr }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="row-form" style="justify-content:flex-end; gap:8px; margin-top:10px;">
+        <button
+          type="submit"
+          class="btn btn-outline-secondary btn-sm"
+          formaction="{{ url_for('export_products_csv') }}"
+        >
+          Export Products CSV
+        </button>
+        <button
+          type="submit"
+          class="btn btn-primary btn-sm"
+          formaction="{{ url_for('export_pricing_csv') }}"
+        >
+          Export Pricing CSV
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card section-card shadow-sm" style="margin-top:12px;">
+  <div class="card-body">
     <div style="font-weight:700; margin-bottom:10px;">Create New User</div>
 
     <form method="POST">
