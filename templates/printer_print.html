@@ -218,37 +218,37 @@
                 max-width:260px;
             ">
               {% if sales_person and sales_person.name %}
-                <div style="font-weight:700; font-size:22px;">
+                <div style="font-weight:700; font-size:18px;">
                   {{ sales_person.name }}
                 </div>
               {% endif %}
 
               {% if sales_person and sales_person.phone %}
-                <div style="margin-top:2px; font-size:20px; font-weight:700;">
+                <div style="margin-top:2px; font-size:18px; font-weight:700;">
                   {{ sales_person.phone }}
                 </div>
               {% endif %}
 
               {% if sales_person and sales_person.email %}
-                <div style="margin-top:2px; font-size:18px;">
+                <div style="margin-top:2px; font-size:18px; font-weight:700;">
                   {{ sales_person.email }}
                 </div>
               {% endif %}
             </div>
 
-            <div style="text-align:center; min-width:220px; margin-top:-10px;">
+            <div style="text-align:center; min-width:220px; margin-top:0;">
               {% if company_info.logo_path %}
                 <div style="margin-bottom:10px;">
                   <img
                     src="{{ url_for('static', filename=company_info.logo_path) }}"
                     alt="Company Logo"
-                    style="max-height:115px; max-width:210px; object-fit:contain; margin-top:-25px;"
+                    style="max-height:115px; max-width:210px; object-fit:contain; margin-top:-10px;"
                   >
                 </div>
               {% endif %}
 
-              <div style="margin-top:6px; font-size:20px; font-weight:700;">
-                {{ display_date }}
+              <div style="margin-top:6px; font-size:18px; font-weight:700;">
+                {{ quote.get("customer_name","") }} — {{ display_date }}
               </div>
             </div>
 
@@ -285,10 +285,10 @@
                 <thead>
                   <tr>
                     <th style="width:20%; text-align:left;">Product</th>
-                    <th style="width:11%; text-align:center;">Package</th>
+                    <th style="width:16%; text-align:center;">Package</th>
                     <th style="width:13%; text-align:center;">Price</th>
                     <th style="width:20%; text-align:center;">Shipping</th>
-                    <th style="width:36%; text-align:left;">Description</th>
+                    <th style="width:31%; text-align:center;">Description</th>
                   </tr>
                 </thead>
 
@@ -304,11 +304,11 @@
                       >{{ r.get('product','') }}</div>
                     </td>
 
-                    <td style="text-align:center;">
+                    <td style="text-align:center; white-space:nowrap;">
                       {% if r.get("package_type") == "330gal Tote" %}
-                        330 GAL Tote
+                        330  Tote
                       {% elif r.get("package_type") == "275gal Tote" %}
-                        275 GAL Tote
+                        275 Tote
                       {% else %}
                         {{ r.get("package_type","") or "-" }}
                       {% endif %}
@@ -318,7 +318,7 @@
                       {% if r.get("is_inquire") %}
                         Inquire
                       {% else %}
-                        ${{ '%.4f'|format(r.get("final_price",0) or 0) }}
+                        ${{ '%.2f'|format(r.get("final_price",0) or 0) }}
                         {% if r.get("um") %} / {{ r.get("um")|upper }}{% endif %}
                       {% endif %}
                     </td>
@@ -332,11 +332,12 @@
                       {% endif %}
                     </td>
 
-                    <td style="text-align:left;">
+                    <td style="text-align:center;">
                       <div
                         contenteditable="true"
                         data-field="row_description"
                         class="print-edit-cell"
+                        style="text-align:center;"
                       >{{ (r.get('description') or '').strip() or (r.get('print_description') or '').strip() or r.get('product','') }}</div>
                     </td>
                   </tr>

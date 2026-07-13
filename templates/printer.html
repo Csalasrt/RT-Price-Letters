@@ -24,8 +24,37 @@
     border: 1px solid #abefc6;
   }
 
-  .build-toolbar-card .card-body {
-    padding: 14px 16px;
+  #build-toolbar-card .card-body{
+      padding-bottom:6px;
+  }
+
+  /* Freeze the filter/toolbar card (Period, Customer, Salesperson, Products,
+     nav/Clear/New/Save buttons) so it stays visible while the page scrolls
+     down through a long product list. Positioning is handled in JS
+     (see #toolbar-freeze-script below) because CSS position:sticky silently
+     breaks if any ancestor element has overflow set to anything other than
+     visible - JS lets us find the real scrolling container instead of
+     guessing at your base layout's markup. */
+  #build-toolbar-card.is-frozen {
+    position: fixed;
+    z-index: 30;
+    background: #fff;
+    box-shadow: 0 4px 10px rgba(16, 24, 40, 0.12);
+    margin: 0 !important;
+  }
+
+  /* Tighten the dead space that used to sit between the toolbar card and
+     the "Price List" card below it. */
+  #build-toolbar-card .card-body {
+    padding-bottom: 10px;
+  }
+
+  #price-list-card {
+      margin-top: -4px !important;
+  }
+
+  #price-list-card .card-body {
+    padding-top: 10px !important;
   }
 
   .build-toolbar {
@@ -419,7 +448,8 @@
 
 {% set ns = namespace(selected_count=(quote_rows or [])|length) %}
 
-<div class="card section-card shadow-sm build-toolbar-card">
+<div id="build-toolbar-spacer" style="height:0px;"></div>
+<div class="card section-card shadow-sm build-toolbar-card" id="build-toolbar-card">
   <div class="card-body">
     <form method="POST" action="{{ url_for('printer_page') }}" id="printer-form">
       <input type="hidden" name="action" id="printer-action" value="build">
@@ -569,7 +599,7 @@
 </div>
 
 {% if quote_rows and quote_rows|length > 0 %}
-  <div class="card section-card shadow-sm" style="margin-top:12px;">
+  <div class="card section-card shadow-sm" id="price-list-card" style="margin-top:12px;">
     <div class="card-body">
 
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
@@ -2193,6 +2223,99 @@ window.addEventListener("beforeunload", function () {
     setPrinterAction("new");
     return true;
   }
+</script>
+
+<script id="toolbar-freeze-script">
+  (function () {
+    var toolbar = document.getElementById("build-toolbar-card");
+    var spacer  = document.getElementById("build-toolbar-spacer");
+    if (!toolbar || !spacer) return;
+
+    // Adjust this if you have a fixed/sticky navbar above the page content -
+    // set it to that navbar's height (in px) so the frozen toolbar docks
+    // just below it instead of covering it.
+    var TOP_OFFSET = 0;
+
+    // Walk up from the toolbar to find whichever ancestor is actually
+    // scrolling (could be window/document, or an inner div with
+    // overflow-y:auto set by the base layout). Position:sticky breaks
+    // silently if we guess wrong here, so we find it directly instead.
+    function findScrollParent(el) {
+      var node = el.parentElement;
+      while (node && node !== document.body) {
+        var style = window.getComputedStyle(node);
+        var canScrollY = (style.overflowY === "auto" || style.overflowY === "scroll");
+        if (canScrollY && node.scrollHeight > node.clientHeight) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      return window;
+    }
+
+    var scrollParent = findScrollParent(toolbar);
+    var frozen = false;
+
+    function triggerPoint() {
+      // Distance from the top of the scroll container to where the
+      // toolbar naturally sits, before we've frozen it.
+      var rect = spacer.getBoundingClientRect();
+      var parentRect = (scrollParent === window)
+        ? { top: 0 }
+        : scrollParent.getBoundingClientRect();
+      return rect.top - parentRect.top - TOP_OFFSET;
+    }
+
+    function currentScroll() {
+      return (scrollParent === window)
+        ? (window.pageYOffset || document.documentElement.scrollTop)
+        : scrollParent.scrollTop;
+    }
+
+    function freeze() {
+      var rect = spacer.getBoundingClientRect();
+      toolbar.classList.add("is-frozen");
+      toolbar.style.top = TOP_OFFSET + "px";
+      toolbar.style.left = rect.left + "px";
+      toolbar.style.width = rect.width + "px";
+      spacer.style.height = toolbar.offsetHeight + "px";
+      frozen = true;
+    }
+
+    function unfreeze() {
+      toolbar.classList.remove("is-frozen");
+      toolbar.style.top = "";
+      toolbar.style.left = "";
+      toolbar.style.width = "";
+      spacer.style.height = "0px";
+      frozen = false;
+    }
+
+    function update() {
+      // Re-check the trigger point every time in case content above the
+      // toolbar (flash messages, error boxes) changes its height.
+      if (!frozen) {
+        var offset = spacer.getBoundingClientRect().top - TOP_OFFSET -
+                     (scrollParent === window ? 0 : scrollParent.getBoundingClientRect().top);
+        if (offset <= 0) freeze();
+      } else {
+        var rect = spacer.getBoundingClientRect();
+        var parentTop = (scrollParent === window) ? 0 : scrollParent.getBoundingClientRect().top;
+        if (rect.top - parentTop - TOP_OFFSET > 0) {
+          unfreeze();
+        } else {
+          // Keep left/width in sync (handles window resizing, sidebar toggles).
+          toolbar.style.left = rect.left + "px";
+          toolbar.style.width = rect.width + "px";
+        }
+      }
+    }
+
+    var target = (scrollParent === window) ? window : scrollParent;
+    target.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+  })();
 </script>
 
 {% endblock %}
