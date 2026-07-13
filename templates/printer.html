@@ -1807,10 +1807,24 @@
 
     lockCurrentTableState();
 
-    const priceListForm = document.getElementById("price-list-form");
+    // #price-list-form only exists once the list already has at least one
+    // row (it's only rendered server-side when quote_rows is non-empty). On
+    // a brand new / still-empty list there's nothing to preserve, so fall
+    // back to the toolbar form (#printer-form) - it always exists and
+    // already carries the live Period/Customer/Salesperson values. Without
+    // this fallback, checking the very first product on a new list did
+    // nothing at all (no submit, no row, no price).
+    let priceListForm = document.getElementById("price-list-form");
+    const usingToolbarFallback = !priceListForm;
+    if (usingToolbarFallback) {
+      priceListForm = document.getElementById("printer-form");
+    }
     if (!priceListForm) return;
 
-    let actionInput = priceListForm.querySelector('input[name="action"][data-dynamic-action]');
+    let actionInput = usingToolbarFallback
+      ? document.getElementById("printer-action")
+      : priceListForm.querySelector('input[name="action"][data-dynamic-action]');
+
     if (!actionInput) {
       actionInput = document.createElement("input");
       actionInput.type = "hidden";
