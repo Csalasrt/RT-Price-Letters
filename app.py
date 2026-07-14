@@ -770,7 +770,7 @@ def build_last_month_lookup(customer_name: str, month_key: str):
     return lookup
 
 
-
+def load_price_letter_history(limit=100):
     rows = (
         PriceLetterHistory.query
         .order_by(PriceLetterHistory.created_at.desc())
