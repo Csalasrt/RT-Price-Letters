@@ -603,9 +603,55 @@
     <div class="card-body">
 
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-        <div style="font-weight:700;">Price List</div>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="font-weight:700;">Price List</div>
+          <div
+            id="view-toggle"
+            onclick="toggleSimpleView()"
+            style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none;
+                   font-size:12px; font-weight:700; color:#374151; border:1px solid #d0d5dd;
+                   border-radius:999px; padding:5px 10px 5px 12px; background:#fff;"
+          >
+            <span id="view-toggle-label">Simple View</span>
+            <span
+              id="view-toggle-switch"
+              style="width:34px; height:18px; border-radius:999px; background:#d1d5db; position:relative; transition:background .15s ease;"
+            >
+              <span
+                id="view-toggle-knob"
+                style="content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s ease;"
+              ></span>
+            </span>
+          </div>
+        </div>
         <div class="text-muted-small">Lines: {{ quote_rows|length }}</div>
       </div>
+
+      {# ============ SIMPLE VIEW (Option 2 style) ============ #}
+      {# Reflects the same quote_rows as the detailed table below. Last-month
+         comparison subtext intentionally not wired up yet. #}
+      <div id="simple-view-panel" style="display:none; margin-top:10px;">
+        <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
+          <thead>
+            <tr>
+              <th style="width:22%; text-align:left; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Product</th>
+              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Package Type</th>
+              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Our Cost</th>
+              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Margin</th>
+              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Sale Price</th>
+              <th style="width:18%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Final Price</th>
+            </tr>
+          </thead>
+          <tbody id="simple-view-tbody">
+            {# Populated by JS (populateSimpleView) from the live input values in
+               #quote-table, not from server-rendered quote_rows, so unsaved
+               edits in the detailed view show up here too. #}
+          </tbody>
+        </table>
+      </div>
+      {# ============ END SIMPLE VIEW ============ #}
+
+      <div id="detailed-view-panel">
 
       <form method="POST" action="{{ url_for('printer_page') }}" id="price-list-form" style="margin:0;">
         <input type="hidden" name="customer_name" value="{{ customer_name }}">
@@ -635,7 +681,7 @@
                   Final Cost
                 </th>
                 <th style="min-width:110px;" class="price-section section-divider-left">Margin %</th>
-                <th style="min-width:120px;" class="price-section">Price</th>
+                <th style="min-width:120px;" class="price-section">Sale Price</th>
                 <th style="min-width:120px;" class="price-section">Add. Shipping</th>
                 <th style="min-width:120px;" class="price-section section-divider-right">Add. Packaging</th>
                 <th style="min-width:130px;" class="final-price-section section-divider-left section-divider-right">Final Price</th>
@@ -864,6 +910,8 @@
           </button>
         </div>
       </form>
+
+      </div>
 
     </div>
   </div>
@@ -1808,6 +1856,171 @@
     const dupBtn = clone.querySelector(".duplicate-btn");
     if (dupBtn) dupBtn.onclick = function() { duplicateCustomRow(this); };
     origTr.insertAdjacentElement("afterend", clone);
+  }
+
+  // Product name (normalized: trimmed, lowercased, single-spaced) -> last
+  // month's saved cost/margin/price/final_price for this customer, from
+  // build_last_month_lookup() in app.py. Empty {} if this customer had no
+  // saved price letter last month.
+  const lastMonthLookup = {{ last_month_lookup | tojson }};
+
+  function normalizeProductNameJs(name) {
+    return (name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function normalizePackageTypeJs(rawValue) {
+    return (rawValue || "").trim().toLowerCase();
+  }
+
+  function lastMonthLookupKey(product, packageTypeRawValue) {
+    return normalizeProductNameJs(product) + "||" + normalizePackageTypeJs(packageTypeRawValue);
+  }
+
+  function populateSimpleView() {
+    const tbody = document.getElementById("simple-view-tbody");
+    const sourceRows = document.querySelectorAll("#quote-table tbody tr");
+    if (!tbody) return;
+
+    function fmtMoney(rawValue) {
+      const trimmed = (rawValue || "").trim();
+      if (trimmed.toLowerCase() === "inquire") return "Inquire";
+      const num = parseFloat(trimmed);
+      return "$" + (isNaN(num) ? "0.0000" : num.toFixed(4));
+    }
+
+    function fmtPercent(rawValue) {
+      const num = parseFloat((rawValue || "").trim());
+      return (isNaN(num) ? "0.00" : num.toFixed(2)) + "%";
+    }
+
+    function packageLabel(selectEl) {
+      if (!selectEl || !selectEl.selectedOptions || !selectEl.selectedOptions.length) return "-";
+      const text = selectEl.selectedOptions[0].textContent || "";
+      return text.replace(/^[☐☑]\s*/, "").trim() || "-";
+    }
+
+    function fmtLmVal(num, isPercent) {
+      return isPercent ? num.toFixed(2) + "%" : "$" + num.toFixed(4);
+    }
+
+    function lastMonthSubtext(kind, currentRawValue, lastMonthEntry) {
+      const base = 'margin-top:2px; font-size:11px; color:#94a3b8;';
+      const isPercent = kind === "margin";
+
+      if (!lastMonthEntry) {
+        return `<div class="lm-line" style="${base}">no data last month</div>`;
+      }
+
+      const lmIsInquire = lastMonthEntry.is_inquire && kind === "price";
+      if (lmIsInquire) {
+        return `<div class="lm-line" style="${base}">was Inquire</div>`;
+      }
+
+      const lmNum = parseFloat(lastMonthEntry[kind]);
+      if (isNaN(lmNum)) {
+        return `<div class="lm-line" style="${base}">no data last month</div>`;
+      }
+
+      const wasText = "was " + fmtLmVal(lmNum, isPercent);
+
+      const curTrimmed = (currentRawValue || "").trim();
+      if (curTrimmed.toLowerCase() === "inquire") {
+        return `<div class="lm-line" style="${base}">${wasText}</div>`;
+      }
+
+      const curNum = parseFloat(curTrimmed);
+      if (isNaN(curNum)) {
+        return `<div class="lm-line" style="${base}">${wasText}</div>`;
+      }
+
+      const delta = curNum - lmNum;
+      let deltaHtml;
+      if (delta > 0.00005) {
+        deltaHtml = `<span style="color:#b91c1c; font-weight:700;">▲ ${fmtLmVal(Math.abs(delta), isPercent)}</span>`;
+      } else if (delta < -0.00005) {
+        deltaHtml = `<span style="color:#15803d; font-weight:700;">▼ ${fmtLmVal(Math.abs(delta), isPercent)}</span>`;
+      } else {
+        deltaHtml = `<span style="color:#94a3b8; font-weight:700;">— ${fmtLmVal(0, isPercent)}</span>`;
+      }
+
+      return `<div class="lm-line" style="${base}">${wasText} ${deltaHtml}</div>`;
+    }
+
+    let html = "";
+
+    sourceRows.forEach(function (tr, index) {
+      const productEl  = tr.querySelector('input[name="row_product"]');
+      const packageEl  = tr.querySelector('select[name="row_package_type"]');
+      const costEl     = tr.querySelector('input[name="row_cost"]');
+      const marginEl   = tr.querySelector('input[name="row_margin"]');
+      const priceEl    = tr.querySelector('input[name="row_price"]');
+      const finalEl    = tr.querySelector('input[name="row_final"]');
+
+      const product   = productEl ? productEl.value : "";
+      const packageTy = packageLabel(packageEl);
+      const costRaw   = costEl ? costEl.value : "0";
+      const marginRaw = marginEl ? marginEl.value : "0";
+      const priceRaw  = priceEl ? priceEl.value : "0";
+      const cost      = fmtMoney(costRaw);
+      const margin    = fmtPercent(marginRaw);
+      const price     = fmtMoney(priceRaw);
+      const finalVal  = fmtMoney(finalEl ? finalEl.value : "0");
+
+      const lmEntry = lastMonthLookup[lastMonthLookupKey(product, packageEl ? packageEl.value : "")] || null;
+      const costSubtext   = lastMonthSubtext("cost", costRaw, lmEntry);
+      const marginSubtext = lastMonthSubtext("margin", marginRaw, lmEntry);
+      const priceSubtext  = lastMonthSubtext("price", priceRaw, lmEntry);
+
+      const isLast = index === sourceRows.length - 1;
+      const borderStyle = isLast ? "" : ' style="border-bottom:1px solid #eef0f2;"';
+
+      html += `
+        <tr${borderStyle}>
+          <td style="text-align:left; font-weight:700; padding:8px 10px; font-size:13px;">${product}</td>
+          <td style="text-align:center; padding:8px 10px; font-size:13px;">${packageTy}</td>
+          <td style="text-align:center; padding:8px 10px; font-size:13px;">
+            <div style="font-weight:600;">${cost}</div>
+            ${costSubtext}
+          </td>
+          <td style="text-align:center; padding:8px 10px; font-size:13px;">
+            <div style="font-weight:600;">${margin}</div>
+            ${marginSubtext}
+          </td>
+          <td style="text-align:center; padding:8px 10px; font-size:13px;">
+            <div style="font-weight:600;">${price}</div>
+            ${priceSubtext}
+          </td>
+          <td style="text-align:center; padding:8px 10px; font-size:13px;">${finalVal}</td>
+        </tr>
+      `;
+    });
+
+    tbody.innerHTML = html;
+  }
+
+  function toggleSimpleView() {
+    var toggle = document.getElementById("view-toggle-switch");
+    var knob = document.getElementById("view-toggle-knob");
+    var simplePanel = document.getElementById("simple-view-panel");
+    var detailedPanel = document.getElementById("detailed-view-panel");
+    if (!toggle || !simplePanel || !detailedPanel) return;
+
+    var showingSimple = simplePanel.style.display !== "none";
+
+    if (showingSimple) {
+      // currently simple -> switch back to detailed
+      simplePanel.style.display = "none";
+      detailedPanel.style.display = "";
+      toggle.style.background = "#d1d5db";
+      knob.style.left = "2px";
+    } else {
+      // currently detailed -> switch to simple
+      populateSimpleView();
+      simplePanel.style.display = "";
+      detailedPanel.style.display = "none";
+      toggle.style.background = "#2563eb";
+      knob.style.left = "18px";
+    }
   }
 
   function toggleProductPanel(e) {

@@ -414,6 +414,37 @@ def current_month_key_central():
     return f"{y}-{m}"
 
 
+_MONTH_ORDER = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+
+def previous_month_key(month_key: str) -> str:
+    """Given a month_key like '2026-JUL', return the key for the month
+    immediately before it ('2026-JUN'), rolling the year back at January.
+    Returns "" if month_key isn't in the expected 'YYYY-MON' shape."""
+    month_key = str(month_key or "").strip().upper()
+    if "-" not in month_key:
+        return ""
+
+    year_part, mon_part = month_key.split("-", 1)
+    try:
+        year = int(year_part)
+    except ValueError:
+        return ""
+
+    if mon_part not in _MONTH_ORDER:
+        return ""
+
+    idx = _MONTH_ORDER.index(mon_part)
+    if idx == 0:
+        idx = 11
+        year -= 1
+    else:
+        idx -= 1
+
+    return f"{year}-{_MONTH_ORDER[idx]}"
+
+
 EXPORT_MONTH_CHOICES = [
     ("JAN", "January"),
     ("FEB", "February"),
@@ -673,7 +704,73 @@ def _price_letter_history_row_to_dict(row):
     return entry
 
 
-def load_price_letter_history(limit=100):
+def get_last_month_rows_for_customer(customer_name: str, month_key: str):
+    """Find the price letter saved for this customer in the month
+    immediately before month_key, and return its saved rows (empty list if
+    nothing was ever saved for that customer that month)."""
+    customer_name = (customer_name or "").strip()
+    prev_key = previous_month_key(month_key)
+    if not customer_name or not prev_key:
+        return []
+
+    row = (
+        PriceLetterHistory.query
+        .filter(
+            db.func.lower(PriceLetterHistory.customer_name) == customer_name.lower(),
+            PriceLetterHistory.month_key == prev_key,
+        )
+        .order_by(PriceLetterHistory.created_at.desc())
+        .first()
+    )
+
+    if not row:
+        return []
+
+    entry = _price_letter_history_row_to_dict(row)
+
+    rows = entry.get("rows")
+    if not rows:
+        # Some older saved letters only ever wrote rows nested inside the
+        # "quote" blob (quote.rows) rather than at the top level - fall
+        # back to that shape too so old months still compare correctly.
+        nested_quote = entry.get("quote") or {}
+        if isinstance(nested_quote, dict):
+            rows = nested_quote.get("rows")
+
+    return rows if isinstance(rows, list) else []
+
+
+def build_last_month_lookup(customer_name: str, month_key: str):
+    """Build a dict keyed by 'normalized product name||normalized package
+    type' -> {cost, margin, price, final_price} from last month's saved
+    price letter for this customer. Package type is part of the key so a
+    product sold in two different packages last month (e.g. EDTA in a Drum
+    vs EDTA in a 330gal Tote) each get their own correct comparison instead
+    of colliding into one. Used by the Build Letter page's Simple View to
+    show a 'was $X, up/down $Y' comparison under each product's numbers.
+    If the customer had no saved letter last month, this comes back empty
+    and the Simple View just shows "no data last month" for every row."""
+    last_month_rows = get_last_month_rows_for_customer(customer_name, month_key)
+
+    lookup = {}
+    for r in last_month_rows:
+        product_key = normalize_product_name(r.get("product"))
+        if not product_key:
+            continue
+        package_key = normalize_package_type(r.get("package_type"))
+        key = f"{product_key}||{package_key}"
+        lookup[key] = {
+            "cost": r.get("cost", 0) or 0,
+            "margin": r.get("margin", 0) or 0,
+            "price": r.get("price", 0) or 0,
+            "final_price": r.get("final_price", 0) or 0,
+            "is_inquire": bool(r.get("is_inquire")),
+        }
+
+    return lookup
+
+
+
     rows = (
         PriceLetterHistory.query
         .order_by(PriceLetterHistory.created_at.desc())
@@ -1378,6 +1475,10 @@ def get_printer_product_options(month_key: str):
     return month_key, options, priced_products
 def normalize_product_name(name: str) -> str:
     return " ".join(str(name or "").strip().lower().split())
+
+
+def normalize_package_type(package_type: str) -> str:
+    return str(package_type or "").strip().lower()
 
 
 def load_company_products():
@@ -5655,6 +5756,8 @@ def printer_page():
         if normalize_product_name(p.get("product")) in quote_row_product_keys
     }
 
+    last_month_lookup = build_last_month_lookup(customer_name, month_key)
+
     return render_template(
         "printer.html",
         month_key=month_key,
@@ -5670,6 +5773,7 @@ def printer_page():
         selected_pricing_period=form.get("pricing_period", month_key),
         customer_locations=customer_locations,       # ← add
         pickup_locations=pickup_locations,           # ← add
+        last_month_lookup=last_month_lookup,
         page="printer",
         page_title="Build Letter"
     )
