@@ -6747,8 +6747,8 @@ def products_save_row():
             return jsonify({"ok": False, "error": "Default Price must be a number."}), 400
 
     default_um = (data.get("default_um") or "").strip().upper()
-    if default_um and default_um not in ("LB", "GAL"):
-        return jsonify({"ok": False, "error": "Default U/M must be LB or GAL."}), 400
+    if default_um and default_um not in ("LB", "GAL", "UNIT"):
+        return jsonify({"ok": False, "error": "Default U/M must be LB, GAL, or UNIT."}), 400
 
     old_name = (product.product or "").strip()
     renamed = bool(old_name) and old_name != product_name.strip()
@@ -6882,6 +6882,7 @@ def products_page():
                 added_count = 0
                 updated_count = 0
                 renamed_pairs = []
+                failed_lines = []  # (original_line_text, reason)
 
                 for i, line in enumerate(lines, start=1):
                     if "\t" in line:
@@ -6890,7 +6891,7 @@ def products_page():
                         parts = [p.strip() for p in line.split(",")]
 
                     if len(parts) not in (2, 3, 4):
-                        errors.append(f"Line {i}: expected 2-4 columns (Product, LB/GAL, Default Price, Default U/M).")
+                        failed_lines.append((line, "expected 2-4 columns (Product, LB/GAL, Default Price, Default U/M)"))
                         continue
 
                     default_price_raw = ""
@@ -6904,13 +6905,13 @@ def products_page():
                         product_name, lb_raw = parts
 
                     if not product_name:
-                        errors.append(f"Line {i}: product name is required.")
+                        failed_lines.append((line, "product name is required"))
                         continue
 
                     try:
                         lb_per_gal = float(lb_raw.replace(",", ""))
                     except Exception:
-                        errors.append(f"Line {i}: LB/GAL must be numeric.")
+                        failed_lines.append((line, "LB/GAL must be numeric"))
                         continue
 
                     if not default_price_raw:
@@ -6919,12 +6920,12 @@ def products_page():
                         try:
                             default_price = float(default_price_raw.replace("$", "").replace(",", ""))
                         except Exception:
-                            errors.append(f"Line {i}: Default Price must be numeric.")
+                            failed_lines.append((line, "Default Price must be numeric"))
                             continue
 
                     default_um = default_um.strip().upper()
-                    if default_um and default_um not in ("LB", "GAL"):
-                        errors.append(f"Line {i}: Default U/M must be LB or GAL, got '{default_um}'.")
+                    if default_um and default_um not in ("LB", "GAL", "UNIT"):
+                        failed_lines.append((line, f"Default U/M must be LB, GAL, or UNIT, got '{default_um}'"))
                         continue
 
                     key = normalize_product_name(product_name)
@@ -6951,13 +6952,32 @@ def products_page():
                         })
                         added_count += 1
 
-                if not errors:
+                # Save every good line regardless of whether other lines in
+                # the same paste failed - a typo on one row should never
+                # block the rows that parsed fine.
+                if added_count or updated_count:
                     products.sort(key=lambda x: normalize_product_name(x.get("product")))
                     save_company_products(products)
 
                     for product_id, old_name, new_name in renamed_pairs:
                         cascade_product_rename(product_id, old_name, new_name)
 
+                if failed_lines:
+                    # Only the bad lines go back into the paste box, so the
+                    # user can fix just those instead of retyping everything
+                    # - the good ones are already saved and gone from here.
+                    mass_product_data = "\n".join(line for line, _reason in failed_lines)
+                    for line, reason in failed_lines:
+                        errors.append(f"Skipped ({reason}): {line}")
+
+                    if added_count or updated_count:
+                        flash(
+                            f"Saved {added_count} new product(s) and updated {updated_count} existing product(s). "
+                            f"{len(failed_lines)} line(s) below still need fixing.",
+                            "info"
+                        )
+                else:
+                    mass_product_data = ""
                     flash(f"Saved {added_count} new product(s) and updated {updated_count} existing product(s).", "success")
                     return redirect(url_for("products_page"))
 

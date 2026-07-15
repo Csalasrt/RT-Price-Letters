@@ -87,6 +87,7 @@
             <option value="" {% if not single_default_um %}selected{% endif %}>— Select —</option>
             <option value="LB" {% if single_default_um == "LB" %}selected{% endif %}>LB</option>
             <option value="GAL" {% if single_default_um == "GAL" %}selected{% endif %}>GAL</option>
+            <option value="UNIT" {% if single_default_um == "UNIT" %}selected{% endif %}>UNIT</option>
           </select>
         </div>
 
@@ -140,7 +141,7 @@
             <div class="text-muted-small" style="margin-top:6px;">
               Format: <code>Product Name,LB/GAL,Default Price,Default U/M</code><br>
               One product per line. Default Price and Default U/M are both optional - leave either or both off
-              and just paste <code>Product Name,LB/GAL</code>. Default U/M must be LB or GAL if included.
+              and just paste <code>Product Name,LB/GAL</code>. Default U/M must be LB, GAL, or UNIT if included.
               Excel paste with tabs can be supported too.
             </div>
           </div>
@@ -239,6 +240,7 @@
                       <option value="" {% if not p.default_um %}selected{% endif %}>— Select —</option>
                       <option value="LB" {% if p.default_um == "LB" %}selected{% endif %}>LB</option>
                       <option value="GAL" {% if p.default_um == "GAL" %}selected{% endif %}>GAL</option>
+                      <option value="UNIT" {% if p.default_um == "UNIT" %}selected{% endif %}>UNIT</option>
                     </select>
                   </td>
 
