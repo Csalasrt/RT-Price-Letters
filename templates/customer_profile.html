@@ -94,10 +94,29 @@
 
       <hr>
 
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <div style="font-weight:700;">Default Customer Setup</div>
-        <div style="display:flex; gap:8px;">
-          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addDefaultRow()">+ Add Product</button>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; gap:10px; flex-wrap:wrap;">
+        <div style="font-weight:700; padding-top:8px;">Default Customer Setup</div>
+        <div style="display:flex; gap:8px; align-items:flex-start;">
+          <div class="product-picker" id="product-picker">
+            <div class="product-trigger placeholder" id="product-trigger" onclick="toggleProductPanel(event)">
+              <div class="product-trigger-text" id="product-trigger-text">Select products...</div>
+              <div class="product-trigger-arrow">▾</div>
+            </div>
+
+            <div class="product-panel hidden" id="product-panel">
+              <div class="product-search-wrap">
+                <input
+                  type="text"
+                  id="product-search"
+                  class="product-search"
+                  placeholder="Search products..."
+                  oninput="filterProductOptions()"
+                >
+              </div>
+              <div class="product-options" id="product-options"></div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm" style="white-space:nowrap;" onclick="addCustomRow()">+ Custom</button>
           <button type="submit" form="defaultSetupForm" class="btn btn-primary btn-sm">Save Setup</button>
         </div>
       </div>
@@ -122,13 +141,17 @@
                 {% for row in customer.default_letter_rows %}
                 <tr class="default-row">
                   <td>
-                    <div class="product-cell-wrapper" style="position:relative;">
-                      <input type="text" name="default_row_product" class="form-control form-control-sm text-center default-product-input" value="{{ row.product }}" placeholder="Product" autocomplete="off">
-                      <div class="default-product-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ccc; border-radius:4px; z-index:999; max-height:180px; overflow-y:auto;"></div>
-                    </div>
+                    <input type="hidden" name="default_row_product" value="{{ row.product }}">
+                    <div class="readonly-product">{{ row.product }}</div>
                   </td>
                   <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}"></td>
-                  <td><input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="{{ row.um }}" style="max-width:70px;"></td>
+                  <td>
+                    <select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px;">
+                      {% for u in ["", "LB", "GAL", "EACH"] %}
+                        <option value="{{ u }}" {% if (row.um|upper) == u %}selected{% endif %}>{{ u if u else "Select" }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
                   <td>
                     <select name="default_row_package_type" class="form-control form-control-sm text-center">
                       {% for pkg in ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"] %}
@@ -165,7 +188,7 @@
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <div style="font-weight:700;">Saved Template</div>
         <div style="display:flex; gap:8px;">
-          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addDefaultRow()">+ Add Product</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="switchTab('info'); toggleProductPanel(event);">+ Add Product</button>
           <button type="submit" form="defaultSetupForm" class="btn btn-primary btn-sm">Save Template</button>
         </div>
       </div>
@@ -195,13 +218,17 @@
               {% for row in customer.default_letter_rows %}
               <tr class="default-row">
                 <td>
-                  <div class="product-cell-wrapper" style="position:relative;">
-                    <input type="text" name="default_row_product" class="form-control form-control-sm text-center default-product-input" value="{{ row.product }}" placeholder="Product" autocomplete="off">
-                    <div class="default-product-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ccc; border-radius:4px; z-index:999; max-height:180px; overflow-y:auto;"></div>
-                  </div>
+                  <input type="hidden" name="default_row_product" value="{{ row.product }}">
+                  <div class="readonly-product">{{ row.product }}</div>
                 </td>
                 <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}"></td>
-                <td><input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="{{ row.um }}" style="max-width:70px;"></td>
+                <td>
+                  <select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px;">
+                    {% for u in ["", "LB", "GAL", "EACH"] %}
+                      <option value="{{ u }}" {% if (row.um|upper) == u %}selected{% endif %}>{{ u if u else "Select" }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
                 <td>
                   <select name="default_row_package_type" class="form-control form-control-sm text-center">
                     {% for pkg in ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"] %}
@@ -303,6 +330,29 @@
 
 </div>
 
+<!-- DUPLICATE PRODUCT WARNING MODAL -->
+<div id="dupe-warning-overlay" style="display:none; position:fixed; inset:0; background:rgba(16,24,40,0.45); z-index:5000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; max-width:440px; width:92%; padding:24px; box-shadow:0 12px 32px rgba(16,24,40,0.25);">
+    <div style="font-weight:700; font-size:16px; margin-bottom:10px; color:#101828;">
+      Possible duplicate product
+    </div>
+    <div style="font-size:14px; color:#344054; line-height:1.5; margin-bottom:18px;">
+      This looks a lot like an existing product: <strong id="dupe-warning-match-name"></strong>.
+      Duplicate entries for the same product can cause pricing and reporting errors down the line.
+      If this is the same product, cancel and edit the name to match the existing one instead.
+      If it's genuinely a different product, you can continue.
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="dupe-warning-cancel-btn">
+        Cancel
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" id="dupe-warning-accept-btn">
+        Accept — Add Anyway
+      </button>
+    </div>
+  </div>
+</div>
+
 
 <style>
   .table-responsive {
@@ -315,28 +365,117 @@
     overflow: visible !important;
   }
 
-  .default-product-dropdown {
-    position: absolute;
-    top: calc(100% + 2px);
-    left: 0;
-    right: 0;
-    z-index: 99999 !important;
-
-    background: #fff;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-
-    max-height: 220px;
-    overflow-y: auto;
-
-    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  }
-
   #tab-info,
   #tab-template,
   .card,
   .card-body {
     overflow: visible !important;
+  }
+
+  /* ── Product picker (matches customer_new.html) ── */
+  .product-picker {
+    position: relative;
+  }
+
+  .product-trigger {
+    width: 100%;
+    max-width: 360px;
+    height: 36px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    background: #fff;
+    padding: 6px 12px;
+    font-size: 13px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    color: #101828;
+  }
+
+  .product-trigger.placeholder {
+    color: #667085;
+  }
+
+  .product-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    max-width: 360px;
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.10);
+    z-index: 2000;
+    padding: 6px 0;
+  }
+
+  .product-panel.hidden {
+    display: none;
+  }
+
+  .product-search-wrap {
+    padding: 0 8px 6px 8px;
+    border-bottom: 1px solid #eaecf0;
+  }
+
+  .product-search {
+    width: 100%;
+    height: 30px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    box-sizing: border-box;
+  }
+
+  .product-options {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .product-option {
+    display: block;
+    padding: 4px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+    text-align: left;
+  }
+
+  .product-option:hover {
+    background: #f9fafb;
+  }
+
+  .product-option input[type="checkbox"] {
+    margin-right: 6px;
+    width: 12px;
+    height: 12px;
+    vertical-align: middle;
+  }
+
+  .product-option-name {
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  .readonly-product {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 31px;
+    width: 100%;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: #f9fafb;
+    font-size: 13px;
+    font-weight: 600;
+    color: #344054;
+    padding: 4px 8px;
+    box-sizing: border-box;
   }
 </style>
 
@@ -508,49 +647,397 @@
     if (state) state.addEventListener("change", autoSaveLocations);
   }
 
-  // ── Default setup / template product dropdown ──
-  const PROFILE_PRODUCTS = {{ (products or company_products or []) | tojson }};
+  // ── Default setup / template product picker (matches customer_new.html) ──
+  // ── Duplicate product name detector ──
+  // Strips spaces, dashes, slashes, %, #, and other separator/noise
+  // characters before comparing, then scores similarity against every
+  // existing product name using a Levenshtein-distance ratio, scaled down
+  // for short names. Pops a warning on Enter or when the user leaves a
+  // custom product name field.
+  const DUPE_MATCH_MAX_THRESHOLD = 85; // ceiling once names are long enough
 
-  function productRowHtml() {
-    const pkgOptions = ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"]
-      .map(p => `<option value="${p}">${p}</option>`).join("");
+  function normalizeForDupeCheck(name) {
+    return String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function levenshteinDistance(a, b) {
+    const m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[m][n];
+  }
+
+  function similarityPercent(nameA, nameB) {
+    const normA = normalizeForDupeCheck(nameA);
+    const normB = normalizeForDupeCheck(nameB);
+    if (!normA || !normB) return 0;
+    if (normA === normB) return 100;
+    const dist = levenshteinDistance(normA, normB);
+    const maxLen = Math.max(normA.length, normB.length);
+    if (maxLen === 0) return 100;
+    return Math.round((1 - dist / maxLen) * 100);
+  }
+
+  // Shorter names need a lower bar than a flat 85% - a single changed
+  // letter in a 3-letter word is already a 33% difference on its own.
+  // Scales the required match percentage down as the shorter of the two
+  // compared names gets shorter.
+  function getDynamicThreshold(len) {
+    if (len <= 3) return 60;
+    if (len <= 5) return 70;
+    if (len <= 7) return 78;
+    return DUPE_MATCH_MAX_THRESHOLD;
+  }
+
+  function findBestDuplicateMatch(newName, existingNames) {
+    const list = Array.isArray(existingNames) ? existingNames : [];
+    const normNew = normalizeForDupeCheck(newName);
+    if (!normNew) return null;
+
+    let best = null;
+    list.forEach(function (existing) {
+      const normExisting = normalizeForDupeCheck(existing);
+      if (!normExisting) return;
+
+      const pct = similarityPercent(newName, existing);
+      const threshold = getDynamicThreshold(Math.min(normNew.length, normExisting.length));
+
+      if (pct >= threshold && (!best || pct > best.percent)) {
+        best = { name: existing, percent: pct };
+      }
+    });
+    return best;
+  }
+
+  const dupeOverlay = document.getElementById("dupe-warning-overlay");
+  const dupeMatchNameEl = document.getElementById("dupe-warning-match-name");
+  const dupeAcceptBtn = document.getElementById("dupe-warning-accept-btn");
+  const dupeCancelBtn = document.getElementById("dupe-warning-cancel-btn");
+
+  let pendingDupeAccept = null;
+  let pendingDupeCancel = null;
+
+  function showDuplicateWarningModal(matchedName, onAccept, onCancel) {
+    if (!dupeOverlay) return;
+    dupeMatchNameEl.textContent = matchedName;
+    pendingDupeAccept = onAccept || null;
+    pendingDupeCancel = onCancel || null;
+    dupeOverlay.style.display = "flex";
+  }
+
+  function hideDuplicateWarningModal() {
+    if (!dupeOverlay) return;
+    dupeOverlay.style.display = "none";
+    pendingDupeAccept = null;
+    pendingDupeCancel = null;
+  }
+
+  if (dupeAcceptBtn) {
+    dupeAcceptBtn.addEventListener("click", function () {
+      const cb = pendingDupeAccept;
+      hideDuplicateWarningModal();
+      if (cb) cb();
+    });
+  }
+
+  if (dupeCancelBtn) {
+    dupeCancelBtn.addEventListener("click", function () {
+      const cb = pendingDupeCancel;
+      hideDuplicateWarningModal();
+      if (cb) cb();
+    });
+  }
+
+  // WeakSet (not a DOM attribute) so cloned rows - which copy attributes
+  // but not listeners - correctly get a fresh listener attached instead
+  // of being skipped as "already attached".
+  const dupeCheckAttachedInputs = new WeakSet();
+
+  function runDupeCheck(input) {
+    if (input.dataset.dupeModalOpen === "1") return; // modal already open for this field
+
+    const val = input.value;
+    if (!val || !val.trim()) return;
+
+    const match = findBestDuplicateMatch(val, normalizedProductNames());
+    if (!match) return;
+
+    input.dataset.dupeModalOpen = "1";
+    showDuplicateWarningModal(
+      match.name,
+      function () { input.dataset.dupeModalOpen = ""; }, // Accept
+      function () { input.dataset.dupeModalOpen = ""; input.focus(); input.select(); } // Cancel
+    );
+  }
+
+  function attachDupeCheckOnBlur(input) {
+    if (!input || dupeCheckAttachedInputs.has(input)) return;
+    dupeCheckAttachedInputs.add(input);
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      runDupeCheck(input);
+    });
+
+    input.addEventListener("blur", function () {
+      runDupeCheck(input);
+    });
+  }
+
+  const PROFILE_PRODUCTS = {{ (products or company_products or []) | tojson }};
+  const CUSTOM_PRODUCT_SENTINEL = "__custom__";
+  const PACKAGE_TYPES = ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"];
+  const UM_OPTIONS = ["", "LB", "GAL", "EACH"];
+
+  function extractProductName(item) {
+    if (typeof item === "string") return item.trim();
+    if (!item || typeof item !== "object") return "";
+    return String(item.product || item.name || item.label || item.title || item.value || "").trim();
+  }
+
+  function normalizeProductValue(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function normalizedProductNames() {
+    const names = (Array.isArray(PROFILE_PRODUCTS) ? PROFILE_PRODUCTS : [])
+      .map(extractProductName)
+      .filter(Boolean);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }
+
+  function findProductInfo(name) {
+    const target = normalizeProductValue(name);
+    return (Array.isArray(PROFILE_PRODUCTS) ? PROFILE_PRODUCTS : [])
+      .find(p => normalizeProductValue(extractProductName(p)) === target) || null;
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  const productTrigger = document.getElementById("product-trigger");
+  const productTriggerText = document.getElementById("product-trigger-text");
+  const productPanel = document.getElementById("product-panel");
+  const productOptions = document.getElementById("product-options");
+  const productSearch = document.getElementById("product-search");
+
+  function getMainRows() {
+    return Array.from(document.querySelectorAll("#default-setup-table tbody tr.default-row"));
+  }
+
+  function getRowProductValue(tr) {
+    const hidden = tr.querySelector('input[name="default_row_product"][type="hidden"]');
+    if (hidden) return hidden.value;
+    const editable = tr.querySelector('input[name="default_row_product"]');
+    if (editable && editable.dataset.sentinel) return editable.dataset.sentinel;
+    return editable ? editable.value : "";
+  }
+
+  function selectedProductNames() {
+    return [...new Set(
+      getMainRows()
+        .map(getRowProductValue)
+        .filter(Boolean)
+        .filter(v => v !== CUSTOM_PRODUCT_SENTINEL)
+    )];
+  }
+
+  function isProductSelected(name) {
+    const target = normalizeProductValue(name);
+    return selectedProductNames().some(p => normalizeProductValue(p) === target);
+  }
+
+  function updateTriggerText() {
+    if (!productTrigger || !productTriggerText) return;
+    const count = selectedProductNames().length;
+    if (count > 0) {
+      productTrigger.classList.remove("placeholder");
+      productTriggerText.textContent = `${count} product${count !== 1 ? "s" : ""} selected`;
+    } else {
+      productTrigger.classList.add("placeholder");
+      productTriggerText.textContent = "Select products...";
+    }
+  }
+
+  function toggleProductPanel(event) {
+    if (event) event.stopPropagation();
+    if (!productPanel) return;
+    productPanel.classList.toggle("hidden");
+
+    if (!productPanel.classList.contains("hidden")) {
+      renderProductOptions();
+      setTimeout(() => productSearch && productSearch.focus(), 0);
+    }
+  }
+
+  function closeProductPanel() {
+    if (productPanel) productPanel.classList.add("hidden");
+  }
+
+  function filterProductOptions() {
+    const filter = (productSearch ? productSearch.value : "").toLowerCase().trim();
+    document.querySelectorAll(".product-option").forEach(function (option) {
+      const name = option.getAttribute("data-product-name") || "";
+      option.style.display = name.includes(filter) ? "" : "none";
+    });
+  }
+
+  function renderProductOptions() {
+    if (!productOptions) return;
+    const names = normalizedProductNames();
+
+    if (!names.length) {
+      productOptions.innerHTML = `<div class="text-muted" style="padding:10px 12px;">No products found.</div>`;
+      return;
+    }
+
+    productOptions.innerHTML = names.map(name => `
+      <label class="product-option" data-product-name="${escapeHtml(name.toLowerCase())}">
+        <input type="checkbox" value="${escapeHtml(name)}" ${isProductSelected(name) ? "checked" : ""}>
+        <span class="product-option-name">${escapeHtml(name)}</span>
+      </label>
+    `).join("");
+
+    productOptions.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+      cb.addEventListener("change", function () { handleProductToggle(this); });
+    });
+
+    filterProductOptions();
+  }
+
+  function buildDefaultRowCells(data = {}) {
+    const isCustom = !!data.isCustom;
+
+    const pkgOptions = PACKAGE_TYPES
+      .map(p => `<option value="${p}" ${data.package_type === p ? "selected" : ""}>${p}</option>`)
+      .join("");
+
+    const umOptions = UM_OPTIONS
+      .map(u => `<option value="${u}" ${((data.um || "").toUpperCase() === u) ? "selected" : ""}>${u || "Select"}</option>`)
+      .join("");
+
+    const productCell = isCustom
+      ? `<div class="product-cell-wrapper">
+           <input type="text" name="default_row_product" class="form-control form-control-sm text-center"
+                  value="${escapeHtml(data.product || "")}" placeholder="Enter product name"
+                  style="font-weight:600;" data-sentinel="${CUSTOM_PRODUCT_SENTINEL}">
+         </div>`
+      : `<input type="hidden" name="default_row_product" value="${escapeHtml(data.product || "")}">
+         <div class="readonly-product">${escapeHtml(data.product || "")}</div>`;
 
     return `
-      <td>
-        <div class="product-cell-wrapper" style="position:relative;">
-          <input type="text" name="default_row_product" class="form-control form-control-sm text-center default-product-input" value="" placeholder="Product" autocomplete="off">
-          <div class="default-product-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #ccc; border-radius:4px; z-index:999; max-height:180px; overflow-y:auto;"></div>
-        </div>
-      </td>
-      <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value=""></td>
-      <td><input type="text" name="default_row_um" class="form-control form-control-sm text-center" value="" style="max-width:70px;"></td>
+      <td>${productCell}</td>
+      <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="${escapeHtml(data.description || "")}"></td>
+      <td><select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px;">${umOptions}</select></td>
       <td><select name="default_row_package_type" class="form-control form-control-sm text-center">${pkgOptions}</select></td>
-      <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="0" style="max-width:80px;"></td>
-      <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="0" style="max-width:90px;"></td>
-      <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="0" style="max-width:90px;"></td>
-      <td style="display:flex; gap:4px;">
+      <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="${data.margin != null ? data.margin : 0}" style="max-width:80px;"></td>
+      <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="${data.shipping != null ? data.shipping : 0}" style="max-width:90px;"></td>
+      <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="${data.packaging != null ? data.packaging : 0}" style="max-width:90px;"></td>
+      <td style="display:flex; gap:4px; justify-content:center;">
         <button type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicateDefaultRow(this)" title="Duplicate">⧉</button>
         <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDefaultRow(this)">✕</button>
       </td>
     `;
   }
 
-  function addDefaultRow() {
+  function appendRowToBothTables(data) {
     const mainTbody = document.querySelector("#default-setup-table tbody");
     const templateTbody = document.getElementById("template-tab-tbody");
 
     [mainTbody, templateTbody].forEach(tbody => {
+      if (!tbody) return;
       const emptyRow = tbody.querySelector("tr td[colspan]");
       if (emptyRow) emptyRow.closest("tr").remove();
 
       const tr = document.createElement("tr");
       tr.className = "default-row";
-      tr.innerHTML = productRowHtml();
+      tr.innerHTML = buildDefaultRowCells(data);
       tbody.appendChild(tr);
-      attachProductDropdown(tr.querySelector(".default-product-input"));
-    });
 
-    syncTemplateRowsToMain();
+      const customInput = tr.querySelector(`input[name="default_row_product"][data-sentinel="${CUSTOM_PRODUCT_SENTINEL}"]`);
+      if (customInput) attachDupeCheckOnBlur(customInput);
+    });
+  }
+
+  function refreshUiAfterRowChange() {
+    ["#default-setup-table tbody", "#template-tab-tbody"].forEach(sel => {
+      const tbody = document.querySelector(sel);
+      if (tbody && tbody.querySelectorAll("tr.default-row").length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>`;
+      }
+    });
+    updateTriggerText();
+    renderProductOptions();
+  }
+
+  function addProductRow(productName) {
+    const info = findProductInfo(productName);
+    appendRowToBothTables({
+      product: productName,
+      description: info ? (info.description || "") : "",
+      um: info ? (info.default_um || "") : "",
+      package_type: "",
+      margin: 0,
+      shipping: 0,
+      packaging: 0,
+      isCustom: false
+    });
+    refreshUiAfterRowChange();
+  }
+
+  function removeAllRowsForProduct(productName) {
+    const target = normalizeProductValue(productName);
+    document.querySelectorAll("#default-setup-table tbody tr.default-row, #template-tab-tbody tr.default-row").forEach(tr => {
+      if (normalizeProductValue(getRowProductValue(tr)) === target) tr.remove();
+    });
+    refreshUiAfterRowChange();
+  }
+
+  function handleProductToggle(checkbox) {
+    const productName = checkbox.value || "";
+    if (!productName) return;
+
+    if (checkbox.checked) {
+      if (!isProductSelected(productName)) {
+        addProductRow(productName);
+      } else {
+        refreshUiAfterRowChange();
+      }
+    } else {
+      removeAllRowsForProduct(productName);
+    }
+  }
+
+  // "+ Custom" - adds a blank, freely-editable product row (kept as
+  // addDefaultRow so the Template tab's existing button still works).
+  function addDefaultRow() {
+    appendRowToBothTables({ product: "", isCustom: true, margin: 0, shipping: 0, packaging: 0 });
+    refreshUiAfterRowChange();
+
+    const mainTbody = document.querySelector("#default-setup-table tbody");
+    const lastRow = mainTbody ? mainTbody.querySelector("tr.default-row:last-child") : null;
+    const nameInput = lastRow ? lastRow.querySelector('input[name="default_row_product"]') : null;
+    if (nameInput) nameInput.focus();
+  }
+
+  function addCustomRow() {
+    addDefaultRow();
   }
 
   function removeDefaultRow(btn) {
@@ -565,6 +1052,9 @@
         tbody.innerHTML = `<tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>`;
       }
     });
+
+    updateTriggerText();
+    renderProductOptions();
   }
 
   function duplicateDefaultRow(btn) {
@@ -577,110 +1067,13 @@
       if (!source) return;
 
       const clone = source.cloneNode(true);
-      const dropdown = clone.querySelector(".default-product-dropdown");
-      const input = clone.querySelector(".default-product-input");
-
-      if (dropdown) dropdown.style.display = "none";
-      if (input) attachProductDropdown(input);
-
       source.insertAdjacentElement("afterend", clone);
+
+      const clonedCustomInput = clone.querySelector(`input[name="default_row_product"][data-sentinel="${CUSTOM_PRODUCT_SENTINEL}"]`);
+      if (clonedCustomInput) attachDupeCheckOnBlur(clonedCustomInput);
     });
 
     syncTemplateRowsToMain();
-  }
-
-  let activeFloatingDropdown = null;
-
-  function attachProductDropdown(input) {
-    if (!input || input.dataset.dropdownAttached === "1") return;
-    input.dataset.dropdownAttached = "1";
-
-    input.addEventListener("input", showFloatingProductDropdown);
-    input.addEventListener("focus", showFloatingProductDropdown);
-
-    input.addEventListener("blur", function () {
-      setTimeout(() => {
-        if (activeFloatingDropdown) {
-          activeFloatingDropdown.remove();
-          activeFloatingDropdown = null;
-        }
-        syncTemplateRowsToMain();
-      }, 150);
-    });
-  }
-
-  function showFloatingProductDropdown(e) {
-    const input = e.target;
-    const q = input.value.trim().toLowerCase();
-
-    if (activeFloatingDropdown) {
-      activeFloatingDropdown.remove();
-      activeFloatingDropdown = null;
-    }
-
-    const matches = PROFILE_PRODUCTS.filter(p =>
-      (p.product || "").toLowerCase().includes(q)
-    );
-
-    if (!matches.length) return;
-
-    const rect = input.getBoundingClientRect();
-
-    const dropdown = document.createElement("div");
-    activeFloatingDropdown = dropdown;
-
-    dropdown.style.cssText = `
-      position: fixed;
-      top: ${rect.bottom + 2}px;
-      left: ${rect.left}px;
-      width: ${rect.width}px;
-      max-height: 220px;
-      overflow-y: auto;
-      background: #fff;
-      border: 1px solid #ced4da;
-      border-radius: 6px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-      z-index: 2147483647;
-    `;
-
-    matches.slice(0, 25).forEach(function(p) {
-      const div = document.createElement("div");
-      div.textContent = p.product;
-      div.style.cssText = `
-        padding: 7px 10px;
-        cursor: pointer;
-        font-size: 13px;
-        text-align: left;
-        background: #fff;
-      `;
-
-      div.addEventListener("mousedown", function(ev) {
-        ev.preventDefault();
-
-        input.value = p.product || "";
-
-        const tr = input.closest("tr");
-        const descInput = tr.querySelector('input[name="default_row_description"]');
-        const umInput = tr.querySelector('input[name="default_row_um"]');
-
-        if (descInput && p.description) descInput.value = p.description;
-        if (umInput && p.um) umInput.value = p.um;
-
-        if (activeFloatingDropdown) {
-          activeFloatingDropdown.remove();
-          activeFloatingDropdown = null;
-        }
-
-        syncTemplateRowsToMain();
-      });
-
-      div.addEventListener("mouseover", () => div.style.background = "#f0f4ff");
-      div.addEventListener("mouseout", () => div.style.background = "#fff");
-
-      dropdown.appendChild(div);
-    });
-
-    document.body.appendChild(dropdown);
   }
 
   function syncTemplateRowsToMain() {
@@ -700,7 +1093,12 @@
     });
   }
 
-  document.querySelectorAll(".default-product-input").forEach(attachProductDropdown);
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest("#product-picker")) closeProductPanel();
+  });
+
+  updateTriggerText();
+  renderProductOptions();
 
   document.getElementById("template-tab-tbody")?.addEventListener("input", syncTemplateRowsToMain);
   document.getElementById("template-tab-tbody")?.addEventListener("change", syncTemplateRowsToMain);

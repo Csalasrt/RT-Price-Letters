@@ -103,6 +103,8 @@ class CompanyProduct(db.Model):
     product = db.Column(db.String(255), nullable=False)
     description = db.Column(db.String(500), default="")
     lb_per_gal = db.Column(db.Float, default=0.0)
+    default_price = db.Column(db.Float, default=0.0)
+    default_um = db.Column(db.String(20), default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Optional link to another product's id. When set, pricing entered
@@ -338,8 +340,6 @@ def load_pricing_store():
             "product": r.product or "",
             "um": r.um or "",
             "price": float(r.price or 0.0),
-            "freight_tax": float(r.freight_tax or 0.0),
-            "final_price": float(r.final_price or 0.0),
             "created_at": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
         })
 
@@ -378,8 +378,6 @@ def save_pricing_store(store: dict):
                 product=product,
                 um=um,
                 price=to_float(r.get("price", 0.0), 0.0),
-                freight_tax=to_float(r.get("freight_tax", 0.0), 0.0),
-                final_price=to_float(r.get("final_price", 0.0), 0.0),
                 created_at=created_at,
             ))
 
@@ -478,6 +476,55 @@ def get_export_year_choices():
 
 def maybe_auto_reset_month(store: dict):
     return store
+
+
+def build_pricing_display_rows(products, saved_rows):
+    """One row per product in the master Products list, merged with
+    whatever's already been saved for the selected month (matched by
+    product name, case/space-insensitive).
+
+    If a product has no saved pricing entry for the selected month, it
+    falls back to that product's Default Price / Default U/M (set on the
+    Products page) instead of showing blank/zeroed fields - so there's
+    always something to work off of. Each row carries an `is_default` flag
+    so the template can show default-sourced values in a lighter, muted
+    style and actual user-entered-this-month values in bold, making it
+    obvious at a glance which numbers are real for this month and which
+    are just the fallback default."""
+    saved_by_name = {}
+    for r in (saved_rows or []):
+        key = normalize_product_name(r.get("product"))
+        if not key:
+            continue
+        existing = saved_by_name.get(key)
+        if existing is None or (r.get("created_at") or "") >= (existing.get("created_at") or ""):
+            saved_by_name[key] = r
+
+    display_rows = []
+    for p in (products or []):
+        key = normalize_product_name(p.get("product"))
+        saved = saved_by_name.get(key)
+        is_default = saved is None
+
+        if saved:
+            um = saved.get("um") or ""
+            price = saved.get("price") or 0
+        else:
+            um = p.get("default_um") or ""
+            price = p.get("default_price") or 0
+
+        display_rows.append({
+            "product_id": p.get("id"),
+            "product": p.get("product"),
+            "entry_id": saved.get("id") if saved else "",
+            "um": um,
+            "price": price,
+            "is_default": is_default,
+            "default_price": p.get("default_price") or 0,
+            "default_um": p.get("default_um") or "",
+            "created_at": (saved.get("created_at") if saved else "") or "",
+        })
+    return display_rows
 
 def load_customers():
     customers = Customer.query.order_by(Customer.name.asc()).all()
@@ -1391,7 +1438,7 @@ def get_product_costs_for_month(month_key: str):
     for (_, _), r in latest.items():
         product = (r.get("product") or "").strip()
         um = (r.get("um") or "").strip().upper()
-        cost = float(r.get("final_price") or 0.0)
+        cost = float(r.get("price") or 0.0)
 
         products.append({
             "key": f"{product}||{um}",
@@ -1490,6 +1537,8 @@ def load_company_products():
             "product": p.product or "",
             "description": p.description or "",
             "lb_per_gal": (float(p.lb_per_gal) if p.lb_per_gal is not None else None),
+            "default_price": (float(p.default_price) if p.default_price is not None else 0.0),
+            "default_um": p.default_um or "",
             "pricing_id": p.pricing_id or "",
             "created_at": p.created_at.isoformat() if p.created_at else datetime.now(timezone.utc).isoformat()
         }
@@ -1707,7 +1756,9 @@ def save_company_products(products):
                     id=uuid.uuid4().hex[:10],
                     product=product_name,
                     description="",   # ✅ already good
-                    lb_per_gal=0.0
+                    lb_per_gal=0.0,
+                    default_price=0.0,
+                    default_um=""
                 )
             )
             continue  # 🔥 IMPORTANT
@@ -1731,6 +1782,14 @@ def save_company_products(products):
             else:
                 lb_per_gal = to_float(raw_lb_per_gal, 0.0)
 
+            raw_default_price = item.get("default_price", None)
+            if raw_default_price in (None, ""):
+                default_price = 0.0
+            else:
+                default_price = to_float(raw_default_price, 0.0)
+
+            default_um = (item.get("default_um") or "").strip().upper()
+
             # 🔥 ADD THIS LINE RIGHT HERE
             description = (item.get("description") or "").strip()
             pricing_id = (item.get("pricing_id") or "").strip() or None
@@ -1742,6 +1801,8 @@ def save_company_products(products):
                     product=product_name,
                     description=description,
                     lb_per_gal=lb_per_gal,
+                    default_price=default_price,
+                    default_um=default_um,
                     pricing_id=pricing_id
                 )
             )
@@ -1869,64 +1930,20 @@ def _find_customer_by_id(customers, customer_id):
 
 
 def _build_printer_row_from_product(product_name, priced_by_name, default_margin, description=""):
-    company_products = load_company_products() or []
-    product_map = {
-        normalize_product_name(x.get("product")): x
-        for x in company_products
-        if (x.get("product") or "").strip()
-    }
-
-    product_info = product_map.get(normalize_product_name(product_name), {})
-    try:
-        lb_per_gal = float(product_info.get("lb_per_gal") or 0.0)
-    except Exception:
-        lb_per_gal = 0.0
-
     matches = priced_by_name.get(normalize_product_name(product_name), [])
 
-    clean_description = (description or "").strip()
-
     if matches:
-        p = matches[0]
+        return build_printer_row_from_priced_product(
+            matches[0],
+            default_margin=default_margin,
+            description=description
+        )
 
-        try:
-            cost = float(p.get("cost") or 0.0)
-        except Exception:
-            cost = 0.0
-
-        margin = float(default_margin or 0.0)
-        price = cost * (1.0 + margin / 100.0)
-        shipping = 0.0
-        packaging = 0.0
-        final_price = price + shipping + packaging
-
-        return {
-            "product": p.get("product", product_name),
-            "description": clean_description,
-            "um": p.get("um", ""),
-            "lb_per_gal": lb_per_gal,
-            "package_type": "",
-            "cost": cost,
-            "margin": margin,
-            "price": price,
-            "shipping": shipping,
-            "packaging": packaging,
-            "final_price": final_price
-        }
-
-    return {
-        "product": product_name,
-        "description": clean_description,
-        "um": "",
-        "lb_per_gal": lb_per_gal,
-        "package_type": "",
-        "cost": 0.0,
-        "margin": float(default_margin or 0.0),
-        "price": 0.0,
-        "shipping": 0.0,
-        "packaging": 0.0,
-        "final_price": 0.0
-    }
+    return build_printer_row_from_name_only(
+        product_name,
+        default_margin=default_margin,
+        description=description
+    )
 
 def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fallback_margin):
     default_row = _normalize_default_letter_row(default_row)
@@ -2205,6 +2222,52 @@ def build_printer_row_from_priced_product(p, default_margin=0.0, description="")
 
 
 def build_printer_row_from_name_only(product_name, default_margin=0.0, description=""):
+    """Used when a product has no pricing entry for the selected month.
+    Falls back to that product's Default Price / Default U/M (set on the
+    Products page) instead of showing a flat zero, so there's always a
+    starting cost to work off of. source_cost/source_um are set to that
+    default so the page's existing UM-conversion logic (applyUMConversion
+    in printer.html, driven by data-source-cost/data-source-um/data-weight)
+    can correctly re-express it if the user changes the row's U/M - e.g. a
+    default set in LB gets multiplied by the product's LB/GAL weight when
+    the row is switched to GAL, same math used everywhere else in the app."""
+    weight = get_product_weight(product_name)
+
+    default_price = 0.0
+    default_um = ""
+    for p in load_company_products() or []:
+        if normalize_product_name(p.get("product")) == normalize_product_name(product_name):
+            default_price = to_float(p.get("default_price", 0.0), 0.0)
+            default_um = normalize_um(p.get("default_um", ""))
+            break
+
+    margin = round(to_float(default_margin, 0.0), 4)
+
+    if default_price > 0 and default_um:
+        cost = round(default_price, 4)
+        final_cost = cost
+        price = round(final_cost * (1.0 + margin / 100.0), 4)
+
+        return {
+            "product": product_name,
+            "description": (description or "").strip(),
+            "um": default_um,
+            "source_um": default_um,
+            "package_type": "",
+            "cost": cost,
+            "source_cost": cost,
+            "pre_shipping": 0.0,
+            "pre_packaging": 0.0,
+            "final_cost": final_cost,
+            "margin": margin,
+            "price": price,
+            "source_price": price,
+            "add_shipping": 0.0,
+            "add_packaging": 0.0,
+            "final_price": price,
+            "weight": weight
+        }
+
     return {
         "product": product_name,
         "description": (description or "").strip(),
@@ -2216,13 +2279,13 @@ def build_printer_row_from_name_only(product_name, default_margin=0.0, descripti
         "pre_shipping": 0.0,
         "pre_packaging": 0.0,
         "final_cost": 0.0,
-        "margin": round(to_float(default_margin, 0.0), 4),
+        "margin": margin,
         "price": 0.0,
         "source_price": 0.0,
         "add_shipping": 0.0,
         "add_packaging": 0.0,
         "final_price": 0.0,
-        "weight": get_product_weight(product_name)
+        "weight": weight
     }
 
 def ensure_parent_dir(path):
@@ -3816,19 +3879,42 @@ def refresh_printer_rows_for_month(rows, priced_by_name):
             refreshed.append(normalize_printer_row(new_row))
 
         else:
-            # No pricing found for this product in selected month.
-            # Keep product/settings, but cost becomes 0 so user sees it is missing.
-            new_row = dict(old)
-            new_row["cost"] = 0.0
-            new_row["source_cost"] = 0.0
-            new_row["price"] = 0.0
-            new_row["source_price"] = 0.0
-            new_row["pre_shipping"] = 0.0
-            new_row["pre_packaging"] = 0.0
-            new_row["final_cost"] = 0.0
+            # No pricing found for this product in selected month - fall
+            # back to the product's Default Price / Default U/M so there's
+            # still a starting cost to work from, converting it to
+            # whatever U/M this row was already showing (if any) using the
+            # same LB/GAL math used everywhere else in the app.
+            fallback = build_printer_row_from_name_only(
+                product,
+                default_margin=margin,
+                description=old.get("description", "")
+            )
+
+            if desired_um and fallback.get("source_um") and desired_um != fallback.get("source_um"):
+                converted_cost = convert_printer_cost_between_ums(
+                    fallback.get("source_cost", 0.0), fallback.get("source_um"), desired_um, product
+                )
+                if converted_cost is not None:
+                    fallback["cost"] = round(converted_cost, 4)
+                    fallback["um"] = desired_um
+
+            new_row = fallback
+            new_row["package_type"] = old.get("package_type", "")
+            new_row["pre_shipping"] = round(pre_shipping, 4)
+            new_row["pre_packaging"] = round(pre_packaging, 4)
             new_row["add_shipping"] = round(add_shipping, 4)
             new_row["add_packaging"] = round(add_packaging, 4)
-            new_row["final_price"] = round(add_shipping + add_packaging, 4)
+            new_row["margin"] = round(margin, 4)
+
+            cost = to_float(new_row.get("cost", 0.0), 0.0)
+            final_cost = cost + pre_shipping + pre_packaging
+            price = final_cost * (1.0 + margin / 100.0)
+            final_price = price + add_shipping + add_packaging
+
+            new_row["final_cost"] = round(final_cost, 4)
+            new_row["price"] = round(price, 4)
+            new_row["source_price"] = round(price, 4)
+            new_row["final_price"] = round(final_price, 4)
             refreshed.append(normalize_printer_row(new_row))
 
     return refreshed
@@ -3864,16 +3950,40 @@ def recost_existing_printer_rows(rows, priced_by_name):
             matched = matches[0]
 
         if not matched:
-            old["cost"] = 0.0
-            old["source_cost"] = 0.0
+            fallback = build_printer_row_from_name_only(
+                product,
+                default_margin=margin,
+                description=old.get("description", "")
+            )
+
+            fallback_cost = to_float(fallback.get("source_cost", 0.0), 0.0)
+            fallback_um = fallback.get("source_um", "")
+
+            if preferred_um and fallback_um and preferred_um != fallback_um:
+                converted_cost = convert_printer_cost_between_ums(
+                    fallback_cost, fallback_um, preferred_um, product
+                )
+                if converted_cost is not None:
+                    fallback_cost = converted_cost
+                    fallback_um = preferred_um
+
+            new_final_cost = fallback_cost + pre_shipping + pre_packaging
+            new_price = new_final_cost * (1.0 + margin / 100.0)
+            new_final = new_price + add_shipping + add_packaging
+
+            old["cost"] = round(fallback_cost, 4)
+            old["source_cost"] = round(fallback_cost, 4)
+            old["um"] = fallback_um or preferred_um
+            old["source_um"] = fallback_um or preferred_um
             old["pre_shipping"] = round(pre_shipping, 4)
             old["pre_packaging"] = round(pre_packaging, 4)
-            old["final_cost"] = 0.0
-            old["price"] = 0.0
-            old["source_price"] = 0.0
+            old["final_cost"] = round(new_final_cost, 4)
+            old["price"] = round(new_price, 4)
+            old["source_price"] = round(new_price, 4)
             old["add_shipping"] = round(add_shipping, 4)
             old["add_packaging"] = round(add_packaging, 4)
-            old["final_price"] = round(add_shipping + add_packaging, 4)
+            old["final_price"] = round(new_final, 4)
+            old["weight"] = get_product_weight(product)
             recosted.append(normalize_printer_row(old))
             continue
 
@@ -3954,11 +4064,38 @@ def force_period_costs_on_rows(rows, priced_by_name):
             matched = matches[0]
 
         if not matched:
-            old["cost"] = 0.0
-            old["source_cost"] = 0.0
-            old["price"] = 0.0
-            old["source_price"] = 0.0
-            old["final_price"] = round(shipping + packaging, 4)
+            fallback = build_printer_row_from_name_only(
+                product,
+                default_margin=margin,
+                description=old.get("description", "")
+            )
+
+            fallback_source_cost = to_float(fallback.get("source_cost", 0.0), 0.0)
+            fallback_source_um = fallback.get("source_um", "")
+            fallback_display_um = desired_um or fallback_source_um
+            fallback_display_cost = fallback_source_cost
+
+            if fallback_display_um != fallback_source_um and fallback_source_um:
+                converted = convert_printer_cost_between_ums(
+                    fallback_source_cost, fallback_source_um, fallback_display_um, product
+                )
+                if converted is None:
+                    fallback_display_um = fallback_source_um
+                    fallback_display_cost = fallback_source_cost
+                else:
+                    fallback_display_cost = converted
+
+            price = fallback_display_cost * (1.0 + margin / 100.0)
+            final_price = price + shipping + packaging
+
+            old["um"] = fallback_display_um
+            old["source_um"] = fallback_source_um
+            old["cost"] = round(fallback_display_cost, 4)
+            old["source_cost"] = round(fallback_source_cost, 4)
+            old["price"] = round(price, 4)
+            old["source_price"] = round(price, 4)
+            old["final_price"] = round(final_price, 4)
+            old["weight"] = get_product_weight(product)
             fixed_rows.append(normalize_printer_row(old))
             continue
 
@@ -4174,6 +4311,7 @@ def pricing_page():
 
     store["by_month"].setdefault(selected_key, [])
     rows = store["by_month"][selected_key]
+    products = load_company_products()
 
     errors = []
     paste_text = ""
@@ -4182,15 +4320,13 @@ def pricing_page():
         action = (request.form.get("action") or "").strip().lower()
 
         if action == "save_rows":
-            row_ids = request.form.getlist("row_id")
-            row_products = request.form.getlist("row_product")
+            row_product_ids = request.form.getlist("row_product_id")
             row_ums = request.form.getlist("row_um")
             row_prices = request.form.getlist("row_price")
-            row_freights = request.form.getlist("row_freight_tax")
-            row_finals = request.form.getlist("row_final_price")
-            row_descriptions = request.form.getlist("row_description")
+            row_default_prices = request.form.getlist("row_default_price")
+            row_default_ums = request.form.getlist("row_default_um")
 
-            updated_rows = []
+            products_by_id = {p["id"]: p for p in products}
 
             def to_float(v, label, row_num):
                 try:
@@ -4199,35 +4335,73 @@ def pricing_page():
                     errors.append(f"Row {row_num}: {label} must be a number.")
                     return 0.0
 
-            for i, row_id in enumerate(row_ids):
-                product = (row_products[i] if i < len(row_products) else "").strip()
+            def to_float_silent(v):
+                try:
+                    return float(str(v).replace("$", "").replace(",", "").strip())
+                except Exception:
+                    return 0.0
+
+            existing_by_name = {}
+            for r in rows:
+                existing_by_name[normalize_product_name(r.get("product"))] = r
+
+            updated_rows = []
+
+            for i, product_id in enumerate(row_product_ids):
+                product_info = products_by_id.get(product_id)
+                if not product_info:
+                    # Product was removed from the master list after this
+                    # page loaded - nothing to save it against, skip it.
+                    continue
+
+                product_name = product_info["product"]
+                key = normalize_product_name(product_name)
+
                 um = (row_ums[i] if i < len(row_ums) else "").strip().upper()
-
                 price = to_float(row_prices[i] if i < len(row_prices) else 0, "Price", i + 1)
-                freight_tax = to_float(row_freights[i] if i < len(row_freights) else 0, "Freight/Tax", i + 1)
-                final_price = to_float(row_finals[i] if i < len(row_finals) else 0, "Final Price", i + 1)
 
-                if not product or not um:
-                    errors.append(f"Row {i+1}: Product and U/M are required.")
+                prior = existing_by_name.get(key)
+
+                # Rows with no saved entry yet are prefilled with the
+                # product's Default Price / Default U/M so there's always
+                # something to work off of. If the user never actually
+                # changed anything, the submitted values will still exactly
+                # match that default baseline - skip creating a real entry
+                # for those so the store doesn't fill up with a "saved"
+                # row for every product every time the page is submitted,
+                # and the row keeps tracking the default (light gray) going
+                # forward instead of freezing today's default in as if it
+                # were user-entered.
+                baseline_price = to_float_silent(row_default_prices[i] if i < len(row_default_prices) else 0)
+                baseline_um = (row_default_ums[i] if i < len(row_default_ums) else "").strip().upper()
+
+                if (
+                    not prior
+                    and um == baseline_um
+                    and abs(price - baseline_price) < 0.00005
+                ):
+                    continue
+
+                if price != 0 and not um:
+                    errors.append(f"{product_name}: U/M is required once a price is entered.")
 
                 updated_rows.append({
-                    "id": row_id,
+                    "id": prior.get("id") if prior else uuid.uuid4().hex[:10],
                     "year": selected_year,
                     "month": selected_month,
-                    "product": product,
+                    "product": product_name,
                     "um": um,
                     "price": price,
-                    "freight_tax": freight_tax,
-                    "final_price": final_price,
-                    "created_at": rows[i].get("created_at") if i < len(rows) else datetime.now(timezone.utc).isoformat()
+                    "created_at": prior.get("created_at") if prior else datetime.now(timezone.utc).isoformat()
                 })
 
             if errors:
-                rows = updated_rows
+                display_rows = build_pricing_display_rows(products, updated_rows)
                 return render_template(
                     "pricing.html",
                     month_key=selected_key,
-                    rows=rows,
+                    display_rows=display_rows,
+                    products=products,
                     errors=errors,
                     paste_text="",
                     month_options=month_options,
@@ -4240,7 +4414,7 @@ def pricing_page():
 
             store["by_month"][selected_key] = updated_rows
             save_pricing_store(store)
-            flash(f"Updated {len(updated_rows)} row(s) for {selected_key}.", "success")
+            flash(f"Saved pricing for {len(updated_rows)} product(s) in {selected_key}.", "success")
             return redirect(
                 url_for(
                     "pricing_page",
@@ -4250,9 +4424,9 @@ def pricing_page():
             )
 
         if action == "delete_selected":
-            delete_ids = set(request.form.getlist("delete_row"))
+            delete_product_ids = set(request.form.getlist("delete_row"))
 
-            if not delete_ids:
+            if not delete_product_ids:
                 flash("No rows were selected.", "info")
                 return redirect(
                     url_for(
@@ -4262,16 +4436,23 @@ def pricing_page():
                     )
                 )
 
+            products_by_id = {p["id"]: p for p in products}
+            delete_names = {
+                normalize_product_name(products_by_id[pid]["product"])
+                for pid in delete_product_ids
+                if pid in products_by_id
+            }
+
             remaining_rows = [
                 r for r in rows
-                if str(r.get("id")) not in delete_ids
+                if normalize_product_name(r.get("product")) not in delete_names
             ]
 
             deleted_count = len(rows) - len(remaining_rows)
             store["by_month"][selected_key] = remaining_rows
             save_pricing_store(store)
 
-            flash(f"Deleted {deleted_count} row(s) from {selected_key}.", "success")
+            flash(f"Cleared pricing for {deleted_count} product(s) in {selected_key}.", "success")
             return redirect(
                 url_for(
                     "pricing_page",
@@ -4301,7 +4482,8 @@ def pricing_page():
             return render_template(
                 "pricing.html",
                 month_key=selected_key,
-                rows=rows,
+                display_rows=build_pricing_display_rows(products, rows),
+                products=products,
                 errors=errors,
                 paste_text=paste_text,
                 month_options=month_options,
@@ -4323,14 +4505,14 @@ def pricing_page():
 
             parts = [p for p in parts if p != ""]
 
-            if len(parts) != 5:
+            if len(parts) != 3:
                 errors.append(
-                    f"Line {i}: expected 5 columns "
-                    f"(Product, U/M, Price, Freight/Tax, Final Price), got {len(parts)} → {raw}"
+                    f"Line {i}: expected 3 columns "
+                    f"(Product, U/M, Price), got {len(parts)} → {raw}"
                 )
                 continue
 
-            product, um, price, freight_tax, final_price = parts
+            product, um, price = parts
 
             product = product.strip()
             um = um.strip().upper()
@@ -4343,14 +4525,12 @@ def pricing_page():
                     return None
 
             p = to_float(price, "Price")
-            f = to_float(freight_tax, "Freight/Tax")
-            fp = to_float(final_price, "Final Price")
 
             if not product or not um:
                 errors.append(f"Line {i}: Product and U/M are required → {raw}")
                 continue
 
-            if p is None or f is None or fp is None:
+            if p is None:
                 continue
 
             new_entries.append({
@@ -4360,8 +4540,6 @@ def pricing_page():
                 "product": product,
                 "um": um,
                 "price": p,
-                "freight_tax": f,
-                "final_price": fp,
                 "created_at": datetime.now(timezone.utc).isoformat()
             })
 
@@ -4369,7 +4547,8 @@ def pricing_page():
             return render_template(
                 "pricing.html",
                 month_key=selected_key,
-                rows=rows,
+                display_rows=build_pricing_display_rows(products, rows),
+                products=products,
                 errors=errors,
                 paste_text=paste_text,
                 month_options=month_options,
@@ -4379,6 +4558,12 @@ def pricing_page():
                 page="pricing",
                 page_title="Pricing"
             )
+
+        # Any pasted product names that aren't already in the master
+        # Products list get added there now, so this always-one-row-per-
+        # product page has a row ready for them going forward.
+        ensure_products_exist([e["product"] for e in new_entries])
+        products = load_company_products()
 
         existing = store["by_month"][selected_key]
 
@@ -4392,8 +4577,6 @@ def pricing_page():
             return (
                 _pkey(e),
                 float(e.get("price") or 0.0),
-                float(e.get("freight_tax") or 0.0),
-                float(e.get("final_price") or 0.0),
             )
 
         existing_full = set(_fullsig(e) for e in existing)
@@ -4429,7 +4612,8 @@ def pricing_page():
             return render_template(
                 "pricing.html",
                 month_key=selected_key,
-                rows=rows,
+                display_rows=build_pricing_display_rows(products, rows),
+                products=products,
                 errors=[],
                 paste_text=paste_text,
                 show_mod_modal=True,
@@ -4465,7 +4649,8 @@ def pricing_page():
     return render_template(
         "pricing.html",
         month_key=selected_key,
-        rows=rows,
+        display_rows=build_pricing_display_rows(products, rows),
+        products=products,
         errors=[],
         paste_text="",
         month_options=month_options,
@@ -6504,6 +6689,69 @@ def pricing_view_page(month_key):
         page_title="View Pricing"
     )
 
+@app.route("/products/save_row", methods=["POST"])
+@login_required
+def products_save_row():
+    """Autosave a single product row as soon as the user leaves an input
+    box, instead of requiring a whole-table 'Save Changes' submit. Updates
+    that one product directly rather than going through
+    save_company_products()'s delete-all-and-recreate pattern, so editing
+    one row can never wipe out unsaved-but-already-committed data in
+    another row."""
+    data = request.get_json(silent=True) or {}
+
+    product_id = (data.get("product_id") or "").strip()
+    if not product_id:
+        return jsonify({"ok": False, "error": "Missing product_id."}), 400
+
+    product = db.session.get(CompanyProduct, product_id)
+    if not product:
+        return jsonify({"ok": False, "error": "Product not found - it may have been deleted."}), 404
+
+    product_name = (data.get("product") or "").strip()
+    if not product_name:
+        return jsonify({"ok": False, "error": "Product name is required."}), 400
+
+    description = (data.get("description") or "").strip()
+
+    lb_raw = str(data.get("lb_per_gal") if data.get("lb_per_gal") is not None else "").strip()
+    if not lb_raw:
+        lb_per_gal = None
+    else:
+        try:
+            lb_per_gal = float(lb_raw.replace(",", ""))
+        except Exception:
+            return jsonify({"ok": False, "error": "LB/GAL must be a number."}), 400
+
+    price_raw = str(data.get("default_price") if data.get("default_price") is not None else "").strip()
+    if not price_raw:
+        default_price = 0.0
+    else:
+        try:
+            default_price = float(price_raw.replace("$", "").replace(",", ""))
+        except Exception:
+            return jsonify({"ok": False, "error": "Default Price must be a number."}), 400
+
+    default_um = (data.get("default_um") or "").strip().upper()
+    if default_um and default_um not in ("LB", "GAL"):
+        return jsonify({"ok": False, "error": "Default U/M must be LB or GAL."}), 400
+
+    old_name = (product.product or "").strip()
+    renamed = bool(old_name) and old_name != product_name.strip()
+
+    product.product = product_name
+    product.description = description
+    product.lb_per_gal = lb_per_gal
+    product.default_price = default_price
+    product.default_um = default_um
+    db.session.commit()
+
+    if renamed:
+        cascade_product_rename(product_id, old_name, product_name)
+
+    return jsonify({"ok": True})
+
+
 @app.route("/products", methods=["GET", "POST"])
 @login_required
 def products_page():
@@ -6513,6 +6761,8 @@ def products_page():
     single_product_name = ""
     single_description = ""
     single_lb_per_gal = ""
+    single_default_price = ""
+    single_default_um = ""
     single_pricing_link = ""
     mass_product_data = ""
 
@@ -6523,11 +6773,15 @@ def products_page():
             product_name = (request.form.get("product_name") or "").strip()
             description = (request.form.get("description") or "").strip()
             lb_raw = (request.form.get("lb_per_gal") or "").strip()
+            default_price_raw = (request.form.get("default_price") or "").strip()
+            default_um = (request.form.get("default_um") or "").strip().upper()
             pricing_link_name = (request.form.get("pricing_link") or "").strip()
 
             single_product_name = product_name
             single_description = description
             single_lb_per_gal = lb_raw
+            single_default_price = default_price_raw
+            single_default_um = default_um
             single_pricing_link = pricing_link_name
 
             if not product_name:
@@ -6538,6 +6792,15 @@ def products_page():
             except Exception:
                 lb_per_gal = None
                 errors.append("LB/GAL must be a number.")
+
+            if not default_price_raw:
+                default_price = 0.0
+            else:
+                try:
+                    default_price = float(default_price_raw.replace("$", "").replace(",", ""))
+                except Exception:
+                    default_price = 0.0
+                    errors.append("Default Price must be a number.")
 
             if not errors:
                 existing_map = {
@@ -6565,6 +6828,8 @@ def products_page():
                     existing_map[key]["product"] = product_name
                     existing_map[key]["description"] = description
                     existing_map[key]["lb_per_gal"] = lb_per_gal
+                    existing_map[key]["default_price"] = default_price
+                    existing_map[key]["default_um"] = default_um
                     existing_map[key]["pricing_id"] = pricing_id
                     flash("Product updated.", "success")
                 else:
@@ -6573,6 +6838,8 @@ def products_page():
                         "product": product_name,
                         "description": description,
                         "lb_per_gal": lb_per_gal,
+                        "default_price": default_price,
+                        "default_um": default_um,
                         "pricing_id": pricing_id,
                         "created_at": datetime.now(timezone.utc).isoformat()
                     })
@@ -6608,11 +6875,19 @@ def products_page():
                     else:
                         parts = [p.strip() for p in line.split(",")]
 
-                    if len(parts) != 2:
-                        errors.append(f"Line {i}: expected 2 columns (Product, LB/GAL).")
+                    if len(parts) not in (2, 3, 4):
+                        errors.append(f"Line {i}: expected 2-4 columns (Product, LB/GAL, Default Price, Default U/M).")
                         continue
 
-                    product_name, lb_raw = parts
+                    default_price_raw = ""
+                    default_um = ""
+
+                    if len(parts) == 4:
+                        product_name, lb_raw, default_price_raw, default_um = parts
+                    elif len(parts) == 3:
+                        product_name, lb_raw, default_price_raw = parts
+                    else:
+                        product_name, lb_raw = parts
 
                     if not product_name:
                         errors.append(f"Line {i}: product name is required.")
@@ -6624,6 +6899,20 @@ def products_page():
                         errors.append(f"Line {i}: LB/GAL must be numeric.")
                         continue
 
+                    if not default_price_raw:
+                        default_price = 0.0
+                    else:
+                        try:
+                            default_price = float(default_price_raw.replace("$", "").replace(",", ""))
+                        except Exception:
+                            errors.append(f"Line {i}: Default Price must be numeric.")
+                            continue
+
+                    default_um = default_um.strip().upper()
+                    if default_um and default_um not in ("LB", "GAL"):
+                        errors.append(f"Line {i}: Default U/M must be LB or GAL, got '{default_um}'.")
+                        continue
+
                     key = normalize_product_name(product_name)
                     if key in existing_map:
                         old_name = existing_map[key].get("product", "")
@@ -6633,6 +6922,8 @@ def products_page():
                         existing_map[key]["product"] = product_name
                         existing_map[key]["description"] = existing_map[key].get("description", "")
                         existing_map[key]["lb_per_gal"] = lb_per_gal
+                        existing_map[key]["default_price"] = default_price
+                        existing_map[key]["default_um"] = default_um
                         updated_count += 1
                     else:
                         products.append({
@@ -6640,6 +6931,8 @@ def products_page():
                             "product": product_name,
                             "description": "",
                             "lb_per_gal": lb_per_gal,
+                            "default_price": default_price,
+                            "default_um": default_um,
                             "created_at": datetime.now(timezone.utc).isoformat()
                         })
                         added_count += 1
@@ -6659,6 +6952,8 @@ def products_page():
             row_product_names = request.form.getlist("row_product_name")
             row_descriptions = request.form.getlist("row_description")
             row_lb_values = request.form.getlist("row_lb_per_gal")
+            row_default_prices = request.form.getlist("row_default_price")
+            row_default_ums = request.form.getlist("row_default_um")
             row_pricing_links = request.form.getlist("row_pricing_link")
 
             updated_rows = []
@@ -6668,6 +6963,8 @@ def products_page():
                 product_name = (row_product_names[i] if i < len(row_product_names) else "").strip()
                 description = (row_descriptions[i] if i < len(row_descriptions) else "").strip()
                 lb_raw = (row_lb_values[i] if i < len(row_lb_values) else "").strip()
+                default_price_raw = (row_default_prices[i] if i < len(row_default_prices) else "").strip()
+                default_um = (row_default_ums[i] if i < len(row_default_ums) else "").strip().upper()
                 pricing_link_name = (row_pricing_links[i] if i < len(row_pricing_links) else "").strip()
 
                 if not product_name:
@@ -6685,6 +6982,15 @@ def products_page():
                         errors.append(f"Row {i+1}: LB/GAL must be numeric.")
                         continue
 
+                if not default_price_raw:
+                    default_price = 0.0
+                else:
+                    try:
+                        default_price = float(default_price_raw.replace("$", "").replace(",", ""))
+                    except Exception:
+                        errors.append(f"Row {i+1}: Default Price must be numeric.")
+                        continue
+
                 old_name = (existing.get("product") or "").strip()
                 if old_name and old_name != product_name.strip():
                     renamed_pairs.append((product_id, old_name, product_name))
@@ -6694,6 +7000,8 @@ def products_page():
                     "product": product_name,
                     "description": description,
                     "lb_per_gal": lb_per_gal,
+                    "default_price": default_price,
+                    "default_um": default_um,
                     "pricing_link_name": pricing_link_name,
                     "created_at": existing.get("created_at") or datetime.now(timezone.utc).isoformat()
                 })
@@ -6742,6 +7050,8 @@ def products_page():
         single_product_name=single_product_name,
         single_description=single_description,
         single_lb_per_gal=single_lb_per_gal,
+        single_default_price=single_default_price,
+        single_default_um=single_default_um,
         single_pricing_link=single_pricing_link,
         mass_product_data=mass_product_data,
         page="app",
@@ -7255,15 +7565,27 @@ def customer_new_page():
 
     customer_name = ""
     form_rows = []
-    locations = []
+    location_cities = []
+    location_states = []
 
     if request.method == "POST":
         customer_name = (request.form.get("customer_name") or "").strip()
-        locations = [
-            x.strip()
-            for x in request.form.getlist("locations[]")
-            if x.strip()
-        ]
+
+        location_cities = [c.strip() for c in request.form.getlist("location_city[]")]
+        location_states = [s.strip() for s in request.form.getlist("location_state[]")]
+
+        locations = [f"{c} {s}" for c, s in zip(location_cities, location_states) if c]
+
+        # Remove duplicates while keeping order - same rule as
+        # customer_locations_save uses on the profile page.
+        cleaned_locations = []
+        seen = set()
+        for name in locations:
+            key = name.lower()
+            if key not in seen:
+                seen.add(key)
+                cleaned_locations.append(name)
+        locations = cleaned_locations
 
         form_rows = parse_customer_simple_rows_from_form(request.form)
 
@@ -7309,7 +7631,8 @@ def customer_new_page():
         errors=errors,
         customer_name=customer_name,
         form_rows=form_rows,
-        locations=locations,
+        location_cities=location_cities,
+        location_states=location_states,
         page="app",
         page_title="Add Customer",
     )

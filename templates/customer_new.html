@@ -56,6 +56,22 @@
     margin-top: 4px;
   }
 
+  .location-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .location-row .text-input {
+    flex: 1;
+    margin-bottom: 0;
+  }
+
+  .location-row select {
+    max-width: 120px;
+  }
+
   .top-entry-row {
     display: grid;
     grid-template-columns: minmax(280px, 420px) minmax(260px, 360px);
@@ -394,28 +410,36 @@
             <div style="margin-bottom: 18px;">
             <label class="field-label">Customer Locations</label>
 
+            {% set us_states = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"] %}
+
             <div id="locations-box">
-                {% if locations is defined and locations %}
-                {% for location in locations %}
-                    <input
-                    type="text"
-                    name="locations[]"
-                    class="text-input mb-2"
-                    value="{{ location }}"
-                    placeholder="Enter location name"
-                    >
+                {% if location_cities is defined and location_cities %}
+                {% for city in location_cities %}
+                    {% set state = location_states[loop.index0] if location_states is defined and loop.index0 < location_states|length else "TX" %}
+                    <div class="location-row">
+                      <input type="text" name="location_city[]" class="text-input" value="{{ city }}" placeholder="City">
+                      <select name="location_state[]" class="text-input">
+                        {% for st in us_states %}
+                          <option value="{{ st }}" {% if state == st %}selected{% endif %}>{{ st }}</option>
+                        {% endfor %}
+                      </select>
+                      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
+                    </div>
                 {% endfor %}
                 {% else %}
-                <input
-                    type="text"
-                    name="locations[]"
-                    class="text-input mb-2"
-                    placeholder="Enter location name"
-                >
+                <div class="location-row">
+                  <input type="text" name="location_city[]" class="text-input" value="" placeholder="City">
+                  <select name="location_state[]" class="text-input">
+                    {% for st in us_states %}
+                      <option value="{{ st }}" {% if st == "TX" %}selected{% endif %}>{{ st }}</option>
+                    {% endfor %}
+                  </select>
+                  <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
+                </div>
                 {% endif %}
             </div>
 
-            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addLocationInput()">
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addLocationRow()">
                 + Add Location
             </button>
             </div>
@@ -464,19 +488,200 @@
   </div>
 </div>
 
+<!-- DUPLICATE PRODUCT WARNING MODAL -->
+<div id="dupe-warning-overlay" style="display:none; position:fixed; inset:0; background:rgba(16,24,40,0.45); z-index:5000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; max-width:440px; width:92%; padding:24px; box-shadow:0 12px 32px rgba(16,24,40,0.25);">
+    <div style="font-weight:700; font-size:16px; margin-bottom:10px; color:#101828;">
+      Possible duplicate product
+    </div>
+    <div style="font-size:14px; color:#344054; line-height:1.5; margin-bottom:18px;">
+      This looks a lot like an existing product: <strong id="dupe-warning-match-name"></strong>.
+      Duplicate entries for the same product can cause pricing and reporting errors down the line.
+      If this is the same product, cancel and edit the name to match the existing one instead.
+      If it's genuinely a different product, you can continue.
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="dupe-warning-cancel-btn">
+        Cancel
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" id="dupe-warning-accept-btn">
+        Accept — Add Anyway
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
   const RAW_COMPANY_PRODUCTS = {{ company_products|tojson if company_products is defined else '[]' }};
   const EXISTING_ROWS = {{ form_rows|tojson if form_rows is defined else '[]' }};
-  function addLocationInput() {
+
+  // ── Duplicate product name detector ──
+  // Strips spaces, dashes, slashes, %, #, and other separator/noise
+  // characters before comparing, then scores similarity against every
+  // existing product name using a Levenshtein-distance ratio, scaled down
+  // for short names. Pops a warning on Enter or when the user leaves a
+  // custom product name field.
+  const DUPE_MATCH_MAX_THRESHOLD = 85; // ceiling once names are long enough
+
+  function normalizeForDupeCheck(name) {
+    return String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function levenshteinDistance(a, b) {
+    const m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[m][n];
+  }
+
+  function similarityPercent(nameA, nameB) {
+    const normA = normalizeForDupeCheck(nameA);
+    const normB = normalizeForDupeCheck(nameB);
+    if (!normA || !normB) return 0;
+    if (normA === normB) return 100;
+    const dist = levenshteinDistance(normA, normB);
+    const maxLen = Math.max(normA.length, normB.length);
+    if (maxLen === 0) return 100;
+    return Math.round((1 - dist / maxLen) * 100);
+  }
+
+  // Shorter names need a lower bar than a flat 85% - a single changed
+  // letter in a 3-letter word is already a 33% difference on its own.
+  // Scales the required match percentage down as the shorter of the two
+  // compared names gets shorter.
+  function getDynamicThreshold(len) {
+    if (len <= 3) return 60;
+    if (len <= 5) return 70;
+    if (len <= 7) return 78;
+    return DUPE_MATCH_MAX_THRESHOLD;
+  }
+
+  function findBestDuplicateMatch(newName, existingNames) {
+    const list = Array.isArray(existingNames) ? existingNames : [];
+    const normNew = normalizeForDupeCheck(newName);
+    if (!normNew) return null;
+
+    let best = null;
+    list.forEach(function (existing) {
+      const normExisting = normalizeForDupeCheck(existing);
+      if (!normExisting) return;
+
+      const pct = similarityPercent(newName, existing);
+      const threshold = getDynamicThreshold(Math.min(normNew.length, normExisting.length));
+
+      if (pct >= threshold && (!best || pct > best.percent)) {
+        best = { name: existing, percent: pct };
+      }
+    });
+    return best;
+  }
+
+  const dupeOverlay = document.getElementById("dupe-warning-overlay");
+  const dupeMatchNameEl = document.getElementById("dupe-warning-match-name");
+  const dupeAcceptBtn = document.getElementById("dupe-warning-accept-btn");
+  const dupeCancelBtn = document.getElementById("dupe-warning-cancel-btn");
+
+  let pendingDupeAccept = null;
+  let pendingDupeCancel = null;
+
+  function showDuplicateWarningModal(matchedName, onAccept, onCancel) {
+    if (!dupeOverlay) return;
+    dupeMatchNameEl.textContent = matchedName;
+    pendingDupeAccept = onAccept || null;
+    pendingDupeCancel = onCancel || null;
+    dupeOverlay.style.display = "flex";
+  }
+
+  function hideDuplicateWarningModal() {
+    if (!dupeOverlay) return;
+    dupeOverlay.style.display = "none";
+    pendingDupeAccept = null;
+    pendingDupeCancel = null;
+  }
+
+  if (dupeAcceptBtn) {
+    dupeAcceptBtn.addEventListener("click", function () {
+      const cb = pendingDupeAccept;
+      hideDuplicateWarningModal();
+      if (cb) cb();
+    });
+  }
+
+  if (dupeCancelBtn) {
+    dupeCancelBtn.addEventListener("click", function () {
+      const cb = pendingDupeCancel;
+      hideDuplicateWarningModal();
+      if (cb) cb();
+    });
+  }
+
+  function runDupeCheck(input) {
+    if (input.dataset.dupeModalOpen === "1") return; // modal already open for this field
+
+    const val = input.value;
+    if (!val || !val.trim()) return;
+
+    const match = findBestDuplicateMatch(val, normalizedProducts());
+    if (!match) return;
+
+    input.dataset.dupeModalOpen = "1";
+    showDuplicateWarningModal(
+      match.name,
+      function () { input.dataset.dupeModalOpen = ""; }, // Accept
+      function () { input.dataset.dupeModalOpen = ""; input.focus(); input.select(); } // Cancel
+    );
+  }
+
+  function attachDupeCheckOnBlur(input) {
+    if (!input || input.dataset.dupeCheckAttached === "1") return;
+    input.dataset.dupeCheckAttached = "1";
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      runDupeCheck(input);
+    });
+
+    input.addEventListener("blur", function () {
+      runDupeCheck(input);
+    });
+  }
+
+  const US_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
+
+  function addLocationRow() {
     const box = document.getElementById("locations-box");
+    const options = US_STATES.map(st =>
+      `<option value="${st}" ${st === "TX" ? "selected" : ""}>${st}</option>`
+    ).join("");
 
-    const input = document.createElement("input");
-    input.type = "text";
-    input.name = "locations[]";
-    input.className = "text-input mb-2";
-    input.placeholder = "Enter location name";
+    const row = document.createElement("div");
+    row.className = "location-row";
+    row.innerHTML = `
+      <input type="text" name="location_city[]" class="text-input" value="" placeholder="City">
+      <select name="location_state[]" class="text-input">${options}</select>
+      <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeLocationRow(this)">Remove</button>
+    `;
+    box.appendChild(row);
+  }
 
-    box.appendChild(input);
+  function removeLocationRow(button) {
+    const row = button.closest(".location-row");
+    if (row) row.remove();
+
+    const box = document.getElementById("locations-box");
+    if (box.children.length === 0) {
+      addLocationRow();
+    }
   }
 
   const rowsBody = document.getElementById("customer-rows-body");
@@ -712,6 +917,7 @@
       customInput.style.fontWeight = "600";
       customInput.dataset.sentinel = CUSTOM_PRODUCT_SENTINEL;
       productTd.appendChild(customInput);
+      attachDupeCheckOnBlur(customInput);
     } else {
       const hiddenProduct = document.createElement("input");
       hiddenProduct.type = "hidden";
@@ -803,7 +1009,10 @@
     updateEmptyState();
     // Focus the product name input so the user can start typing immediately
     const nameInput = tr.querySelector('[name="row_product"]');
-    if (nameInput) nameInput.focus();
+    if (nameInput) {
+      nameInput.focus();
+      attachDupeCheckOnBlur(nameInput);
+    }
   }
 
   function removeAllRowsForProduct(productName) {

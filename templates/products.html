@@ -38,7 +38,7 @@
 
     <!-- SINGLE ADD -->
     <div id="single-add-section">
-      <form method="POST" action="{{ url_for('products_page') }}">
+      <form method="POST" action="{{ url_for('products_page') }}" id="single-add-form">
         <input type="hidden" name="action" value="add_single_product">
 
         <div class="row-form">
@@ -71,12 +71,54 @@
           >
         </div>
 
+        <div class="row-form">
+          <label>Default Price</label>
+          <input
+            name="default_price"
+            value="{{ single_default_price or '' }}"
+            placeholder="e.g. 2.2500"
+            inputmode="decimal"
+          >
+        </div>
+
+        <div class="row-form">
+          <label>Default U/M</label>
+          <select name="default_um">
+            <option value="" {% if not single_default_um %}selected{% endif %}>— Select —</option>
+            <option value="LB" {% if single_default_um == "LB" %}selected{% endif %}>LB</option>
+            <option value="GAL" {% if single_default_um == "GAL" %}selected{% endif %}>GAL</option>
+          </select>
+        </div>
+
         <div class="row-form" style="justify-content:flex-end;">
           <button class="btn btn-primary btn-sm" type="submit">
             Save Product
           </button>
         </div>
       </form>
+    </div>
+
+    <!-- DUPLICATE PRODUCT WARNING MODAL -->
+    <div id="dupe-warning-overlay" style="display:none; position:fixed; inset:0; background:rgba(16,24,40,0.45); z-index:5000; align-items:center; justify-content:center;">
+      <div style="background:#fff; border-radius:12px; max-width:440px; width:92%; padding:24px; box-shadow:0 12px 32px rgba(16,24,40,0.25);">
+        <div style="font-weight:700; font-size:16px; margin-bottom:10px; color:#101828;">
+          Possible duplicate product
+        </div>
+        <div style="font-size:14px; color:#344054; line-height:1.5; margin-bottom:18px;">
+          This looks a lot like an existing product: <strong id="dupe-warning-match-name"></strong>.
+          Duplicate entries for the same product can cause pricing and reporting errors down the line.
+          If this is the same product, cancel and edit the name to match the existing one instead.
+          If it's genuinely a different product, you can continue.
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="dupe-warning-cancel-btn">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" id="dupe-warning-accept-btn">
+            Accept — Add Anyway
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- MASS ADD -->
@@ -91,13 +133,15 @@
               name="mass_product_data"
               rows="10"
               style="width:100%;"
-              placeholder="Methanol,6.63&#10;MEG,9.30&#10;Windshield Washer Fluid,7.60"
+              placeholder="Methanol,6.63,2.2500,GAL&#10;MEG,9.30,1.8000,LB&#10;Windshield Washer Fluid,7.60"
               required
             >{{ mass_product_data or '' }}</textarea>
 
             <div class="text-muted-small" style="margin-top:6px;">
-              Format: <code>Product Name,LB/GAL</code><br>
-              One product per line. Excel paste with tabs can be supported too.
+              Format: <code>Product Name,LB/GAL,Default Price,Default U/M</code><br>
+              One product per line. Default Price and Default U/M are both optional - leave either or both off
+              and just paste <code>Product Name,LB/GAL</code>. Default U/M must be LB or GAL if included.
+              Excel paste with tabs can be supported too.
             </div>
           </div>
         </div>
@@ -117,7 +161,12 @@
   <div class="card-body">
 
     <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
-      <div style="font-weight:700;">Stored Products</div>
+      <div>
+        <div style="font-weight:700;">Stored Products</div>
+        <div class="text-muted-small" style="margin-top:2px;">
+          Changes save automatically as soon as you leave a field.
+        </div>
+      </div>
       <div class="text-muted-small">
         {{ products|length if products else 0 }} product(s)
       </div>
@@ -133,15 +182,18 @@
                 <th style="width:52px; min-width:52px; text-align:center;">
                   <input type="checkbox" id="select-all-products">
                 </th>
-                <th style="min-width:220px;">Product</th>
-                <th style="min-width:300px;">Description</th>
-                <th style="min-width:120px;" class="text-end">LB/GAL</th>
-                <th style="min-width:95px;">Added</th>
+                <th style="min-width:220px; text-align:center;">Product</th>
+                <th style="min-width:300px; text-align:center;">Description</th>
+                <th style="min-width:120px; text-align:center;">LB/GAL</th>
+                <th style="min-width:130px; text-align:center;">Default Price</th>
+                <th style="min-width:110px; text-align:center;">Default U/M</th>
+                <th style="min-width:95px; text-align:center;">Added</th>
+                <th style="min-width:80px; text-align:center;">Status</th>
               </tr>
             </thead>
             <tbody>
               {% for p in products %}
-                <tr>
+                <tr class="product-row" data-product-id="{{ p.id }}">
                   <td style="text-align:center;">
                     <input type="checkbox" name="delete_product_id" value="{{ p.id }}" class="delete-product-check">
                   </td>
@@ -149,7 +201,7 @@
                   <td>
                     <input type="hidden" name="product_id" value="{{ p.id }}">
                     <input
-                      class="form-control form-control-sm editable-product-name"
+                      class="form-control form-control-sm editable-product-name row-field"
                       name="row_product_name"
                       value="{{ p.product }}"
                     >
@@ -157,7 +209,7 @@
 
                   <td>
                     <input
-                      class="form-control form-control-sm"
+                      class="form-control form-control-sm row-field"
                       name="row_description"
                       value="{{ p.description or '' }}"
                       placeholder="Description"
@@ -166,15 +218,36 @@
 
                   <td class="text-end">
                     <input
-                      class="form-control form-control-sm text-end editable-lbpg"
+                      class="form-control form-control-sm text-end editable-lbpg row-field"
                       name="row_lb_per_gal"
                       value="{{ '%.4f'|format((p.lb_per_gal or 0)|float) }}"
                       inputmode="decimal"
                     >
                   </td>
 
+                  <td class="text-end">
+                    <input
+                      class="form-control form-control-sm text-end editable-default-price row-field"
+                      name="row_default_price"
+                      value="{{ '%.4f'|format((p.default_price or 0)|float) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  <td>
+                    <select class="form-control form-control-sm editable-default-um row-field" name="row_default_um">
+                      <option value="" {% if not p.default_um %}selected{% endif %}>— Select —</option>
+                      <option value="LB" {% if p.default_um == "LB" %}selected{% endif %}>LB</option>
+                      <option value="GAL" {% if p.default_um == "GAL" %}selected{% endif %}>GAL</option>
+                    </select>
+                  </td>
+
                   <td class="text-muted-small">
                     {{ (p.created_at[5:7] ~ "/" ~ p.created_at[8:10] ~ "/" ~ p.created_at[2:4]) if p.created_at else "—" }}
+                  </td>
+
+                  <td class="text-muted-small text-center row-save-status" style="font-size:12px;">
+                    —
                   </td>
                 </tr>
               {% endfor %}
@@ -192,15 +265,6 @@
           >
             Delete Selected
           </button>
-
-          <button
-            class="btn btn-primary btn-sm"
-            type="submit"
-            name="action"
-            value="save_products_table"
-          >
-            Save Changes
-          </button>
         </div>
       </form>
     {% else %}
@@ -211,6 +275,154 @@
 </div>
 
 <script>
+  // ── Duplicate product name detector ──
+  // Runs when a new product is added via the "Add One Product" form. Strips
+  // spaces, dashes, slashes, %, #, and other separator/noise characters
+  // before comparing, then scores similarity against every existing
+  // product name using a Levenshtein-distance ratio. Anything 85% or
+  // higher pops a warning instead of silently letting a near-duplicate
+  // (e.g. "Methanol-99%" vs "Methanol 99") slip into the system.
+  const ALL_PRODUCT_NAMES = {{ products | map(attribute='product') | list | tojson }};
+  const DUPE_MATCH_MAX_THRESHOLD = 85; // ceiling once names are long enough
+
+  function normalizeForDupeCheck(name) {
+    return String(name || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ""); // strips spaces, -, /, %, #, ., etc - letters/numbers only
+  }
+
+  function levenshteinDistance(a, b) {
+    const m = a.length;
+    const n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,     // deletion
+          dp[i][j - 1] + 1,     // insertion
+          dp[i - 1][j - 1] + cost // substitution
+        );
+      }
+    }
+    return dp[m][n];
+  }
+
+  function similarityPercent(nameA, nameB) {
+    const normA = normalizeForDupeCheck(nameA);
+    const normB = normalizeForDupeCheck(nameB);
+    if (!normA || !normB) return 0;
+    if (normA === normB) return 100;
+
+    const dist = levenshteinDistance(normA, normB);
+    const maxLen = Math.max(normA.length, normB.length);
+    if (maxLen === 0) return 100;
+
+    return Math.round((1 - dist / maxLen) * 100);
+  }
+
+  // Shorter names need a lower bar than a flat 85% - a single changed
+  // letter in a 3-letter word is already a 33% difference on its own, so
+  // a fixed threshold would almost never catch short-name typos/variants.
+  // Scales the required match percentage down as the shorter of the two
+  // compared names gets shorter.
+  function getDynamicThreshold(len) {
+    if (len <= 3) return 60;
+    if (len <= 5) return 70;
+    if (len <= 7) return 78;
+    return DUPE_MATCH_MAX_THRESHOLD;
+  }
+
+  function findBestDuplicateMatch(newName, existingNames) {
+    const list = Array.isArray(existingNames) ? existingNames : [];
+    const normNew = normalizeForDupeCheck(newName);
+    if (!normNew) return null;
+
+    let best = null;
+    list.forEach(function (existing) {
+      const normExisting = normalizeForDupeCheck(existing);
+      if (!normExisting) return;
+
+      const pct = similarityPercent(newName, existing);
+      const threshold = getDynamicThreshold(Math.min(normNew.length, normExisting.length));
+
+      if (pct >= threshold && (!best || pct > best.percent)) {
+        best = { name: existing, percent: pct };
+      }
+    });
+    return best;
+  }
+
+  // ── Warning modal ──
+  const dupeOverlay = document.getElementById("dupe-warning-overlay");
+  const dupeMatchNameEl = document.getElementById("dupe-warning-match-name");
+  const dupeAcceptBtn = document.getElementById("dupe-warning-accept-btn");
+  const dupeCancelBtn = document.getElementById("dupe-warning-cancel-btn");
+
+  let pendingDupeAcceptCallback = null;
+
+  function showDuplicateWarningModal(matchedName, onAccept) {
+    if (!dupeOverlay) return;
+    dupeMatchNameEl.textContent = matchedName;
+    pendingDupeAcceptCallback = onAccept;
+    dupeOverlay.style.display = "flex";
+  }
+
+  function hideDuplicateWarningModal() {
+    if (!dupeOverlay) return;
+    dupeOverlay.style.display = "none";
+    pendingDupeAcceptCallback = null;
+  }
+
+  if (dupeAcceptBtn) {
+    dupeAcceptBtn.addEventListener("click", function () {
+      const cb = pendingDupeAcceptCallback;
+      hideDuplicateWarningModal();
+      if (cb) cb();
+    });
+  }
+
+  if (dupeCancelBtn) {
+    dupeCancelBtn.addEventListener("click", function () {
+      hideDuplicateWarningModal();
+    });
+  }
+
+  // ── Wire into the "Add One Product" form ──
+  const singleAddForm = document.getElementById("single-add-form");
+  let singleAddBypassDupeCheck = false;
+
+  if (singleAddForm) {
+    singleAddForm.addEventListener("submit", function (e) {
+      if (singleAddBypassDupeCheck) {
+        singleAddBypassDupeCheck = false;
+        return; // user already accepted - let it through
+      }
+
+      const nameInput = singleAddForm.querySelector('input[name="product_name"]');
+      if (!nameInput) return;
+
+      const match = findBestDuplicateMatch(nameInput.value, ALL_PRODUCT_NAMES);
+      if (!match) return; // no close match - submit normally
+
+      e.preventDefault();
+      showDuplicateWarningModal(match.name, function () {
+        singleAddBypassDupeCheck = true;
+        if (singleAddForm.requestSubmit) {
+          singleAddForm.requestSubmit();
+        } else {
+          singleAddForm.submit();
+        }
+      });
+    });
+  }
+
   const singleBtn = document.getElementById("show-single-btn");
   const massBtn = document.getElementById("show-mass-btn");
   const singleSection = document.getElementById("single-add-section");
@@ -250,6 +462,127 @@
       document.querySelectorAll(".delete-product-check").forEach(function(cb) {
         cb.checked = selectAllProducts.checked;
       });
+    });
+  }
+
+  // ---- Autosave each product row as soon as the user leaves a field ----
+  // Replaces the old whole-table "Save Changes" button, which had a real
+  // problem: any other action that reloaded the page (like deleting a
+  // different product) would silently throw away whatever you'd typed but
+  // not yet explicitly saved. Saving per-row on blur means your edits are
+  // committed the moment you tab/click away from a field, so nothing gets
+  // wiped out by an unrelated action elsewhere on the page.
+
+  function setRowStatus(tr, text, isError) {
+    const status = tr.querySelector(".row-save-status");
+    if (!status) return;
+    status.textContent = text;
+    status.style.color = isError ? "#b91c1c" : "#16a34a";
+    status.style.fontWeight = "700";
+  }
+
+  function clearRowStatusSoon(tr) {
+    const status = tr.querySelector(".row-save-status");
+    if (!status) return;
+    setTimeout(function () {
+      status.textContent = "—";
+      status.style.color = "";
+      status.style.fontWeight = "";
+    }, 1800);
+  }
+
+  function saveProductRow(tr) {
+    if (!tr) return;
+
+    const productId = tr.getAttribute("data-product-id");
+    if (!productId) return;
+
+    const nameEl = tr.querySelector('[name="row_product_name"]');
+    const productName = nameEl ? nameEl.value.trim() : "";
+
+    if (!productName) {
+      setRowStatus(tr, "Name required", true);
+      return;
+    }
+
+    const payload = {
+      product_id: productId,
+      product: productName,
+      description: (tr.querySelector('[name="row_description"]') || {}).value || "",
+      lb_per_gal: (tr.querySelector('[name="row_lb_per_gal"]') || {}).value || "",
+      default_price: (tr.querySelector('[name="row_default_price"]') || {}).value || "",
+      default_um: (tr.querySelector('[name="row_default_um"]') || {}).value || ""
+    };
+
+    setRowStatus(tr, "Saving…", false);
+
+    fetch("{{ url_for('products_save_row') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+      .then(function (result) {
+        if (result.ok && result.data && result.data.ok) {
+          setRowStatus(tr, "Saved ✓", false);
+        } else {
+          const msg = (result.data && result.data.error) ? result.data.error : "Save failed";
+          setRowStatus(tr, msg, true);
+        }
+        clearRowStatusSoon(tr);
+      })
+      .catch(function () {
+        setRowStatus(tr, "Save failed", true);
+        clearRowStatusSoon(tr);
+      });
+  }
+
+  function toNum(v) {
+    if (v === null || v === undefined) return 0;
+    const s = String(v).replace("$", "").replace(/,/g, "").trim();
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+
+  const productsTableBody = document.querySelector(".product-row") ? document.querySelector(".product-row").closest("tbody") : null;
+
+  if (productsTableBody) {
+    // Default Price: if the box currently holds a zero value, clicking into
+    // it clears it immediately so you can just start typing. If it holds a
+    // real (non-zero) value, it's left alone - you have to backspace it out
+    // on purpose, same as any normal text field.
+    productsTableBody.addEventListener("focusin", function (e) {
+      const el = e.target;
+      if (!el.classList || !el.classList.contains("editable-default-price")) return;
+
+      if (toNum(el.value) === 0) {
+        el.value = "";
+      }
+    });
+
+    productsTableBody.addEventListener("focusout", function (e) {
+      const el = e.target;
+      if (!el.classList || !el.classList.contains("row-field")) return;
+
+      // If a Default Price box was cleared (via the auto-clear above, or
+      // manually) and left empty, put a real zero back before saving so
+      // the stored value stays numeric.
+      if (el.classList.contains("editable-default-price") && el.value.trim() === "") {
+        el.value = "0.0000";
+      }
+
+      const tr = el.closest("tr.product-row");
+      saveProductRow(tr);
+    });
+
+    // Dropdowns don't always fire a meaningful focusout on selection in
+    // every browser - also save immediately on change for the U/M select.
+    productsTableBody.addEventListener("change", function (e) {
+      const el = e.target;
+      if (!el.classList || !el.classList.contains("editable-default-um")) return;
+
+      const tr = el.closest("tr.product-row");
+      saveProductRow(tr);
     });
   }
 </script>

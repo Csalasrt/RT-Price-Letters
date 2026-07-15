@@ -124,6 +124,18 @@
     overflow: hidden;
   }
 
+  /* Narrower gaps between input slots in the detailed (in-depth) view -
+     the base app-wide table padding (10px 12px) left a lot of dead space
+     around each input box; this tightens just the horizontal padding
+     while keeping the row height/vertical padding the same. */
+  #quote-table td {
+    padding: 8px 4px;
+  }
+
+  #quote-table thead th {
+    padding: 8px 6px;
+  }
+
   #quote-table .form-control,
   #quote-table .form-select,
   #quote-table select,
@@ -201,6 +213,25 @@
   #quote-table tbody tr:focus-within td.selection-cell,
   #quote-table tbody tr:focus-within td.product-col-frozen {
     background: #eef4ff;
+  }
+
+  /* Frozen Final Price column - stays visible on the right while scrolling
+     horizontally through all the input columns, same idea as the frozen
+     Product column on the left. */
+  #quote-table th.final-price-section,
+  #quote-table td.final-price-section {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    box-shadow: -2px 0 3px rgba(0,0,0,0.06);
+  }
+
+  #quote-table thead th.final-price-section {
+    z-index: 4;
+  }
+
+  #quote-table tbody tr:focus-within td.final-price-section {
+    background: #eef4ff !important;
   }
 
   /* Simple highlight for whichever row the user is currently working in */
@@ -634,12 +665,14 @@
         <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
           <thead>
             <tr>
-              <th style="width:22%; text-align:left; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Product</th>
-              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Package Type</th>
-              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Our Cost</th>
-              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Margin</th>
-              <th style="width:15%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Sale Price</th>
-              <th style="width:18%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Final Price</th>
+              <th style="width:18%; text-align:left; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Product</th>
+              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Package Type</th>
+              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Our Cost</th>
+              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Margin</th>
+              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Price</th>
+              <th style="width:11%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Add. Shipping</th>
+              <th style="width:11%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Add. Packaging</th>
+              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Final Price</th>
             </tr>
           </thead>
           <tbody id="simple-view-tbody">
@@ -681,7 +714,7 @@
                   Final Cost
                 </th>
                 <th style="min-width:110px;" class="price-section section-divider-left">Margin %</th>
-                <th style="min-width:120px;" class="price-section">Sale Price</th>
+                <th style="min-width:120px;" class="price-section">Price</th>
                 <th style="min-width:120px;" class="price-section">Add. Shipping</th>
                 <th style="min-width:120px;" class="price-section section-divider-right">Add. Packaging</th>
                 <th style="min-width:130px;" class="final-price-section section-divider-left section-divider-right">Final Price</th>
@@ -1560,6 +1593,178 @@
   </script>
 {% endif %}
 
+<!-- DUPLICATE PRODUCT WARNING MODAL -->
+<div id="dupe-warning-overlay" style="display:none; position:fixed; inset:0; background:rgba(16,24,40,0.45); z-index:5000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; max-width:440px; width:92%; padding:24px; box-shadow:0 12px 32px rgba(16,24,40,0.25);">
+    <div style="font-weight:700; font-size:16px; margin-bottom:10px; color:#101828;">
+      Possible duplicate product
+    </div>
+    <div style="font-size:14px; color:#344054; line-height:1.5; margin-bottom:18px;">
+      This looks a lot like an existing product: <strong id="dupe-warning-match-name"></strong>.
+      Duplicate entries for the same product can cause pricing and reporting errors down the line.
+      If this is the same product, cancel and edit the name to match the existing one instead.
+      If it's genuinely a different product, you can continue.
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="dupe-warning-cancel-btn">
+        Cancel
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" id="dupe-warning-accept-btn">
+        Accept — Add Anyway
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Duplicate product name detector ──
+  // Strips spaces, dashes, slashes, %, #, and other separator/noise
+  // characters before comparing, then scores similarity against every
+  // existing product name using a Levenshtein-distance ratio, scaled down
+  // for short names. Pops a warning on Enter or when the user leaves a
+  // custom product name field.
+  const ALL_PRODUCT_NAMES = {{ products | map(attribute='product') | list | tojson }};
+  const DUPE_MATCH_MAX_THRESHOLD = 85; // ceiling once names are long enough
+
+  function normalizeForDupeCheck(name) {
+    return String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function levenshteinDistance(a, b) {
+    const m = a.length, n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[m][n];
+  }
+
+  function similarityPercent(nameA, nameB) {
+    const normA = normalizeForDupeCheck(nameA);
+    const normB = normalizeForDupeCheck(nameB);
+    if (!normA || !normB) return 0;
+    if (normA === normB) return 100;
+    const dist = levenshteinDistance(normA, normB);
+    const maxLen = Math.max(normA.length, normB.length);
+    if (maxLen === 0) return 100;
+    return Math.round((1 - dist / maxLen) * 100);
+  }
+
+  // Shorter names need a lower bar than a flat 85% - a single changed
+  // letter in a 3-letter word is already a 33% difference on its own.
+  // Scales the required match percentage down as the shorter of the two
+  // compared names gets shorter.
+  function getDynamicThreshold(len) {
+    if (len <= 3) return 60;
+    if (len <= 5) return 70;
+    if (len <= 7) return 78;
+    return DUPE_MATCH_MAX_THRESHOLD;
+  }
+
+  function findBestDuplicateMatch(newName, existingNames) {
+    const list = Array.isArray(existingNames) ? existingNames : [];
+    const normNew = normalizeForDupeCheck(newName);
+    if (!normNew) return null;
+
+    let best = null;
+    list.forEach(function (existing) {
+      const normExisting = normalizeForDupeCheck(existing);
+      if (!normExisting) return;
+
+      const pct = similarityPercent(newName, existing);
+      const threshold = getDynamicThreshold(Math.min(normNew.length, normExisting.length));
+
+      if (pct >= threshold && (!best || pct > best.percent)) {
+        best = { name: existing, percent: pct };
+      }
+    });
+    return best;
+  }
+
+  const dupeOverlay = document.getElementById("dupe-warning-overlay");
+  const dupeMatchNameEl = document.getElementById("dupe-warning-match-name");
+  const dupeAcceptBtn = document.getElementById("dupe-warning-accept-btn");
+  const dupeCancelBtn = document.getElementById("dupe-warning-cancel-btn");
+
+  let pendingDupeAccept = null;
+  let pendingDupeCancel = null;
+
+  function showDuplicateWarningModal(matchedName, onAccept, onCancel) {
+    if (!dupeOverlay) return;
+    dupeMatchNameEl.textContent = matchedName;
+    pendingDupeAccept = onAccept || null;
+    pendingDupeCancel = onCancel || null;
+    dupeOverlay.style.display = "flex";
+  }
+
+  function hideDuplicateWarningModal() {
+    if (!dupeOverlay) return;
+    dupeOverlay.style.display = "none";
+    pendingDupeAccept = null;
+    pendingDupeCancel = null;
+  }
+
+  if (dupeAcceptBtn) {
+    dupeAcceptBtn.addEventListener("click", function () {
+      const cb = pendingDupeAccept;
+      hideDuplicateWarningModal();
+      if (cb) cb();
+    });
+  }
+
+  if (dupeCancelBtn) {
+    dupeCancelBtn.addEventListener("click", function () {
+      const cb = pendingDupeCancel;
+      hideDuplicateWarningModal();
+      if (cb) cb();
+    });
+  }
+
+  // WeakSet (not a DOM attribute) so cloned rows - which copy attributes
+  // but not listeners - correctly get a fresh listener attached instead
+  // of being skipped as "already attached".
+  const dupeCheckAttachedInputs = new WeakSet();
+
+  function runDupeCheck(input) {
+    if (input.dataset.dupeModalOpen === "1") return; // modal already open for this field
+
+    const val = input.value;
+    if (!val || !val.trim()) return;
+
+    const match = findBestDuplicateMatch(val, ALL_PRODUCT_NAMES);
+    if (!match) return;
+
+    input.dataset.dupeModalOpen = "1";
+    showDuplicateWarningModal(
+      match.name,
+      function () { input.dataset.dupeModalOpen = ""; }, // Accept
+      function () { input.dataset.dupeModalOpen = ""; input.focus(); input.select(); } // Cancel
+    );
+  }
+
+  function attachDupeCheckOnBlur(input) {
+    if (!input || dupeCheckAttachedInputs.has(input)) return;
+    dupeCheckAttachedInputs.add(input);
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      runDupeCheck(input);
+    });
+
+    input.addEventListener("blur", function () {
+      runDupeCheck(input);
+    });
+  }
+</script>
+
 <script>
   function setPrinterAction(actionValue) {
     const actionInput = document.getElementById("printer-action");
@@ -1844,7 +2049,10 @@
     savePrinterDraftState();
 
     const nameInput = tr.querySelector('[name="row_product"]');
-    if (nameInput) nameInput.focus();
+    if (nameInput) {
+      nameInput.focus();
+      attachDupeCheckOnBlur(nameInput);
+    }
   }
 
   function duplicateCustomRow(btn) {
@@ -1856,6 +2064,9 @@
     const dupBtn = clone.querySelector(".duplicate-btn");
     if (dupBtn) dupBtn.onclick = function() { duplicateCustomRow(this); };
     origTr.insertAdjacentElement("afterend", clone);
+
+    const clonedNameInput = clone.querySelector('[name="row_product"]');
+    if (clonedNameInput) attachDupeCheckOnBlur(clonedNameInput);
   }
 
   // Product name (normalized: trimmed, lowercased, single-spaced) -> last
@@ -1954,6 +2165,8 @@
       const costEl     = tr.querySelector('input[name="row_cost"]');
       const marginEl   = tr.querySelector('input[name="row_margin"]');
       const priceEl    = tr.querySelector('input[name="row_price"]');
+      const addShipEl  = tr.querySelector('input[name="row_add_shipping"]');
+      const addPackEl  = tr.querySelector('input[name="row_add_packaging"]');
       const finalEl    = tr.querySelector('input[name="row_final"]');
 
       const product   = productEl ? productEl.value : "";
@@ -1964,6 +2177,8 @@
       const cost      = fmtMoney(costRaw);
       const margin    = fmtPercent(marginRaw);
       const price     = fmtMoney(priceRaw);
+      const addShip   = fmtMoney(addShipEl ? addShipEl.value : "0");
+      const addPack   = fmtMoney(addPackEl ? addPackEl.value : "0");
       const finalVal  = fmtMoney(finalEl ? finalEl.value : "0");
 
       const lmEntry = lastMonthLookup[lastMonthLookupKey(product, packageEl ? packageEl.value : "")] || null;
@@ -1990,6 +2205,8 @@
             <div style="font-weight:600;">${price}</div>
             ${priceSubtext}
           </td>
+          <td style="text-align:center; padding:8px 10px; font-size:13px;">${addShip}</td>
+          <td style="text-align:center; padding:8px 10px; font-size:13px;">${addPack}</td>
           <td style="text-align:center; padding:8px 10px; font-size:13px;">${finalVal}</td>
         </tr>
       `;
