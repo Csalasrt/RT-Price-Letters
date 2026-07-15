@@ -1457,6 +1457,16 @@ def get_printer_product_options(month_key: str):
     month_key, priced_products = get_product_costs_for_month(month_key)
     company_products = load_company_products() or []
 
+    # Only products that currently exist in the master Products list are
+    # ever valid options here - a product with leftover pricing history
+    # for this month should NOT reappear in the dropdown just because a
+    # price was saved before it got deleted.
+    valid_keys = {
+        normalize_product_name(item.get("product"))
+        for item in company_products
+        if (item.get("product") or "").strip()
+    }
+
     options = []
     seen = set()
 
@@ -1490,6 +1500,10 @@ def get_printer_product_options(month_key: str):
             continue
 
         key = normalize_product_name(product_name)
+
+        if key not in valid_keys:
+            # Deleted product with stale pricing history - skip entirely.
+            continue
 
         replaced = False
         for i, existing in enumerate(options):
