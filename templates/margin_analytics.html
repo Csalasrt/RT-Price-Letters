@@ -1,250 +1,850 @@
 {% extends "base.html" %}
 {% block content %}
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <style>
-.page-wrap{
-  padding:20px;
-}
-
-.card{
-  border:1px solid #d1d5db;
-  margin-bottom:18px;
-}
-
-.card-body{
-  padding:18px;
-}
-
-.title{
-  font-size:24px;
-  font-weight:700;
-  margin-bottom:12px;
-}
-
-.charts-row{
-  display:grid;
-  grid-template-columns:repeat(3, minmax(0, 1fr));
-  gap:18px;
-  margin-bottom:18px;
-}
-
-.chart-box{
-  position:relative;
-  height:300px;
-  width:100%;
-  min-height:300px;
-  max-height:300px;
-}
-
-.table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-.table th, .table td{
-  border:1px solid #d1d5db;
-  padding:8px;
-  text-align:center;
-}
-
-.chart-title{
-  font-size:16px;
-  font-weight:700;
-  margin-bottom:10px;
-}
-
-@media (max-width: 1100px){
-  .charts-row{
-    grid-template-columns:1fr;
+  .analytics-wrap{
+    width:100%;
+    max-width:none;
+    margin:0;
+    padding:0 8px 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
-}
+
+  .analytics-card{
+    background:#fff;
+    border:1px solid #d1d5db;
+    border-radius:0;
+    box-shadow:none;
+    margin-bottom:14px;
+  }
+
+  .analytics-card .card-body{
+    padding:14px 16px;
+  }
+
+  .analytics-title{
+    font-size:20px;
+    font-weight:700;
+    margin-bottom:3px;
+    letter-spacing:-.01em;
+  }
+
+  .analytics-subtitle{
+    font-size:12.5px;
+    color:#6b7280;
+    margin-bottom:12px;
+  }
+
+  .analytics-grid{
+    display:grid;
+    grid-template-columns: repeat(5, minmax(160px, 1fr));
+    gap:10px;
+    align-items:end;
+  }
+
+  .analytics-field label{
+    display:block;
+    font-size:10.5px;
+    font-weight:700;
+    margin-bottom:4px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:#4b5563;
+  }
+
+  .analytics-field input,
+  .analytics-field select{
+    width:100%;
+    height:34px;
+    border:1px solid #cbd5e1;
+    border-radius:0;
+    padding:6px 8px;
+    font-size:13px;
+    background:#fff;
+  }
+
+  .analytics-summary{
+    display:grid;
+    grid-template-columns: repeat(6, minmax(160px, 1fr));
+    gap:10px;
+  }
+
+  .analytics-stat{
+    border:1px solid #d1d5db;
+    background:#f9fafb;
+    padding:10px 12px;
+  }
+
+  .analytics-stat-label{
+    font-size:10.5px;
+    font-weight:700;
+    color:#6b7280;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    margin-bottom:5px;
+  }
+
+  .analytics-stat-value{
+    font-size:20px;
+    font-weight:700;
+    letter-spacing:-.01em;
+  }
+
+  .analytics-table-wrap{
+    overflow-x:auto;
+  }
+
+  .analytics-table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:1100px;
+  }
+
+  .analytics-table th{
+    background:#f3f4f6;
+    border:1px solid #d1d5db;
+    padding:8px;
+    text-align:center;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.03em;
+  }
+
+  .analytics-table td{
+    border:1px solid #d1d5db;
+    padding:6px 8px;
+    text-align:center;
+    font-size:13px;
+  }
+
+  .section-heading{
+    font-size:14px;
+    font-weight:700;
+    margin-bottom:10px;
+    letter-spacing:.02em;
+    color:#111827;
+  }
+
+  @media (max-width: 1200px){
+    .analytics-grid,
+    .analytics-summary{
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
+    }
+  }
+
+  /* ── Ticker chart card ── */
+  .ticker-card{
+    position:relative;
+    background:#ffffff;
+    border:1px solid #d1d5db !important;
+    padding:16px 18px !important;
+  }
+
+  .ticker-mono{
+    font-family: "SF Mono", "Courier New", ui-monospace, monospace;
+  }
+
+  .ticker-view-switch{
+    position:absolute;
+    top:14px;
+    right:16px;
+    display:flex;
+    gap:3px;
+    background:#f3f4f6;
+    border:1px solid #d1d5db;
+    padding:2px;
+    z-index:5;
+  }
+
+  .ticker-view-btn{
+    border:none;
+    background:transparent;
+    font-family: "SF Mono", "Courier New", ui-monospace, monospace;
+    font-size:10.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:#6b7280;
+    padding:5px 10px;
+    cursor:pointer;
+  }
+
+  .ticker-view-btn:hover:not(.active):not(:disabled){
+    color:#111827;
+  }
+
+  .ticker-view-btn.active{
+    background:#fff;
+    color:#111827;
+    box-shadow:0 1px 2px rgba(0,0,0,0.10);
+  }
+
+  .ticker-view-btn:disabled{
+    opacity:.35;
+    cursor:not-allowed;
+  }
+
+  .ticker-header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-bottom:14px;
+    padding-right:150px;
+  }
+
+  .ticker-label{
+    font-size:10.5px;
+    font-weight:700;
+    color:#6b7280;
+    text-transform:uppercase;
+    letter-spacing:.09em;
+    margin-bottom:5px;
+  }
+
+  .ticker-value{
+    font-size:32px;
+    font-weight:700;
+    color:#111827;
+    line-height:1;
+    letter-spacing:-.01em;
+  }
+
+  .ticker-delta{
+    font-size:13px;
+    font-weight:700;
+    padding:3px 8px;
+    display:inline-block;
+    margin-left:10px;
+    border-radius:2px;
+    vertical-align:middle;
+  }
+
+  .ticker-delta.up   { color:#15803d; background:rgba(34,197,94,0.14); }
+  .ticker-delta.down { color:#b91c1c; background:rgba(239,68,68,0.14); }
+  .ticker-delta.flat { color:#6b7280; background:rgba(156,163,175,0.14); }
+
+  .ticker-meta{
+    font-size:11px;
+    color:#6b7280;
+    text-align:right;
+  }
+
+  .ticker-legend{
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px;
+    font-size:10.5px;
+    color:#6b7280;
+    justify-content:flex-start;
+    margin-bottom:8px;
+  }
+
+  .ticker-legend .dot{
+    display:inline-block;
+    width:7px;
+    height:7px;
+    border-radius:50%;
+    margin-right:5px;
+  }
+
+  .ticker-canvas-wrap{
+    position:relative;
+    width:100%;
+    height:340px;
+  }
+
+  #marginTickerChart{
+    display:block;
+    width:100%;
+    height:100%;
+  }
+
+  .ticker-empty{
+    color:#9ca3af;
+    font-size:12.5px;
+    text-align:center;
+    padding-top:100px;
+  }
 </style>
 
-<div class="page-wrap">
-
-  <div class="card">
+<div class="analytics-wrap">
+  <div class="analytics-card">
     <div class="card-body">
-      <div class="title">
-        Margin Analytics{% if product %} - {{ product }}{% endif %}{% if analytics_um %} ({{ analytics_um }}){% endif %}
-      </div>
+      <div class="analytics-title">Analytics</div>
+      <div class="analytics-subtitle">Review saved margin history by product, customer, and pricing date.</div>
 
       <form method="GET">
-        <select name="product" onchange="this.form.submit()">
-          <option value="">Select Product</option>
-          {% for p in product_options %}
-            <option value="{{ p }}" {% if product == p %}selected{% endif %}>
-              {{ p }}
-            </option>
-          {% endfor %}
-        </select>
+        <div class="analytics-grid">
+          <div class="analytics-field">
+            <label>Product</label>
+            <select name="product">
+              <option value="">All Products</option>
+              {% for item in filter_options.products %}
+                <option value="{{ item }}" {% if filters.product == item %}selected{% endif %}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="analytics-field">
+            <label>Customer</label>
+            <select name="customer">
+              <option value="">All Customers</option>
+              {% for item in filter_options.customers %}
+                <option value="{{ item }}" {% if filters.customer == item %}selected{% endif %}>{{ item }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="analytics-field">
+            <label>U/M</label>
+            <select name="um">
+              <option value="">All</option>
+              <option value="LB" {% if filters.um == "LB" %}selected{% endif %}>LB</option>
+              <option value="GAL" {% if filters.um == "GAL" %}selected{% endif %}>GAL</option>
+              <option value="EACH" {% if filters.um == "EACH" %}selected{% endif %}>EACH</option>
+            </select>
+          </div>
+
+          <div class="analytics-field">
+            <label>Start Date</label>
+            <input type="date" name="start_date" value="{{ filters.start_date }}">
+          </div>
+
+          <div class="analytics-field">
+            <label>End Date</label>
+            <input type="date" name="end_date" value="{{ filters.end_date }}">
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px;">
+          <a href="{{ url_for('margin_analytics_page') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+          <button type="submit" class="btn btn-primary btn-sm">Apply Filters</button>
+        </div>
       </form>
     </div>
   </div>
 
-  {% if chart_data %}
-
-  <div class="charts-row">
-
-    <!-- COST -->
-    <div class="card">
-      <div class="card-body">
-        <div class="chart-title">Cost Over Time{% if analytics_um %} ({{ analytics_um }}){% endif %}</div>
-        <div class="chart-box">
-            <canvas id="costChart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- FINAL -->
-    <div class="card">
-      <div class="card-body">
-        <div class="chart-title">Final Price Over Time{% if analytics_um %} ({{ analytics_um }}){% endif %}</div>
-        <div class="chart-box">
-            <canvas id="finalChart"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- COMBINED -->
-    <div class="card">
-      <div class="card-body">
-        <div class="chart-title">Cost vs Final Price{% if analytics_um %} ({{ analytics_um }}){% endif %}</div>
-        <div class="chart-box">
-            <canvas id="combinedChart"></canvas>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- TABLE -->
-  <div class="card">
+  <div class="analytics-card">
     <div class="card-body">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Customer</th> <!-- ✅ ADDED -->
-            <th>Saved U/M</th>
-            <th>Chart U/M</th>
-            <th>Cost</th>
-            <th>Final Price</th>
-            <th>Margin %</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in records %}
-          <tr>
-            <td>{{ r.pricing_date }}</td>
-            <td>{{ r.customer or '-' }}</td> <!-- ✅ ADDED -->
-            <td>{{ r.saved_um or '-' }}</td>
-            <td>{{ r.default_um or '-' }}</td>
-            <td>{{ '%.4f'|format(r.normalized_cost or 0) }}</td>
-            <td>{{ '%.4f'|format(r.normalized_final_price or 0) }}</td>
-            <td>{{ '%.2f'|format(r.margin_pct or 0) }}%</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="analytics-summary">
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Records</div>
+          <div class="analytics-stat-value">{{ summary.count }}</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Avg Margin %</div>
+          <div class="analytics-stat-value">{{ '%.2f'|format(summary.avg_margin_pct or 0) }}%</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Avg Cost</div>
+          <div class="analytics-stat-value">{{ '%.4f'|format(summary.avg_cost or 0) }}</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Avg Final Price</div>
+          <div class="analytics-stat-value">{{ '%.4f'|format(summary.avg_final_price or 0) }}</div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Best Margin %</div>
+          <div class="analytics-stat-value">
+            {% if summary.best_margin_pct is not none %}{{ '%.2f'|format(summary.best_margin_pct) }}%{% else %}-{% endif %}
+          </div>
+        </div>
+        <div class="analytics-stat">
+          <div class="analytics-stat-label">Latest Date</div>
+          <div class="analytics-stat-value">{{ summary.latest_pricing_date or "-" }}</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  {% endif %}
+  <div class="analytics-card">
+    <div class="card-body ticker-card">
+      <div class="ticker-view-switch" id="ticker-view-switch">
+        <button type="button" class="ticker-view-btn" data-view="cost_price">Cost vs Price</button>
+        <button type="button" class="ticker-view-btn active" data-view="margin">Margin %</button>
+        <button type="button" class="ticker-view-btn" data-view="candle">Range</button>
+      </div>
+
+      <div class="ticker-header">
+        <div>
+          <div class="ticker-label ticker-mono">
+            <span id="ticker-scope">{{ filters.product or "All Products" }}</span> — <span id="ticker-metric-label">Margin % Trend</span>
+          </div>
+          <div>
+            <span class="ticker-value ticker-mono" id="ticker-value">--</span><span class="ticker-delta ticker-mono" id="ticker-delta"></span>
+          </div>
+        </div>
+        <div class="ticker-meta ticker-mono">
+          <div id="ticker-range"></div>
+        </div>
+      </div>
+
+      <div class="ticker-legend ticker-mono" id="ticker-legend"></div>
+
+      <div class="ticker-canvas-wrap">
+        <canvas id="marginTickerChart"></canvas>
+        <div class="ticker-empty ticker-mono" id="ticker-empty" style="display:none;">NO DATA FOR CURRENT FILTERS</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="analytics-card">
+    <div class="card-body">
+      <div class="section-heading">Product Rollup</div>
+      <div class="analytics-table-wrap">
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Entries</th>
+              <th>Avg Margin %</th>
+              <th>Avg Cost</th>
+              <th>Avg Final Price</th>
+              <th>Latest Pricing Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in product_rollup %}
+            <tr>
+              <td>{{ row.product }}</td>
+              <td>{{ row.count }}</td>
+              <td>{{ '%.2f'|format(row.avg_margin_pct or 0) }}%</td>
+              <td>{{ '%.4f'|format(row.avg_cost or 0) }}</td>
+              <td>{{ '%.4f'|format(row.avg_final_price or 0) }}</td>
+              <td>{{ row.latest_pricing_date or '-' }}</td>
+            </tr>
+            {% endfor %}
+            {% if not product_rollup %}
+            <tr>
+              <td colspan="6">No analytics data found.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="analytics-card">
+    <div class="card-body">
+      <div class="section-heading">Saved Margin History</div>
+      <div class="analytics-table-wrap">
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Customer Name</th>
+              <th>U/M</th>
+              <th>Product</th>
+              <th>Source</th>
+              <th>Cost</th>
+              <th>Final Price</th>
+              <th>Margin %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in records|reverse %}
+            <tr>
+              <td>{{ row.pricing_date or '-' }}</td>
+              <td>{{ row.customer or '-' }}</td>
+              <td>{{ row.um or '-' }}</td>
+              <td>{{ row.product or '-' }}</td>
+              <td>{{ row.source or '-' }}</td>
+              <td>{{ '%.4f'|format(row.cost or 0) }}</td>
+              <td>{{ '%.4f'|format(row.final_price or 0) }}</td>
+              <td>{{ '%.2f'|format(row.margin_pct or 0) }}%</td>
+            </tr>
+            {% endfor %}
+            {% if not records %}
+            <tr>
+              <td colspan="8">No saved margin history yet.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 
+
 <script>
-const data = {{ chart_data|tojson }};
-
-const labels = data.map(d => d.date);
-const cost = data.map(d => d.cost);
-const finalPrice = data.map(d => d.final_price);
-
-// COST CHART
-new Chart(document.getElementById('costChart'), {
-  type: 'line',
-  data: {
-    labels,
-    datasets: [{
-      label: 'Cost',
-      data: cost,
-      tension: 0.3
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false
-    },
-    plugins: {
-      tooltip: {
-        enabled: true
-      }
-    }
-  }
-});
-
-// FINAL PRICE CHART
-new Chart(document.getElementById('finalChart'), {
-  type: 'line',
-  data: {
-    labels,
-    datasets: [{
-      label: 'Final Price',
-      data: finalPrice,
-      tension: 0.3
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false
-    },
-    plugins: {
-      tooltip: {
-        enabled: true
-      }
-    }
-  }
-});
-
-// COMBINED CHART
-new Chart(document.getElementById('combinedChart'), {
-  type: 'line',
-  data: {
-    labels,
-    datasets: [
-      {
-        label: 'Cost',
-        data: cost,
-        tension: 0.3
-      },
-      {
-        label: 'Final Price',
-        data: finalPrice,
-        tension: 0.3
-      }
-    ]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false
-    },
-    plugins: {
-      tooltip: {
-        enabled: true
-      }
-    }
-  }
-});
+  // Self-contained canvas line chart - no external chart library, so
+  // nothing can silently fail to load from a CDN. Renders directly with
+  // the browser's Canvas API.
+  const CHART_DATA = {{ chart_data | tojson }};
 </script>
+
+<script>
+  (function () {
+    const canvas    = document.getElementById("marginTickerChart");
+    const emptyEl   = document.getElementById("ticker-empty");
+    const valueEl   = document.getElementById("ticker-value");
+    const deltaEl   = document.getElementById("ticker-delta");
+    const rangeEl   = document.getElementById("ticker-range");
+    const metricEl  = document.getElementById("ticker-metric-label");
+    const legendEl  = document.getElementById("ticker-legend");
+    const switchEl  = document.getElementById("ticker-view-switch");
+
+    if (!canvas) return;
+
+    const points = (Array.isArray(CHART_DATA) ? CHART_DATA : [])
+      .filter(function (p) { return p && p.pricing_date; })
+      .sort(function (a, b) {
+        if (a.pricing_date < b.pricing_date) return -1;
+        if (a.pricing_date > b.pricing_date) return 1;
+        return 0;
+      });
+
+    if (!points.length) {
+      canvas.style.display = "none";
+      emptyEl.style.display = "block";
+      emptyEl.textContent = "NO DATA FOR CURRENT FILTERS";
+      if (switchEl) switchEl.style.display = "none";
+      return;
+    }
+
+    const labels = points.map(function (p) { return p.pricing_date; });
+
+    // ---- view definitions - drop a new key in here for the third chart later ----
+    const VIEWS = {
+      margin: {
+        metricLabel: "Margin % Trend",
+        valueKey: "margin_pct",
+        valueFmt: function (v) { return v.toFixed(2) + "%"; },
+        deltaFmt: function (v) { return Math.abs(v).toFixed(2) + "%"; },
+        axisFmt: function (v) { return v.toFixed(1) + "%"; },
+        series: [
+          {
+            key: "margin_pct",
+            label: "Margin %",
+            fill: true,
+            trendColor: true // color follows up/down vs previous point
+          }
+        ]
+      },
+      cost_price: {
+        metricLabel: "Cost vs Price",
+        valueKey: "final_price",
+        valueFmt: function (v) { return "$" + v.toFixed(4); },
+        deltaFmt: function (v) { return "$" + Math.abs(v).toFixed(4); },
+        axisFmt: function (v) { return "$" + v.toFixed(2); },
+        series: [
+          { key: "cost", label: "Cost", color: "#6b7280", dashed: true, fill: false },
+          { key: "final_price", label: "Price", fill: true, trendColor: true }
+        ]
+      },
+      candle: {
+        metricLabel: "Cost / Price Range",
+        type: "candle",
+        topKey: "final_price",
+        bottomKey: "cost",
+        valueKey: "margin_pct",
+        valueFmt: function (v) { return v.toFixed(2) + "%"; },
+        deltaFmt: function (v) { return Math.abs(v).toFixed(2) + "%"; },
+        axisFmt: function (v) { return "$" + v.toFixed(2); },
+        series: [
+          { key: "cost", label: "Cost" },
+          { key: "final_price", label: "Price" }
+        ],
+        legendItems: [
+          { color: "#111827", label: "Price (top cap)" },
+          { color: "#6b7280", label: "Cost (bottom cap)" },
+          { color: "#dc2626", label: "Margin < 5%" },
+          { color: "#d97706", label: "Margin 5\u201315%" },
+          { color: "#16a34a", label: "Margin > 15%" }
+        ]
+      }
+    };
+
+    let currentView = "margin";
+
+    const gridColor      = "#e5e7eb";
+    const axisTextColor  = "#6b7280";
+    const font            = "10px SF Mono, Courier New, monospace";
+    const PAD_LEFT   = 54;
+    const PAD_RIGHT  = 16;
+    const PAD_TOP    = 14;
+    const PAD_BOTTOM = 24;
+
+    function trendColorFor(key) {
+      const last = points[points.length - 1][key];
+      const prevPt = points.length > 1 ? points[points.length - 2][key] : null;
+      const down = prevPt !== null && last < prevPt;
+      return {
+        line: down ? "#dc2626" : "#16a34a",
+        fill: down ? "rgba(220,38,38,0.10)" : "rgba(22,163,74,0.10)"
+      };
+    }
+
+    function candleColor(marginPct) {
+      if (marginPct < 5)  return { fill: "rgba(220,38,38,0.72)",  stroke: "#dc2626" };
+      if (marginPct < 15) return { fill: "rgba(217,119,6,0.72)",  stroke: "#d97706" };
+      return                     { fill: "rgba(22,163,74,0.72)", stroke: "#16a34a" };
+    }
+
+    function niceTicks(lo, hi, count) {
+      const step = (hi - lo) / (count - 1);
+      const out = [];
+      for (let i = 0; i < count; i++) out.push(lo + step * i);
+      return out;
+    }
+
+    function updateHeader(view) {
+      const cfg = VIEWS[view];
+      metricEl.textContent = cfg.metricLabel;
+
+      const latest = points[points.length - 1][cfg.valueKey];
+      const prev   = points.length > 1 ? points[points.length - 2][cfg.valueKey] : null;
+      const delta  = prev !== null ? (latest - prev) : 0;
+
+      valueEl.textContent = cfg.valueFmt(latest);
+
+      if (prev !== null) {
+        const dir   = delta > 0.0005 ? "up" : (delta < -0.0005 ? "down" : "flat");
+        const arrow = dir === "up" ? "▲" : (dir === "down" ? "▼" : "—");
+        deltaEl.className = "ticker-delta ticker-mono " + dir;
+        deltaEl.textContent = arrow + " " + cfg.deltaFmt(delta);
+      } else {
+        deltaEl.textContent = "";
+      }
+
+      rangeEl.textContent = labels[0] + "   →   " + labels[labels.length - 1] + "   (" + points.length + " pts)";
+
+      legendEl.innerHTML = (cfg.legendItems || cfg.series).map(function (s) {
+        const color = s.color || (s.trendColor ? trendColorFor(s.key).line : "#6b7280");
+        return '<span><span class="dot" style="background:' + color + ';"></span>' + s.label + '</span>';
+      }).join("");
+    }
+
+    function draw(view) {
+      const cfg = VIEWS[view];
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.max(rect.width, 100);
+      const h = Math.max(rect.height, 100);
+
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      const plotW = w - PAD_LEFT - PAD_RIGHT;
+      const plotH = h - PAD_TOP - PAD_BOTTOM;
+
+      // shared single axis across every series in this view
+      let lo = Infinity, hi = -Infinity;
+      cfg.series.forEach(function (s) {
+        points.forEach(function (p) {
+          const v = p[s.key];
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+        });
+      });
+      if (lo === hi) { lo -= 1; hi += 1; }
+      const pad = (hi - lo) * 0.12 || 1;
+      lo -= pad; hi += pad;
+
+      function xAt(i) {
+        if (points.length === 1) return PAD_LEFT + plotW / 2;
+        return PAD_LEFT + (plotW * i) / (points.length - 1);
+      }
+      function yAt(v) {
+        return PAD_TOP + plotH - ((v - lo) / (hi - lo)) * plotH;
+      }
+
+      // ---- grid + y-axis labels ----
+      const ticks = niceTicks(lo, hi, 5);
+      ctx.font = font;
+      ctx.textBaseline = "middle";
+      ctx.strokeStyle = gridColor;
+      ctx.lineWidth = 1;
+
+      ticks.forEach(function (t) {
+        const y = yAt(t);
+        ctx.beginPath();
+        ctx.moveTo(PAD_LEFT, y);
+        ctx.lineTo(w - PAD_RIGHT, y);
+        ctx.stroke();
+
+        ctx.fillStyle = axisTextColor;
+        ctx.textAlign = "right";
+        ctx.fillText(cfg.axisFmt(t), PAD_LEFT - 8, y);
+      });
+
+      // ---- x-axis labels ----
+      const maxLabels = Math.max(2, Math.floor(plotW / 70));
+      const step = Math.max(1, Math.ceil(points.length / maxLabels));
+      ctx.fillStyle = axisTextColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (let i = 0; i < points.length; i += step) {
+        ctx.fillText(labels[i], xAt(i), h - PAD_BOTTOM + 8);
+      }
+      ctx.fillText(labels[points.length - 1], xAt(points.length - 1), h - PAD_BOTTOM + 8);
+
+      // ---- draw series (candle bars, or line series) ----
+      if (cfg.type === "candle") {
+        const n = points.length;
+        const slotW = plotW / n;
+        const barW  = Math.max(6, Math.min(34, slotW * 0.6));
+        const capW  = barW * 1.7;
+        const capH  = 3;
+
+        points.forEach(function (p, i) {
+          const cx = xAt(i);
+          const priceY = yAt(p[cfg.topKey]);
+          const costY  = yAt(p[cfg.bottomKey]);
+          const barTop = Math.min(priceY, costY);
+          const barH   = Math.max(2, Math.abs(costY - priceY));
+
+          const c = candleColor(p.margin_pct);
+
+          // connecting body - thin, so the caps read as the real data points
+          ctx.fillStyle = c.fill;
+          ctx.fillRect(cx - barW / 2, barTop, barW, barH);
+          ctx.strokeStyle = c.stroke;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(cx - barW / 2, barTop, barW, barH);
+
+          // Price cap (top) - dark, sits exactly at the sales price value
+          ctx.fillStyle = "#111827";
+          ctx.fillRect(cx - capW / 2, priceY - capH / 2, capW, capH);
+
+          // Cost cap (bottom) - gray, sits exactly at the cost value
+          ctx.fillStyle = "#6b7280";
+          ctx.fillRect(cx - capW / 2, costY - capH / 2, capW, capH);
+
+          if (barH > 15) {
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "9px SF Mono, Courier New, monospace";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(p.margin_pct.toFixed(1) + "%", cx, barTop + barH / 2);
+          }
+        });
+      } else {
+        cfg.series.forEach(function (s) {
+          const values = points.map(function (p) { return p[s.key]; });
+          const colors = s.trendColor ? trendColorFor(s.key) : { line: s.color, fill: s.color };
+
+          if (s.fill) {
+            ctx.beginPath();
+            values.forEach(function (v, i) {
+              const x = xAt(i), y = yAt(v);
+              if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.lineTo(xAt(points.length - 1), PAD_TOP + plotH);
+            ctx.lineTo(xAt(0), PAD_TOP + plotH);
+            ctx.closePath();
+            ctx.fillStyle = colors.fill;
+            ctx.fill();
+          }
+
+          ctx.setLineDash(s.dashed ? [4, 4] : []);
+          ctx.beginPath();
+          values.forEach(function (v, i) {
+            const x = xAt(i), y = yAt(v);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.strokeStyle = colors.line;
+          ctx.lineWidth = s.dashed ? 1.5 : 2;
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          const lastX = xAt(points.length - 1);
+          const lastY = yAt(values[values.length - 1]);
+          ctx.beginPath();
+          ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = colors.line;
+          ctx.fill();
+        });
+      }
+
+      canvas._chartGeom = { xAt: xAt, yAt: yAt, plotW: plotW, plotH: plotH, w: w, h: h, view: view };
+    }
+
+    function render(view) {
+      currentView = view;
+      updateHeader(view);
+      draw(view);
+    }
+
+    render(currentView);
+
+    let resizeTimer = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () { draw(currentView); }, 100);
+    });
+
+    // ---- view switch buttons ----
+    if (switchEl) {
+      switchEl.querySelectorAll(".ticker-view-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (btn.disabled) return;
+          const view = btn.getAttribute("data-view");
+          if (!VIEWS[view] || view === currentView) return;
+
+          switchEl.querySelectorAll(".ticker-view-btn").forEach(function (b) {
+            b.classList.remove("active");
+          });
+          btn.classList.add("active");
+          render(view);
+        });
+      });
+    }
+
+    // ---- hover crosshair + tooltip ----
+    const tooltip = document.createElement("div");
+    tooltip.style.cssText =
+      "position:absolute; display:none; pointer-events:none; z-index:20;" +
+      "background:#111827; color:#f9fafb; border:1px solid #1f2937; border-radius:3px;" +
+      "padding:6px 9px; font:11px SF Mono, Courier New, monospace; white-space:nowrap;";
+    canvas.parentElement.style.position = "relative";
+    canvas.parentElement.appendChild(tooltip);
+
+    canvas.addEventListener("mousemove", function (e) {
+      const geom = canvas._chartGeom;
+      if (!geom) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+
+      let nearest = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < points.length; i++) {
+        const dist = Math.abs(geom.xAt(i) - mx);
+        if (dist < bestDist) { bestDist = dist; nearest = i; }
+      }
+
+      const p = points[nearest];
+      const cfg = VIEWS[currentView];
+      tooltip.style.display = "block";
+      tooltip.style.left = (geom.xAt(nearest) + 10) + "px";
+      tooltip.style.top = "8px";
+
+      let lines = [p.pricing_date];
+      cfg.series.forEach(function (s) {
+        lines.push(s.label + ": " + cfg.axisFmt(p[s.key]));
+      });
+      if (cfg.type === "candle") {
+        lines.push("Margin: " + p.margin_pct.toFixed(2) + "%");
+      }
+      if (p.product) lines.push(p.product);
+
+      tooltip.innerHTML = lines.join("<br>");
+    });
+
+    canvas.addEventListener("mouseleave", function () {
+      tooltip.style.display = "none";
+    });
+  })();
+</script>
+
 
 {% endblock %}

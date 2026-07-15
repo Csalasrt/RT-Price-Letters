@@ -7451,63 +7451,31 @@ def analytics_page():
 @app.route("/margin-analytics", methods=["GET"])
 @login_required
 def margin_analytics_page():
-    product = (request.args.get("product") or "").strip()
+    filters = {
+        "product": (request.args.get("product") or "").strip(),
+        "customer": (request.args.get("customer") or "").strip(),
+        "source": "",  # source filtering disabled - always includes all sources
+        "um": (request.args.get("um") or "").strip(),
+        "start_date": (request.args.get("start_date") or "").strip(),
+        "end_date": (request.args.get("end_date") or "").strip(),
+    }
 
-    store = load_margin_history()
-    records = store.get("records", []) or []
-
-    product_options = sorted({
-        str(r.get("product") or "").strip()
-        for r in records
-        if str(r.get("product") or "").strip()
-    }, key=lambda x: x.lower())
-
-    filtered = []
-    for r in records:
-        if not is_meaningful_margin_record(r):
-            continue
-
-        if product and normalize_product_name(r.get("product")) != normalize_product_name(product):
-            continue
-
-        filtered.append(r)
-
-    filtered.sort(key=lambda r: (
-        normalize_pricing_date(r.get("pricing_date")),
-        int(r.get("entry_seq") or 0)
-    ))
-
-    normalized_records = []
-    for r in filtered:
-        normalized = normalize_margin_record_for_analytics(r)
-        if isinstance(normalized, dict):
-            normalized_records.append(normalized)
-
-    chart_data = []
-    for r in normalized_records:
-        chart_data.append({
-            "date": normalize_pricing_date(r.get("pricing_date")),
-            "cost": round(to_float(r.get("normalized_cost"), 0.0), 4),
-            "final_price": round(to_float(r.get("normalized_final_price"), 0.0), 4),
-            "margin": round(to_float(r.get("margin_pct"), 0.0), 2),
-            "default_um": r.get("default_um", ""),
-            "saved_um": r.get("saved_um", ""),
-        })
-
-    analytics_um = ""
-    if normalized_records:
-        analytics_um = normalized_records[0].get("default_um", "")
+    records = get_margin_history_records(filters)
+    summary = build_margin_analytics_summary(records)
+    product_rollup = build_margin_product_rollup(records)
+    chart_data = build_margin_chart_points(records)
+    filter_options = get_margin_filter_options()
 
     return render_template(
         "margin_analytics.html",
         page="analytics",
-        product=product,
-        product_options=product_options,
+        filters=filters,
+        summary=summary,
+        product_rollup=product_rollup,
+        records=records,
         chart_data=chart_data,
-        records=normalized_records,
-        analytics_um=analytics_um
+        filter_options=filter_options,
     )
-
 
 @app.route("/health")
 def health():
