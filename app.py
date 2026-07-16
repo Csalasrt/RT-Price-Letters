@@ -6747,8 +6747,8 @@ def products_save_row():
             return jsonify({"ok": False, "error": "Default Price must be a number."}), 400
 
     default_um = (data.get("default_um") or "").strip().upper()
-    if default_um and default_um not in ("LB", "GAL", "UNIT"):
-        return jsonify({"ok": False, "error": "Default U/M must be LB, GAL, or UNIT."}), 400
+    if default_um and default_um not in ("LB", "GAL", "EACH"):
+        return jsonify({"ok": False, "error": "Default U/M must be LB, GAL, or EACH."}), 400
 
     old_name = (product.product or "").strip()
     renamed = bool(old_name) and old_name != product_name.strip()
@@ -6924,8 +6924,8 @@ def products_page():
                             continue
 
                     default_um = default_um.strip().upper()
-                    if default_um and default_um not in ("LB", "GAL", "UNIT"):
-                        failed_lines.append((line, f"Default U/M must be LB, GAL, or UNIT, got '{default_um}'"))
+                    if default_um and default_um not in ("LB", "GAL", "EACH"):
+                        failed_lines.append((line, f"Default U/M must be LB, GAL, or EACH, got '{default_um}'"))
                         continue
 
                     key = normalize_product_name(product_name)
