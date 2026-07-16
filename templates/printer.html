@@ -1501,6 +1501,9 @@
         if (e.target.classList && e.target.classList.contains("price")) {
           lockPrice(tr);
         }
+        if (e.target.classList && e.target.classList.contains("margin")) {
+          unlockPrice(tr);
+        }
         updateRowFromElement(tr, e.target, true);
       });
 
