@@ -1852,7 +1852,7 @@
         sessionStorage.removeItem("printer_draft_state");
       } else {
         actionInput.value = "select_customer";
-        savePrinterDraftState();
+        sessionStorage.removeItem("printer_draft_state");
       }
     }
 
@@ -2556,12 +2556,14 @@
     });
 
     document.addEventListener("input", function(e) {
+    if (window.printerFormSubmitting) return;
     if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
       savePrinterDraftState();
     }
   });
 
   document.addEventListener("change", function(e) {
+    if (window.printerFormSubmitting) return;
     if (e.target.closest("#printer-form") || e.target.closest("#price-list-form")) {
       savePrinterDraftState();
     }
