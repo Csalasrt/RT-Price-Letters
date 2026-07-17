@@ -146,7 +146,7 @@
                   </td>
                   <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}"></td>
                   <td>
-                    <select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px;">
+                    <select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px; margin:0 auto;">
                       {% for u in ["", "LB", "GAL", "EACH"] %}
                         <option value="{{ u }}" {% if (row.um|upper) == u %}selected{% endif %}>{{ u if u else "Select" }}</option>
                       {% endfor %}
@@ -159,9 +159,9 @@
                       {% endfor %}
                     </select>
                   </td>
-                  <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px;"></td>
-                  <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px;"></td>
-                  <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px;"></td>
+                  <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px; margin:0 auto;"></td>
+                  <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px; margin:0 auto;"></td>
+                  <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px; margin:0 auto;"></td>
                   <td style="display:flex; gap:4px; justify-content:center;">
                     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicateDefaultRow(this)" title="Duplicate">⧉</button>
                     <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDefaultRow(this)">✕</button>
@@ -223,7 +223,7 @@
                 </td>
                 <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="{{ row.description }}"></td>
                 <td>
-                  <select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px;">
+                  <select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px; margin:0 auto;">
                     {% for u in ["", "LB", "GAL", "EACH"] %}
                       <option value="{{ u }}" {% if (row.um|upper) == u %}selected{% endif %}>{{ u if u else "Select" }}</option>
                     {% endfor %}
@@ -236,9 +236,9 @@
                     {% endfor %}
                   </select>
                 </td>
-                <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px;"></td>
-                <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px;"></td>
-                <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px;"></td>
+                <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px; margin:0 auto;"></td>
+                <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px; margin:0 auto;"></td>
+                <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px; margin:0 auto;"></td>
                 <td style="display:flex; gap:4px;">
                     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicateDefaultRow(this)" title="Duplicate">⧉</button>
                     <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDefaultRow(this)">✕</button>
@@ -944,11 +944,11 @@
     return `
       <td>${productCell}</td>
       <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="${escapeHtml(data.description || "")}"></td>
-      <td><select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px;">${umOptions}</select></td>
+      <td><select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px; margin:0 auto;">${umOptions}</select></td>
       <td><select name="default_row_package_type" class="form-control form-control-sm text-center">${pkgOptions}</select></td>
-      <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="${data.margin != null ? data.margin : 0}" style="max-width:80px;"></td>
-      <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="${data.shipping != null ? data.shipping : 0}" style="max-width:90px;"></td>
-      <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="${data.packaging != null ? data.packaging : 0}" style="max-width:90px;"></td>
+      <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="${data.margin != null ? data.margin : 0}" style="max-width:80px; margin:0 auto;"></td>
+      <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="${data.shipping != null ? data.shipping : 0}" style="max-width:90px; margin:0 auto;"></td>
+      <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="${data.packaging != null ? data.packaging : 0}" style="max-width:90px; margin:0 auto;"></td>
       <td style="display:flex; gap:4px; justify-content:center;">
         <button type="button" class="btn btn-outline-secondary btn-sm" onclick="duplicateDefaultRow(this)" title="Duplicate">⧉</button>
         <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDefaultRow(this)">✕</button>
