@@ -887,7 +887,7 @@
                     <input
                       class="form-control form-control-sm price"
                       name="row_price"
-                      value="{{ 'Inquire' if r.get('is_inquire') else '%.4f'|format(r.price or 0) }}"
+                      value="{{ 'Inquire' if r.get('is_inquire') else '%.2f'|format(r.price or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
@@ -1074,7 +1074,7 @@
       }
 
       if (raw === "" || raw === "." || raw === "-" || raw === "-.") {
-        if (el.classList.contains("margin")) {
+        if (el.classList.contains("margin") || el.classList.contains("price")) {
           el.value = "0.00";
         } else {
           el.value = "0.0000";
@@ -1084,7 +1084,7 @@
 
       const n = toNum(raw);
 
-      if (el.classList.contains("margin")) {
+      if (el.classList.contains("margin") || el.classList.contains("price")) {
         el.value = fmt2(n);
       } else {
         el.value = fmt4(n);
@@ -1160,10 +1160,10 @@
       if (!priceLocked) {
         if (convertedPrice !== null) {
           price = convertedPrice;
-          priceEl.value = fmt4(price);
+          priceEl.value = fmt2(price);
         } else {
           price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt4(price);
+          priceEl.value = fmt2(price);
         }
       }
 
@@ -1270,7 +1270,7 @@
           const finalCost = cost + preShip + prePack;
           if (finalCostEl) finalCostEl.value = fmt4(finalCost);
           price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt4(price);
+          priceEl.value = fmt2(price);
           finalEl.value = fmt4(price + addShip + addPack);
         }
         return;
@@ -1292,7 +1292,7 @@
       if (changed === "cost" || changed === "pre-shipping" || changed === "pre-packaging") {
         if (!priceLocked) {
           price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt4(price);
+          priceEl.value = fmt2(price);
         } else {
           price = toNum(priceEl.value);
         }
@@ -1312,7 +1312,7 @@
       if (changed === "margin") {
         if (!priceLocked) {
           price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt4(price);
+          priceEl.value = fmt2(price);
         } else {
           price = toNum(priceEl.value);
         }
@@ -1342,7 +1342,7 @@
         }
         finalP = price + addShip + addPack;
 
-        if (!liveEdit) priceEl.value = fmt4(price);
+        if (!liveEdit) priceEl.value = fmt2(price);
         marginEl.value = fmt2(margin);
         finalEl.value  = fmt4(finalP);
         return;
@@ -1371,7 +1371,7 @@
         }
 
         if (!liveEdit) finalEl.value = fmt4(finalP);
-        priceEl.value  = fmt4(price);
+        priceEl.value  = fmt2(price);
         marginEl.value = fmt2(margin);
         return;
       }
@@ -2041,7 +2041,7 @@
       <td><input class="form-control form-control-sm pre-shipping" name="row_pre_shipping" value="0.0000" inputmode="decimal"></td>
       <td><input class="form-control form-control-sm computed final-cost" name="row_final_cost" value="0.0000" readonly tabindex="-1"></td>
       <td class="price-section section-divider-left"><input class="form-control form-control-sm margin" name="row_margin" value="0.00" inputmode="decimal"></td>
-      <td class="price-section"><input class="form-control form-control-sm price" name="row_price" value="0.0000" inputmode="decimal"></td>
+      <td class="price-section"><input class="form-control form-control-sm price" name="row_price" value="0.00" inputmode="decimal"></td>
       <td class="price-section"><input class="form-control form-control-sm add-shipping" name="row_add_shipping" value="0.0000" inputmode="decimal"></td>
       <td class="price-section section-divider-right"><input class="form-control form-control-sm add-packaging" name="row_add_packaging" value="0.0000" inputmode="decimal"></td>
       <td class="final-price-section section-divider-left section-divider-right"><input class="form-control form-control-sm computed final" name="row_final" value="0.0000" readonly tabindex="-1"></td>
