@@ -1,6 +1,35 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% macro shipping_location_cell(row) %}
+<td>
+  <div style="display:flex; gap:4px; align-items:center; justify-content:center;">
+    <select name="default_row_shipping_type" class="form-control form-control-sm shipping-type-select" style="max-width:64px; padding-left:4px; padding-right:4px;">
+      <option value="" {% if not row.shipping_type %}selected{% endif %}>—</option>
+      <option value="DEL" {% if row.shipping_type == 'DEL' %}selected{% endif %}>DEL</option>
+      <option value="FOB" {% if row.shipping_type == 'FOB' %}selected{% endif %}>FOB</option>
+    </select>
+    <select name="default_row_shipping_location" class="form-control form-control-sm shipping-location-select"
+            style="max-width:130px; {% if row.shipping_location == '__custom__' %}display:none;{% endif %}">
+      <option value="">— Location —</option>
+      {% if row.shipping_type == 'FOB' %}
+        {% for loc in pickup_locations %}
+          <option value="{{ loc.city }} {{ loc.state }}" {% if row.shipping_location == loc.city ~ ' ' ~ loc.state %}selected{% endif %}>{{ loc.city }}, {{ loc.state }}</option>
+        {% endfor %}
+      {% elif row.shipping_type == 'DEL' %}
+        {% for loc in customer.locations %}
+          <option value="{{ loc }}" {% if row.shipping_location == loc %}selected{% endif %}>{{ loc }}</option>
+        {% endfor %}
+      {% endif %}
+      <option value="__custom__" {% if row.shipping_location == '__custom__' %}selected{% endif %}>Other...</option>
+    </select>
+    <input type="text" name="default_row_shipping_custom" class="form-control form-control-sm shipping-custom-input"
+           placeholder="Type location..." value="{{ row.shipping_custom }}"
+           style="max-width:130px; {% if row.shipping_location != '__custom__' %}display:none;{% endif %}">
+  </div>
+</td>
+{% endmacro %}
+
 <div class="container-fluid">
 
   <!-- HEADER -->
@@ -130,6 +159,7 @@
                 <th>Description</th>
                 <th>U/M</th>
                 <th>Package</th>
+                <th>Ship From</th>
                 <th>Margin %</th>
                 <th>Shipping</th>
                 <th>Packaging</th>
@@ -159,6 +189,7 @@
                       {% endfor %}
                     </select>
                   </td>
+                  {{ shipping_location_cell(row) }}
                   <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px; margin:0 auto;"></td>
                   <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px; margin:0 auto;"></td>
                   <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px; margin:0 auto;"></td>
@@ -169,7 +200,7 @@
                 </tr>
                 {% endfor %}
               {% else %}
-                <tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>
+                <tr><td colspan="9" class="text-muted">No products yet. Click + Add Product.</td></tr>
               {% endif %}
             </tbody>
           </table>
@@ -207,6 +238,7 @@
               <th>Description</th>
               <th>U/M</th>
               <th>Package</th>
+              <th>Ship From</th>
               <th>Margin %</th>
               <th>Shipping</th>
               <th>Packaging</th>
@@ -236,6 +268,7 @@
                     {% endfor %}
                   </select>
                 </td>
+                {{ shipping_location_cell(row) }}
                 <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="{{ row.margin }}" style="max-width:80px; margin:0 auto;"></td>
                 <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="{{ row.shipping }}" style="max-width:90px; margin:0 auto;"></td>
                 <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="{{ row.packaging }}" style="max-width:90px; margin:0 auto;"></td>
@@ -246,7 +279,7 @@
               </tr>
               {% endfor %}
             {% else %}
-              <tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>
+              <tr><td colspan="9" class="text-muted">No products yet. Click + Add Product.</td></tr>
             {% endif %}
           </tbody>
         </table>
@@ -798,6 +831,8 @@
   const CUSTOM_PRODUCT_SENTINEL = "__custom__";
   const PACKAGE_TYPES = ["Bulk","Drum","Pail","330gal Tote","275gal Tote","Bag","Super Sack"];
   const UM_OPTIONS = ["", "LB", "GAL", "EACH"];
+  const CUSTOMER_LOCATIONS = {{ (customer.locations or []) | tojson }};
+  const PICKUP_LOCATIONS = {{ (pickup_locations or []) | tojson }};
 
   function extractProductName(item) {
     if (typeof item === "string") return item.trim();
@@ -921,6 +956,83 @@
     filterProductOptions();
   }
 
+  function buildShippingLocationOptions(type, currentLocation) {
+    let options = '<option value="">— Location —</option>';
+
+    if (type === "FOB") {
+      options += (Array.isArray(PICKUP_LOCATIONS) ? PICKUP_LOCATIONS : []).map(loc => {
+        const val = `${loc.city} ${loc.state}`;
+        const selected = currentLocation === val ? "selected" : "";
+        return `<option value="${escapeHtml(val)}" ${selected}>${escapeHtml(loc.city)}, ${escapeHtml(loc.state)}</option>`;
+      }).join("");
+    } else if (type === "DEL") {
+      options += (Array.isArray(CUSTOMER_LOCATIONS) ? CUSTOMER_LOCATIONS : []).map(loc => {
+        const selected = currentLocation === loc ? "selected" : "";
+        return `<option value="${escapeHtml(loc)}" ${selected}>${escapeHtml(loc)}</option>`;
+      }).join("");
+    }
+
+    const customSelected = currentLocation === "__custom__" ? "selected" : "";
+    options += `<option value="__custom__" ${customSelected}>Other...</option>`;
+    return options;
+  }
+
+  function buildShippingLocationCell(data = {}) {
+    const type = data.shipping_type || "";
+    const location = data.shipping_location || "";
+    const customValue = data.shipping_custom || "";
+    const locOptions = buildShippingLocationOptions(type, location);
+
+    return `
+      <td>
+        <div style="display:flex; gap:4px; align-items:center; justify-content:center;">
+          <select name="default_row_shipping_type" class="form-control form-control-sm shipping-type-select" style="max-width:64px; padding-left:4px; padding-right:4px;">
+            <option value="" ${!type ? "selected" : ""}>—</option>
+            <option value="DEL" ${type === "DEL" ? "selected" : ""}>DEL</option>
+            <option value="FOB" ${type === "FOB" ? "selected" : ""}>FOB</option>
+          </select>
+          <select name="default_row_shipping_location" class="form-control form-control-sm shipping-location-select"
+                  style="max-width:130px; ${location === "__custom__" ? "display:none;" : ""}">
+            ${locOptions}
+          </select>
+          <input type="text" name="default_row_shipping_custom" class="form-control form-control-sm shipping-custom-input"
+                 placeholder="Type location..." value="${escapeHtml(customValue)}"
+                 style="max-width:130px; ${location !== "__custom__" ? "display:none;" : ""}">
+        </div>
+      </td>
+    `;
+  }
+
+  function handleTemplateShippingTypeChange(select) {
+    const cell = select.closest("td");
+    const locationSelect = cell ? cell.querySelector(".shipping-location-select") : null;
+    const customInput = cell ? cell.querySelector(".shipping-custom-input") : null;
+    if (!locationSelect) return;
+
+    const type = select.value;
+    locationSelect.innerHTML = buildShippingLocationOptions(type, "");
+    locationSelect.style.display = "";
+    if (customInput) {
+      customInput.style.display = "none";
+      customInput.value = "";
+    }
+  }
+
+  function handleTemplateShippingLocationChange(select) {
+    const cell = select.closest("td");
+    const customInput = cell ? cell.querySelector(".shipping-custom-input") : null;
+    if (!customInput) return;
+
+    if (select.value === "__custom__") {
+      select.style.display = "none";
+      customInput.style.display = "";
+      customInput.focus();
+    } else {
+      customInput.style.display = "none";
+      customInput.value = "";
+    }
+  }
+
   function buildDefaultRowCells(data = {}) {
     const isCustom = !!data.isCustom;
 
@@ -946,6 +1058,7 @@
       <td><input type="text" name="default_row_description" class="form-control form-control-sm text-center" value="${escapeHtml(data.description || "")}"></td>
       <td><select name="default_row_um" class="form-control form-control-sm text-center" style="max-width:90px; margin:0 auto;">${umOptions}</select></td>
       <td><select name="default_row_package_type" class="form-control form-control-sm text-center">${pkgOptions}</select></td>
+      ${buildShippingLocationCell(data)}
       <td><input type="number" step="0.01" name="default_row_margin" class="form-control form-control-sm text-center" value="${data.margin != null ? data.margin : 0}" style="max-width:80px; margin:0 auto;"></td>
       <td><input type="number" step="0.0001" name="default_row_shipping" class="form-control form-control-sm text-center" value="${data.shipping != null ? data.shipping : 0}" style="max-width:90px; margin:0 auto;"></td>
       <td><input type="number" step="0.0001" name="default_row_packaging" class="form-control form-control-sm text-center" value="${data.packaging != null ? data.packaging : 0}" style="max-width:90px; margin:0 auto;"></td>
@@ -979,7 +1092,7 @@
     ["#default-setup-table tbody", "#template-tab-tbody"].forEach(sel => {
       const tbody = document.querySelector(sel);
       if (tbody && tbody.querySelectorAll("tr.default-row").length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-muted">No products yet. Click + Add Product.</td></tr>`;
       }
     });
     updateTriggerText();
@@ -1049,7 +1162,7 @@
       if (rows[rowIndex]) rows[rowIndex].remove();
 
       if (tbody.querySelectorAll("tr.default-row").length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-muted">No products yet. Click + Add Product.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-muted">No products yet. Click + Add Product.</td></tr>`;
       }
     });
 
@@ -1084,11 +1197,49 @@
       const mainRow = mainRows[i];
       if (!mainRow) return;
 
-      const templateInputs = templateRow.querySelectorAll("input, select");
-      const mainInputs = mainRow.querySelectorAll("input, select");
+      // The shipping location cell needs special handling: the location
+      // select's available options depend on the chosen type (DEL vs FOB),
+      // so a plain value copy would silently fail if the main row's select
+      // doesn't have that option yet.
+      const templateTypeSelect = templateRow.querySelector(".shipping-type-select");
+      const mainTypeSelect = mainRow.querySelector(".shipping-type-select");
 
-      templateInputs.forEach((input, j) => {
-        if (mainInputs[j]) mainInputs[j].value = input.value;
+      if (templateTypeSelect && mainTypeSelect) {
+        const templateLocationSelect = templateRow.querySelector(".shipping-location-select");
+        const templateCustomInput = templateRow.querySelector(".shipping-custom-input");
+        const mainLocationSelect = mainRow.querySelector(".shipping-location-select");
+        const mainCustomInput = mainRow.querySelector(".shipping-custom-input");
+
+        const type = templateTypeSelect.value;
+        const location = templateLocationSelect ? templateLocationSelect.value : "";
+        const customValue = templateCustomInput ? templateCustomInput.value : "";
+
+        mainTypeSelect.value = type;
+
+        if (mainLocationSelect) {
+          mainLocationSelect.innerHTML = buildShippingLocationOptions(type, location);
+          mainLocationSelect.style.display = location === "__custom__" ? "none" : "";
+        }
+
+        if (mainCustomInput) {
+          mainCustomInput.style.display = location === "__custom__" ? "" : "none";
+          mainCustomInput.value = location === "__custom__" ? customValue : "";
+        }
+      }
+
+      // Everything else - match by `name` attribute rather than index so
+      // the two tables stay in sync even if a column is added/reordered.
+      templateRow.querySelectorAll("input[name], select[name]").forEach(input => {
+        if (
+          input.classList.contains("shipping-type-select") ||
+          input.classList.contains("shipping-location-select") ||
+          input.classList.contains("shipping-custom-input")
+        ) {
+          return; // handled above
+        }
+        const name = input.getAttribute("name");
+        const match = mainRow.querySelector(`[name="${name}"]`);
+        if (match) match.value = input.value;
       });
     });
   }
@@ -1102,6 +1253,18 @@
 
   document.getElementById("template-tab-tbody")?.addEventListener("input", syncTemplateRowsToMain);
   document.getElementById("template-tab-tbody")?.addEventListener("change", syncTemplateRowsToMain);
+
+  ["#default-setup-table tbody", "#template-tab-tbody"].forEach(sel => {
+    const tbody = document.querySelector(sel);
+    if (!tbody) return;
+    tbody.addEventListener("change", function (e) {
+      if (e.target.classList.contains("shipping-type-select")) {
+        handleTemplateShippingTypeChange(e.target);
+      } else if (e.target.classList.contains("shipping-location-select")) {
+        handleTemplateShippingLocationChange(e.target);
+      }
+    });
+  });
 
   function confirmDeleteCustomer(name) {
     return confirm(

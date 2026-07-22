@@ -180,6 +180,13 @@ class CustomerDefaultRow(db.Model):
     shipping = db.Column(db.Float, nullable=False, default=0.0)
     packaging = db.Column(db.Float, nullable=False, default=0.0)
 
+    # Location settings (DEL/FOB + location or a free-typed custom location)
+    # captured from the price list so a customer's saved template remembers
+    # where each product ships from/to, not just its price setup.
+    shipping_type = db.Column(db.String(10), nullable=False, default="")
+    shipping_location = db.Column(db.String(255), nullable=False, default="")
+    shipping_custom = db.Column(db.String(255), nullable=False, default="")
+
 class PricingEntry(db.Model):
     __tablename__ = "pricing_entries"
 
@@ -267,9 +274,54 @@ class MarginHistoryRecord(db.Model):
 # -------------------------
 # Helpers
 # -------------------------
+def ensure_customer_default_row_shipping_columns():
+    """db.create_all() only creates tables that don't exist yet - it won't add
+    new columns to a customer_default_rows table that was already created by
+    an earlier version of the app. Add them here if missing so existing
+    databases pick up the new shipping fields without a manual migration."""
+    from sqlalchemy import text as sa_text
+
+    try:
+        inspector = db.inspect(db.engine)
+        if "customer_default_rows" not in inspector.get_table_names():
+            return
+
+        existing_columns = {col["name"] for col in inspector.get_columns("customer_default_rows")}
+        new_columns = {
+            "shipping_type": "VARCHAR(10)",
+            "shipping_location": "VARCHAR(255)",
+            "shipping_custom": "VARCHAR(255)",
+        }
+
+        missing = {
+            name: col_type
+            for name, col_type in new_columns.items()
+            if name not in existing_columns
+        }
+        if not missing:
+            return
+
+        # Use a raw engine connection/transaction rather than the ORM
+        # session - schema changes like ALTER TABLE don't need it, and this
+        # avoids the ALTER getting tangled up with any pending session state.
+        with db.engine.begin() as conn:
+            for name, col_type in missing.items():
+                conn.execute(sa_text(
+                    f"ALTER TABLE customer_default_rows ADD COLUMN {name} {col_type} DEFAULT ''"
+                ))
+
+        print(f"[migration] Added column(s) to customer_default_rows: {', '.join(missing)}")
+    except Exception as exc:
+        # Deliberately not swallowed silently - if this fails, the app will
+        # keep hitting "no such column" errors until it's fixed, so make
+        # sure that shows up in the console.
+        print(f"[migration] Failed to add shipping columns to customer_default_rows: {exc}")
+
+
 def init_db():
     with app.app_context():
         db.create_all()
+        ensure_customer_default_row_shipping_columns()
 
 
 def create_user(email: str, password: str, full_name: str = "", phone: str = "", is_admin: int = 0):
@@ -1850,6 +1902,9 @@ def find_customer_by_id(customer_id):
             "margin": round(float(row.margin or 0.0), 4),
             "shipping": round(float(row.shipping or 0.0), 4),
             "packaging": round(float(row.packaging or 0.0), 4),
+            "shipping_type": row.shipping_type or "",
+            "shipping_location": row.shipping_location or "",
+            "shipping_custom": row.shipping_custom or "",
         }
         default_letter_rows.append(row_dict)
 
@@ -1894,6 +1949,9 @@ def _blank_default_letter_row():
         "margin": 15.0,
         "shipping": 0.0,
         "packaging": 0.0,
+        "shipping_type": "",
+        "shipping_location": "",
+        "shipping_custom": "",
     }
 
 
@@ -1909,6 +1967,9 @@ def _normalize_default_letter_row(row):
         "margin": round(to_float(row.get("margin", 15.0), 15.0), 4),
         "shipping": round(to_float(row.get("shipping", 0.0), 0.0), 4),
         "packaging": round(to_float(row.get("packaging", 0.0), 0.0), 4),
+        "shipping_type": (row.get("shipping_type") or "").strip(),
+        "shipping_location": (row.get("shipping_location") or "").strip(),
+        "shipping_custom": (row.get("shipping_custom") or "").strip(),
     }
 
 
@@ -2026,6 +2087,9 @@ def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fall
     built["add_shipping"] = 0.0
     built["add_packaging"] = 0.0
     built["margin"] = round(saved_margin, 4)
+    built["shipping_type"] = default_row.get("shipping_type", "")
+    built["shipping_location"] = default_row.get("shipping_location", "")
+    built["shipping_custom"] = default_row.get("shipping_custom", "")
 
     cost = to_float(built.get("cost", 0.0), 0.0)
     final_cost = cost + saved_shipping + saved_packaging
@@ -3360,6 +3424,9 @@ def parse_customer_default_rows_from_form(form):
     row_margins = form.getlist("default_row_margin")
     row_shippings = form.getlist("default_row_shipping")
     row_packagings = form.getlist("default_row_packaging")
+    row_shipping_types = form.getlist("default_row_shipping_type")
+    row_shipping_locations = form.getlist("default_row_shipping_location")
+    row_shipping_customs = form.getlist("default_row_shipping_custom")
 
     row_count = max(
         len(row_products),
@@ -3369,6 +3436,9 @@ def parse_customer_default_rows_from_form(form):
         len(row_margins),
         len(row_shippings),
         len(row_packagings),
+        len(row_shipping_types),
+        len(row_shipping_locations),
+        len(row_shipping_customs),
         0,
     )
 
@@ -3382,6 +3452,9 @@ def parse_customer_default_rows_from_form(form):
             "margin": row_margins[i] if i < len(row_margins) else "",
             "shipping": row_shippings[i] if i < len(row_shippings) else "",
             "packaging": row_packagings[i] if i < len(row_packagings) else "",
+            "shipping_type": row_shipping_types[i] if i < len(row_shipping_types) else "",
+            "shipping_location": row_shipping_locations[i] if i < len(row_shipping_locations) else "",
+            "shipping_custom": row_shipping_customs[i] if i < len(row_shipping_customs) else "",
         })
 
     return submitted_rows
@@ -3732,6 +3805,9 @@ def save_customer_template_from_quote(customer_id, rows):
             "margin": round(to_float(row.get("margin", 0.0), 0.0), 4),
             "shipping": round(to_float(row.get("shipping", 0.0), 0.0), 4),
             "packaging": round(to_float(row.get("packaging", 0.0), 0.0), 4),
+            "shipping_type": (row.get("shipping_type") or "").strip(),
+            "shipping_location": (row.get("shipping_location") or "").strip(),
+            "shipping_custom": (row.get("shipping_custom") or "").strip(),
         })
 
     for i, row in enumerate(cleaned_rows):
@@ -3746,6 +3822,9 @@ def save_customer_template_from_quote(customer_id, rows):
             margin=row["margin"],
             shipping=row["shipping"],
             packaging=row["packaging"],
+            shipping_type=row["shipping_type"],
+            shipping_location=row["shipping_location"],
+            shipping_custom=row["shipping_custom"],
         ))
 
     db.session.commit()
@@ -4909,7 +4988,8 @@ def customer_profile(customer_id):
         customer=customer,
         customer_history=customer_history,
         customer_template=customer_template,
-        products=load_company_products()      
+        products=load_company_products(),
+        pickup_locations=load_pickup_locations()
     )
 
 @app.route("/customers/<customer_id>/locations/save", methods=["POST"])
@@ -7641,9 +7721,16 @@ def customer_new_page():
 
 
 # -------------------------
+# Run schema setup/migrations on import, regardless of whether the app is
+# started with `python app.py` or `flask run` - the latter never executes
+# the `if __name__ == "__main__":` block below, so anything that only ran
+# there (like init_db()) would silently never happen under `flask run`.
+# -------------------------
+with app.app_context():
+    init_db()
+
+# -------------------------
 # Local dev only
 # -------------------------
 if __name__ == "__main__":
-    with app.app_context():
-        init_db()
     app.run(debug=True)

@@ -788,7 +788,6 @@
                         class="form-control form-control-sm shipping-location-select"
                         name="row_shipping_location"
                         style="max-width:160px; {% if r.get('shipping_location') == '__custom__' %}display:none;{% endif %}"
-                        {% if not r.get('shipping_type') %}disabled{% endif %}
                       >
                         <option value="">— Location —</option>
                         {% if r.get('shipping_type') == 'FOB' %}
@@ -1514,6 +1513,21 @@
         if (e.target.classList.contains("um-select")) {
           updateRow(tr, "um", false);
         }
+
+        if (e.target.classList.contains("shipping-location-select")) {
+          const selectedLocation = e.target.value;
+          // Only prompt when a real location was picked - not the blank
+          // placeholder and not "Other..." (which just reveals the free-text
+          // box and isn't a complete setting yet).
+          if (selectedLocation && selectedLocation !== "__custom__") {
+            const shouldDeploy = confirm(
+              "Deploy this location setting for all products on this row?"
+            );
+            if (shouldDeploy) {
+              applyShippingSettingsToAllRows(tr);
+            }
+          }
+        }
       });
 
       table.addEventListener("keydown", function(e) {
@@ -1897,11 +1911,57 @@
     customOpt.textContent = "Other...";
     locationSelect.appendChild(customOpt);
 
-    // Always show both boxes; disable location dropdown when no type selected
-    locationSelect.disabled = !type;
+    // Always show both boxes. Deliberately NOT disabling the location
+    // dropdown here - a disabled <select> is excluded from form submission
+    // entirely, which silently shifted row_shipping_location out of sync
+    // with every other row_* list (product, cost, etc.) for any row that
+    // still had a blank type. Leaving it enabled (with just a placeholder
+    // option) keeps every row's fields aligned by position on submit.
     locationSelect.style.display = "";
     customInput.style.display = "none";
     customInput.value = "";
+  }
+
+  function applyShippingSettingsToAllRows(sourceTr) {
+    const sourceTypeSel    = sourceTr.querySelector(".shipping-type-select");
+    const sourceLocSel     = sourceTr.querySelector(".shipping-location-select");
+    const sourceCustomInput = sourceTr.querySelector(".shipping-custom-input");
+
+    if (!sourceTypeSel || !sourceLocSel) return;
+
+    const type        = sourceTypeSel.value;
+    const location     = sourceLocSel.value;
+    const customValue = sourceCustomInput ? sourceCustomInput.value : "";
+
+    document.querySelectorAll("#quote-table tbody tr").forEach(function(tr) {
+      if (tr === sourceTr) return;
+
+      const typeSel     = tr.querySelector(".shipping-type-select");
+      const locSel      = tr.querySelector(".shipping-location-select");
+      const customInput = tr.querySelector(".shipping-custom-input");
+      if (!typeSel || !locSel) return;
+
+      // Rebuild this row's location options for the chosen type (DEL/FOB
+      // pull from different location lists) before setting the value.
+      typeSel.value = type;
+      handleShippingTypeChange(typeSel);
+
+      locSel.value = location;
+
+      if (location === "__custom__") {
+        locSel.style.display = "none";
+        if (customInput) {
+          customInput.style.display = "";
+          customInput.value = customValue;
+        }
+      } else {
+        locSel.style.display = "";
+        if (customInput) {
+          customInput.style.display = "none";
+          customInput.value = "";
+        }
+      }
+    });
   }
 
   document.addEventListener("DOMContentLoaded", function() {
@@ -2016,7 +2076,7 @@
             <option value="DEL">DEL</option>
             <option value="FOB">FOB</option>
           </select>
-          <select class="form-control form-control-sm shipping-location-select" name="row_shipping_location" style="max-width:160px;" disabled>
+          <select class="form-control form-control-sm shipping-location-select" name="row_shipping_location" style="max-width:160px;">
             <option value="">— Location —</option>
             <option value="__custom__">Other...</option>
           </select>
@@ -2496,9 +2556,40 @@
       setRowField(tr, 'input[name="row_add_shipping"]', row.add_shipping);
       setRowField(tr, 'input[name="row_add_packaging"]', row.add_packaging);
       setRowField(tr, 'input[name="row_final"]', row.final || row.final_price);
-      setRowField(tr, 'select[name="row_shipping_type"]', row.shipping_type);
-      setRowField(tr, 'select[name="row_shipping_location"]', row.shipping_location);
-      setRowField(tr, 'input[name="row_shipping_custom"]', row.shipping_custom);
+      // Shipping type/location need special handling: the location <select>'s
+      // options are rebuilt dynamically per type (DEL -> customer locations,
+      // FOB -> pickup locations). Just assigning .value on row_shipping_type
+      // (via setRowField) doesn't fire a change event, so handleShippingTypeChange
+      // never runs and the location dropdown still has whatever options it was
+      // rendered with. Setting row_shipping_location to a city that isn't in
+      // that stale option list silently no-ops, leaving it blank - which is why
+      // the type showed up but the city didn't. Rebuild the options first, the
+      // same way applyShippingSettingsToAllRows already does it correctly.
+      const shippingTypeSel = tr.querySelector('select[name="row_shipping_type"]');
+      if (shippingTypeSel && row.shipping_type !== undefined && row.shipping_type !== null) {
+        shippingTypeSel.value = row.shipping_type;
+        handleShippingTypeChange(shippingTypeSel);
+      }
+
+      const shippingLocSel = tr.querySelector('select[name="row_shipping_location"]');
+      const shippingCustomInput = tr.querySelector('input[name="row_shipping_custom"]');
+      if (shippingLocSel && row.shipping_location !== undefined && row.shipping_location !== null) {
+        shippingLocSel.value = row.shipping_location;
+
+        if (row.shipping_location === "__custom__") {
+          shippingLocSel.style.display = "none";
+          if (shippingCustomInput) {
+            shippingCustomInput.style.display = "";
+            shippingCustomInput.value = row.shipping_custom || "";
+          }
+        } else {
+          shippingLocSel.style.display = "";
+          if (shippingCustomInput) {
+            shippingCustomInput.style.display = "none";
+            shippingCustomInput.value = "";
+          }
+        }
+      }
       setRowField(tr, 'input[name="row_is_inquire"]', row.is_inquire || "0");
       setRowField(tr, 'input[name="row_price_locked"]', row.price_locked || "");
 
