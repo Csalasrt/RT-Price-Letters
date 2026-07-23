@@ -876,7 +876,7 @@
                     <input
                       class="form-control form-control-sm margin"
                       name="row_margin"
-                      value="{{ '%.2f'|format(r.margin or 0) }}"
+                      value="{{ '0.00' if r.get('is_inquire') else '%.2f'|format(r.margin or 0) }}"
                       inputmode="decimal"
                     >
                   </td>
@@ -991,10 +991,12 @@
       if (!tr) return;
       const priceEl = tr.querySelector(".price");
       const finalEl = tr.querySelector(".final");
+      const marginEl = tr.querySelector(".margin");
       const flagEl = tr.querySelector('input[name="row_is_inquire"]');
 
       if (priceEl) priceEl.value = "Inquire";
       if (finalEl) finalEl.value = "Inquire";
+      if (marginEl) marginEl.value = "0.00";
       tr.dataset.inquire = "1";
       tr.setAttribute("data-inquire", "1");
       if (flagEl) flagEl.value = "1";
@@ -1254,6 +1256,7 @@
           if (finalCostEl) finalCostEl.value = fmt4(finalCost);
           priceEl.value = "Inquire";
           finalEl.value = "Inquire";
+          marginEl.value = "0.00";
           return;
         }
 
@@ -1285,6 +1288,7 @@
       if (isInquireRow && changed !== "price") {
         priceEl.value = "Inquire";
         finalEl.value = "Inquire";
+        marginEl.value = "0.00";
         return;
       }
 
@@ -1330,6 +1334,7 @@
         if (tr.dataset.inquire === "1") {
           priceEl.value = "Inquire";
           finalEl.value = "Inquire";
+          marginEl.value = "0.00";
           return;
         }
 
