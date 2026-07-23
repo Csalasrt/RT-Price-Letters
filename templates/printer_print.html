@@ -362,7 +362,11 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
-  async function buildPriceLetterPdf() {
+  // Renders the letter to a canvas once and builds the tiled PDF from it.
+  // Both Save and Download call this so they're byte-for-byte the same
+  // render - no risk of the saved copy and the downloaded copy drifting
+  // apart from two separate html2canvas passes.
+  async function buildPriceLetterAssets() {
     const preview = document.getElementById("price-letter-preview");
     if (!preview) return null;
 
@@ -430,8 +434,38 @@
 
     return {
       pdf,
-      fileName: `${fileBase}.pdf`
+      canvas,
+      fileName: `${fileBase}.pdf`,
+      pngFileName: `${fileBase}.png`
     };
+  }
+
+  // The actual save/finalize call - adds the history entry (with rows),
+  // updates the customer's saved template, records margin history, and
+  // marks the month's todo done. This is the single source of truth for
+  // "a price letter was saved" - both Save and Download go through it.
+  async function persistPriceLetter(built) {
+    const pdfData = built.pdf.output("datauristring");
+
+    const resp = await fetch("{{ url_for('printer_save_pdf') }}", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: JSON.stringify({
+        file_name: built.fileName,
+        pdf_data: pdfData
+      })
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok || !data.ok) {
+      throw new Error(data.error || "Save failed.");
+    }
+
+    return data;
   }
 
   async function exportPriceLetter() {
@@ -443,45 +477,27 @@
     button.innerText = "Preparing...";
 
     try {
-      const preview = document.getElementById("price-letter-preview");
-      if (!preview) return;
+      const built = await buildPriceLetterAssets();
+      if (!built) return;
 
-      const canvas = await html2canvas(preview, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff"
-      });
+      // Save exactly like Save Letter does - same history entry, same
+      // customer-template update, same margin history, same todo state.
+      // Downloading should never leave a thinner trail than saving.
+      const data = await persistPriceLetter(built);
 
-      const customerName = `{{ quote.get("customer_name", "") }}`;
-      const displayDate = `{{ display_date }}`;
-      const safeCustomer = customerName.replace(/[^\w\s-]/g, "").trim() || "PriceLetter";
-      const safeDate = displayDate.replace(/\//g, "-") || "date";
-      const fileBase = `${safeCustomer}-${safeDate}`;
-
+      // Then hand the user their chosen format as a local file too.
       if (format === "png") {
-        // ── PNG branch ──────────────────────────────────────────
         const link = document.createElement("a");
-        link.download = `${fileBase}.png`;
-        link.href = canvas.toDataURL("image/png");
+        link.download = built.pngFileName;
+        link.href = built.canvas.toDataURL("image/png");
         link.click();
-
       } else {
-        // ── PDF branch (default) - reuse the tiling builder so the
-        // page is never squeezed narrow to force a fit ─────────────
-        const built = await buildPriceLetterPdf();
-        if (!built) return;
         built.pdf.save(built.fileName);
       }
 
-      // ── Post-download housekeeping (same as before) ───────────
-      await fetch("{{ url_for('printer_mark_printed') }}", {
-        method: "POST",
-        headers: { "X-Requested-With": "XMLHttpRequest" }
-      });
-
       sessionStorage.removeItem("printer_draft_state");
       sessionStorage.removeItem("keep_product_panel_open");
-      window.location.href = "{{ url_for('printer_page') }}";
+      window.location.href = data.redirect_url || "{{ url_for('printer_page') }}";
 
     } catch (err) {
       console.error("Export failed:", err);
@@ -499,28 +515,10 @@
     button.innerText = "Saving...";
 
     try {
-      const built = await buildPriceLetterPdf();
+      const built = await buildPriceLetterAssets();
       if (!built) return;
 
-      const pdfData = built.pdf.output("datauristring");
-
-      const resp = await fetch("{{ url_for('printer_save_pdf') }}", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        },
-        body: JSON.stringify({
-          file_name: built.fileName,
-          pdf_data: pdfData
-        })
-      });
-
-      const data = await resp.json();
-
-      if (!resp.ok || !data.ok) {
-        throw new Error(data.error || "Save failed.");
-      }
+      const data = await persistPriceLetter(built);
 
       sessionStorage.removeItem("printer_draft_state");
       sessionStorage.removeItem("keep_product_panel_open");
