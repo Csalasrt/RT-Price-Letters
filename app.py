@@ -596,6 +596,9 @@ def load_customers():
                 "margin": round(float(row.margin or 0.0), 4),
                 "shipping": round(float(row.shipping or 0.0), 4),
                 "packaging": round(float(row.packaging or 0.0), 4),
+                "shipping_type": row.shipping_type or "",
+                "shipping_location": row.shipping_location or "",
+                "shipping_custom": row.shipping_custom or "",
             }
             default_letter_rows.append(row_dict)
 
@@ -701,6 +704,9 @@ def save_customers(customers: list):
                 margin=to_float(row.get("margin", 15.0), 15.0),
                 shipping=to_float(row.get("shipping", 0.0), 0.0),
                 packaging=to_float(row.get("packaging", 0.0), 0.0),
+                shipping_type=(row.get("shipping_type") or "").strip(),
+                shipping_location=(row.get("shipping_location") or "").strip(),
+                shipping_custom=(row.get("shipping_custom") or "").strip(),
             ))
 
     db.session.commit()

@@ -791,17 +791,27 @@
                       >
                         <option value="">— Location —</option>
                         {% if r.get('shipping_type') == 'FOB' %}
+                          {% set pickup_values = [] %}
                           {% for loc in pickup_locations %}
+                            {% set _ = pickup_values.append(loc.city ~ ' ' ~ loc.state) %}
                             <option value="{{ loc.city }} {{ loc.state }}" {% if r.get('shipping_location') == loc.city ~ ' ' ~ loc.state %}selected{% endif %}>
                               {{ loc.city }}, {{ loc.state }}
                             </option>
                           {% endfor %}
+                          {% if r.get('shipping_location') and r.get('shipping_location') != '__custom__' and r.get('shipping_location') not in pickup_values %}
+                            {# Saved value no longer matches any current pickup location - keep it visible instead of silently dropping it #}
+                            <option value="{{ r.get('shipping_location') }}" selected>{{ r.get('shipping_location') }} (not on current list)</option>
+                          {% endif %}
                         {% else %}
                           {% for loc in customer_locations %}
                             <option value="{{ loc }}" {% if r.get('shipping_location') == loc %}selected{% endif %}>
                               {{ loc }}
                             </option>
                           {% endfor %}
+                          {% if r.get('shipping_location') and r.get('shipping_location') != '__custom__' and r.get('shipping_location') not in customer_locations %}
+                            {# Saved value no longer matches any current customer location - keep it visible instead of silently dropping it #}
+                            <option value="{{ r.get('shipping_location') }}" selected>{{ r.get('shipping_location') }} (not on current list)</option>
+                          {% endif %}
                         {% endif %}
                         <option value="__custom__">Other...</option>
                       </select>
@@ -1883,7 +1893,7 @@
       form.submit();
     }
   }
-  function handleShippingTypeChange(select) {
+  function handleShippingTypeChange(select, preserveValue) {
     const td = select.closest("td");
     const locationSelect = td.querySelector(".shipping-location-select");
     const customInput = td.querySelector(".shipping-custom-input");
@@ -1894,12 +1904,15 @@
 
     locationSelect.innerHTML = '<option value="">— Location —</option>';
 
+    let matchedPreserve = false;
+
     if (type === "DEL") {
       customerLocs.forEach(function(loc) {
         const opt = document.createElement("option");
         opt.value = loc;
         opt.textContent = loc;
         locationSelect.appendChild(opt);
+        if (preserveValue && loc === preserveValue) matchedPreserve = true;
       });
     } else if (type === "FOB") {
       pickupLocs.forEach(function(loc) {
@@ -1908,7 +1921,19 @@
         opt.value = val;
         opt.textContent = loc.city + ", " + loc.state;
         locationSelect.appendChild(opt);
+        if (preserveValue && val === preserveValue) matchedPreserve = true;
       });
+    }
+
+    // If a saved location no longer matches anything on the current list
+    // (customer locations changed, etc.), keep it as a selectable option
+    // instead of silently dropping it - the select would otherwise just
+    // show blank even though the row's actual data is still correct.
+    if (preserveValue && preserveValue !== "__custom__" && !matchedPreserve) {
+      const preserveOpt = document.createElement("option");
+      preserveOpt.value = preserveValue;
+      preserveOpt.textContent = preserveValue + " (not on current list)";
+      locationSelect.appendChild(preserveOpt);
     }
 
     const customOpt = document.createElement("option");
@@ -2573,7 +2598,7 @@
       const shippingTypeSel = tr.querySelector('select[name="row_shipping_type"]');
       if (shippingTypeSel && row.shipping_type !== undefined && row.shipping_type !== null) {
         shippingTypeSel.value = row.shipping_type;
-        handleShippingTypeChange(shippingTypeSel);
+        handleShippingTypeChange(shippingTypeSel, row.shipping_location);
       }
 
       const shippingLocSel = tr.querySelector('select[name="row_shipping_location"]');

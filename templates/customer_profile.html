@@ -13,13 +13,21 @@
             style="max-width:130px; {% if row.shipping_location == '__custom__' %}display:none;{% endif %}">
       <option value="">— Location —</option>
       {% if row.shipping_type == 'FOB' %}
+        {% set pickup_values = [] %}
         {% for loc in pickup_locations %}
+          {% set _ = pickup_values.append(loc.city ~ ' ' ~ loc.state) %}
           <option value="{{ loc.city }} {{ loc.state }}" {% if row.shipping_location == loc.city ~ ' ' ~ loc.state %}selected{% endif %}>{{ loc.city }}, {{ loc.state }}</option>
         {% endfor %}
+        {% if row.shipping_location and row.shipping_location != '__custom__' and row.shipping_location not in pickup_values %}
+          <option value="{{ row.shipping_location }}" selected>{{ row.shipping_location }} (not on current list)</option>
+        {% endif %}
       {% elif row.shipping_type == 'DEL' %}
         {% for loc in customer.locations %}
           <option value="{{ loc }}" {% if row.shipping_location == loc %}selected{% endif %}>{{ loc }}</option>
         {% endfor %}
+        {% if row.shipping_location and row.shipping_location != '__custom__' and row.shipping_location not in customer.locations %}
+          <option value="{{ row.shipping_location }}" selected>{{ row.shipping_location }} (not on current list)</option>
+        {% endif %}
       {% endif %}
       <option value="__custom__" {% if row.shipping_location == '__custom__' %}selected{% endif %}>Other...</option>
     </select>
@@ -958,18 +966,25 @@
 
   function buildShippingLocationOptions(type, currentLocation) {
     let options = '<option value="">— Location —</option>';
+    let matched = false;
 
     if (type === "FOB") {
       options += (Array.isArray(PICKUP_LOCATIONS) ? PICKUP_LOCATIONS : []).map(loc => {
         const val = `${loc.city} ${loc.state}`;
         const selected = currentLocation === val ? "selected" : "";
+        if (selected) matched = true;
         return `<option value="${escapeHtml(val)}" ${selected}>${escapeHtml(loc.city)}, ${escapeHtml(loc.state)}</option>`;
       }).join("");
     } else if (type === "DEL") {
       options += (Array.isArray(CUSTOMER_LOCATIONS) ? CUSTOMER_LOCATIONS : []).map(loc => {
         const selected = currentLocation === loc ? "selected" : "";
+        if (selected) matched = true;
         return `<option value="${escapeHtml(loc)}" ${selected}>${escapeHtml(loc)}</option>`;
       }).join("");
+    }
+
+    if (currentLocation && currentLocation !== "__custom__" && !matched) {
+      options += `<option value="${escapeHtml(currentLocation)}" selected>${escapeHtml(currentLocation)} (not on current list)</option>`;
     }
 
     const customSelected = currentLocation === "__custom__" ? "selected" : "";
