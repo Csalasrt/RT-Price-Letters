@@ -2,6 +2,16 @@
 {% block content %}
 
 <style>
+  /* Let this page fill the full width of whatever screen it's opened on
+     instead of being capped by the site's default container max-width.
+     Scoped to this page only, since this <style> block is only emitted
+     when printer.html renders. */
+  .container,
+  .container-fluid {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
   .printer-toast {
     position: fixed;
     top: 20px;
@@ -103,16 +113,16 @@
   }
 
   /* Bootstrap's .table class forces width:100%, which - combined with
-     table-layout:fixed and columns that only had min-width set - was
-     letting the browser stretch every column to fill the page, leaving a
-     lot of dead space padded around short values like "$1.5600". Locking
-     the table to auto width (sized by its own columns, below) and
-     switching those columns from min-width to width fixes that: the table
-     is now only as wide as it actually needs to be, and #quote-table-wrap
-     still scrolls horizontally on narrow screens if needed. */
+     table-layout:fixed - stretches every column to fill the page. The
+     table is meant to expand to fill the screen width, so we keep
+     width:100% here; table-layout:fixed uses each column's declared
+     width purely as a ratio in that case, so the columns all grow or
+     shrink together and stay proportional to one another as the window
+     resizes. #quote-table-wrap still scrolls horizontally as a fallback
+     on very narrow screens. */
   #quote-table {
     table-layout: fixed;
-    width: auto;
+    width: 100%;
   }
 
   .price-list-table th,
