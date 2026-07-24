@@ -102,6 +102,19 @@
     border-collapse: collapse;
   }
 
+  /* Bootstrap's .table class forces width:100%, which - combined with
+     table-layout:fixed and columns that only had min-width set - was
+     letting the browser stretch every column to fill the page, leaving a
+     lot of dead space padded around short values like "$1.5600". Locking
+     the table to auto width (sized by its own columns, below) and
+     switching those columns from min-width to width fixes that: the table
+     is now only as wide as it actually needs to be, and #quote-table-wrap
+     still scrolls horizontally on narrow screens if needed. */
+  #quote-table {
+    table-layout: fixed;
+    width: auto;
+  }
+
   .price-list-table th,
   .price-list-table td {
     vertical-align: middle;
@@ -129,11 +142,15 @@
      around each input box; this tightens just the horizontal padding
      while keeping the row height/vertical padding the same. */
   #quote-table td {
-    padding: 8px 4px;
+    padding: 8px 1px;
   }
 
   #quote-table thead th {
-    padding: 8px 6px;
+    padding: 6px 2px;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.15;
+    font-size: 11px;
   }
 
   #quote-table .form-control,
@@ -144,12 +161,14 @@
     text-align: center !important;
     margin-left: auto;
     margin-right: auto;
+    padding-left: 3px;
+    padding-right: 3px;
   }
 
   #quote-table select {
     text-align-last: center;
-    padding-left: 8px;
-    padding-right: 8px;
+    padding-left: 3px;
+    padding-right: 3px;
   }
 
   #quote-table td .form-control,
@@ -178,6 +197,42 @@
     z-index: 3;
     background: #f8f9fa;
     box-shadow: inset 0 -1px 0 #dee2e6, 0 2px 3px rgba(0,0,0,0.05);
+  }
+
+  /* Group-label row above the normal column headers (General Information /
+     Prior Months Info / Current Cost / Current Month Pricing). Selection
+     and Product use rowspan="2" to span both header rows, so they stay in
+     thead's first <tr> alongside these group-label cells; the actual
+     column headers (Location, Cost, etc.) are thead's second <tr>. Both
+     rows are sticky, so the second row needs a top offset equal to the
+     first row's height or the two would stack on top of each other. */
+  #quote-table thead tr:first-child th.quote-group-header {
+    height: 26px;
+    padding: 5px 4px;
+    font-size: 14.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  #quote-table thead tr:last-child th {
+    top: 26px;
+  }
+
+  /* Horizontal divider under the full header (both the group-label row and
+     the column-header row below it), matching the vertical section
+     dividers. Applied to the second row's cells plus the rowspan="2"
+     Selection/Product cells so the line runs continuously all the way
+     across, including under Product. */
+  #quote-table thead tr:last-child th,
+  #quote-table th.selection-header-cell,
+  #quote-table th.product-col-frozen {
+    border-bottom: 3px solid #98a2b3;
+  }
+
+  /* Enlarge the "Product" column header to match the bigger group-header
+     text, since it sits alongside that row (rowspan="2"). */
+  #quote-table th.product-col-frozen {
+    font-size: 13.5px;
   }
 
   /* Frozen first two columns (row actions + Product) - stay visible while
@@ -250,6 +305,18 @@
     font-weight: 600;
     cursor: default;
   }
+
+  /* Prior Months Info section - darker gray background (same family as the
+     Final Cost column's computed-input gray) covering the full header and
+     data cells, not just the input boxes. */
+  #quote-table th.prior-month-section,
+  #quote-table td.prior-month-section {
+    background: #e4e7ec !important;
+  }
+
+  /* Last Mo. Margin used to be color-coded red/green vs. this month's
+     margin; that comparison coloring has been removed per request, so
+     these cells now just use the normal computed-input styling. */
 
   .product-panel {
     position: absolute;
@@ -697,27 +764,36 @@
           <table class="table table-sm align-middle" id="quote-table">
             <thead>
               <tr>
-                <th class="selection-header-cell">
+                <th class="selection-header-cell" rowspan="2">
                   <div class="selection-header-wrap">
                     <input type="checkbox" id="select-all-delete">
                     <span style="width:28px; height:28px; display:block;"></span>
                   </div>
                 </th>
-                <th class="product-col-frozen" style="min-width:220px;">Product</th>
-                <th style="min-width:90px;">UM</th>
-                <th style="min-width:320px;">Shipping Details</th>
-                <th style="min-width:160px;">Package Type</th>
-                <th style="min-width:120px;">Our Cost</th>
-                <th style="min-width:120px;">Packaging</th>
-                <th style="min-width:120px;">Shipping</th>
-                <th style="min-width:120px;">
+                <th class="product-col-frozen section-divider-right" style="width:140px;" rowspan="2">Product</th>
+                <th colspan="3" class="quote-group-header">General Information</th>
+                <th colspan="2" class="quote-group-header prior-month-section section-divider-left section-divider-right">Prior Months Info</th>
+                <th colspan="4" class="quote-group-header">Current Cost</th>
+                <th colspan="4" class="quote-group-header section-divider-left section-divider-right">Current Month Pricing</th>
+              </tr>
+              <tr>
+                <th style="width:120px;">Location</th>
+                <th style="width:58px;">Package Type</th>
+                <th style="width:52px;">UM</th>
+                <th style="width:78px;" class="prior-month-section section-divider-left">Last Mo. Sale Price</th>
+                <th style="width:65px;" class="prior-month-section section-divider-right">Last Mo. Margin</th>
+                
+                
+                <th style="width:62px;">Current Cost</th>
+                <th style="width:62px;">Pack Cost</th>
+                <th style="width:62px;">Ship Cost</th>
+                <th style="width:62px;">
                   Final Cost
                 </th>
-                <th style="min-width:110px;" class="price-section section-divider-left">Margin %</th>
-                <th style="min-width:120px;" class="price-section">Price</th>
-                <th style="min-width:120px;" class="price-section">Add. Shipping</th>
-                <th style="min-width:120px;" class="price-section section-divider-right">Add. Packaging</th>
-                <th style="min-width:130px;" class="final-price-section section-divider-left section-divider-right">Final Price</th>
+                <th style="width:62px;" class="price-section section-divider-left">Sale Price</th>
+                <th style="width:56px;" class="price-section">Margin %</th>
+                <th style="width:88px;" class="price-section section-divider-right">Add Ship/Pack</th>
+                <th style="width:75px;" class="final-price-section section-divider-left section-divider-right">Final Price</th>
               </tr>
             </thead>
 
@@ -751,7 +827,7 @@
                     </div>
                   </td>
 
-                  <td class="product-col-frozen" style="font-weight:700; text-align:center;">
+                  <td class="product-col-frozen section-divider-right" style="font-weight:700; text-align:center;">
                     {{ r.product }}
                     <input type="hidden" name="row_product" value="{{ r.product }}">
                     <input type="hidden" name="row_description" value="{{ r.get('description', '') }}">
@@ -763,55 +839,31 @@
                     <input type="hidden" name="row_price_locked" value="{{ r.get('price_locked', '') }}">
                   </td>
 
-                  <td>
-                    <select class="form-control form-control-sm um-select" name="row_um">
-                      <option value="LB" {% if (r.um or '')|upper == "LB" %}selected{% endif %}>LB</option>
-                      <option value="GAL" {% if (r.um or '')|upper == "GAL" %}selected{% endif %}>GAL</option>
-                      <option value="EACH" {% if (r.um or '')|upper == "EACH" %}selected{% endif %}>EACH</option>
-                    </select>
-                  </td>
-
 <td>
+                    {% set _known_locs = ['FOB'] + customer_locations %}
                     <div style="display:flex; gap:6px; align-items:center;">
-                      <select
-                        class="form-control form-control-sm shipping-type-select"
+                      <input
+                        type="hidden"
                         name="row_shipping_type"
-                        onchange="handleShippingTypeChange(this)"
-                        style="max-width:80px;"
+                        value="{% if r.get('shipping_location') == 'FOB' %}FOB{% elif r.get('shipping_location') and r.get('shipping_location') != '__custom__' %}DEL{% else %}{{ r.get('shipping_type', '') }}{% endif %}"
                       >
-                        <option value="" {% if not r.get('shipping_type') %}selected{% endif %}>—</option>
-                        <option value="DEL" {% if r.get('shipping_type') == 'DEL' %}selected{% endif %}>DEL</option>
-                        <option value="FOB" {% if r.get('shipping_type') == 'FOB' %}selected{% endif %}>FOB</option>
-                      </select>
 
                       <select
                         class="form-control form-control-sm shipping-location-select"
                         name="row_shipping_location"
-                        style="max-width:160px; {% if r.get('shipping_location') == '__custom__' %}display:none;{% endif %}"
+                        style="width:100%; {% if r.get('shipping_location') == '__custom__' %}display:none;{% endif %}"
                       >
-                        <option value="">— Location —</option>
-                        {% if r.get('shipping_type') == 'FOB' %}
-                          {% set pickup_values = [] %}
-                          {% for loc in pickup_locations %}
-                            {% set _ = pickup_values.append(loc.city ~ ' ' ~ loc.state) %}
-                            <option value="{{ loc.city }} {{ loc.state }}" {% if r.get('shipping_location') == loc.city ~ ' ' ~ loc.state %}selected{% endif %}>
-                              {{ loc.city }}, {{ loc.state }}
-                            </option>
-                          {% endfor %}
-                          {% if r.get('shipping_location') and r.get('shipping_location') != '__custom__' and r.get('shipping_location') not in pickup_values %}
-                            {# Saved value no longer matches any current pickup location - keep it visible instead of silently dropping it #}
-                            <option value="{{ r.get('shipping_location') }}" selected>{{ r.get('shipping_location') }} (not on current list)</option>
-                          {% endif %}
-                        {% else %}
-                          {% for loc in customer_locations %}
-                            <option value="{{ loc }}" {% if r.get('shipping_location') == loc %}selected{% endif %}>
-                              {{ loc }}
-                            </option>
-                          {% endfor %}
-                          {% if r.get('shipping_location') and r.get('shipping_location') != '__custom__' and r.get('shipping_location') not in customer_locations %}
-                            {# Saved value no longer matches any current customer location - keep it visible instead of silently dropping it #}
-                            <option value="{{ r.get('shipping_location') }}" selected>{{ r.get('shipping_location') }} (not on current list)</option>
-                          {% endif %}
+                        <option value="">— Select —</option>
+                        <option value="FOB" {% if r.get('shipping_location') == 'FOB' %}selected{% endif %}>FOB</option>
+                        <option disabled>──────────</option>
+                        {% for loc in customer_locations %}
+                          <option value="{{ loc }}" {% if r.get('shipping_location') == loc %}selected{% endif %}>
+                            {{ loc }}
+                          </option>
+                        {% endfor %}
+                        {% if r.get('shipping_location') and r.get('shipping_location') != '__custom__' and r.get('shipping_location') not in _known_locs %}
+                          {# Saved value no longer matches any current customer location - keep it visible instead of silently dropping it #}
+                          <option value="{{ r.get('shipping_location') }}" selected>{{ r.get('shipping_location') }} (not on current list)</option>
                         {% endif %}
                         <option value="__custom__">Other...</option>
                       </select>
@@ -822,21 +874,39 @@
                         name="row_shipping_custom"
                         placeholder="Type location..."
                         value="{{ r.get('shipping_custom', '') }}"
-                        style="max-width:160px; {% if r.get('shipping_location') != '__custom__' %}display:none;{% endif %}"
+                        style="width:100%; {% if r.get('shipping_location') != '__custom__' %}display:none;{% endif %}"
                       >
                     </div>
                   </td>       
 
                   <td>
                     <select class="form-control form-control-sm package-type" name="row_package_type">
-                      <option value="">Select package type</option>
+                      <option value="">Select pack</option>
                       <option value="Drum" {% if r.package_type == "Drum" %}selected{% endif %}>☐ Drum</option>
-                      <option value="330gal Tote" {% if r.package_type == "330gal Tote" %}selected{% endif %}>☐ 330 GAL Tote</option>
-                      <option value="275gal Tote" {% if r.package_type == "275gal Tote" %}selected{% endif %}>☐ 275 GAL Tote</option>
+                      <option value="330gal Tote" {% if r.package_type == "330gal Tote" %}selected{% endif %}>☐ 330 Tote</option>
+                      <option value="275gal Tote" {% if r.package_type == "275gal Tote" %}selected{% endif %}>☐ 275 Tote</option>
                       <option value="Pail" {% if r.package_type == "Pail" %}selected{% endif %}>☐ Pail</option>
                       <option value="Bulk" {% if r.package_type == "Bulk" %}selected{% endif %}>☐ Bulk</option>
                       <option value="Bag" {% if r.package_type == "Bag" %}selected{% endif %}>☐ Bag</option>
                     </select>
+                  </td>
+
+                  <td>
+                    <select class="form-control form-control-sm um-select" name="row_um">
+                      <option value="LB" {% if (r.um or '')|upper == "LB" %}selected{% endif %}>LB</option>
+                      <option value="GAL" {% if (r.um or '')|upper == "GAL" %}selected{% endif %}>GAL</option>
+                      <option value="EACH" {% if (r.um or '')|upper == "EACH" %}selected{% endif %}>EACH</option>
+                    </select>
+                  </td>
+
+                  {# Last month's final (sale) price for this product/package, filled in by JS from lastMonthLookup - the same figure the Simple View's "was $X" price comparison uses - purely informational, not submitted #}
+                  <td class="prior-month-section section-divider-left">
+                    <input class="form-control form-control-sm computed last-month-final-price" readonly tabindex="-1" value="—">
+                  </td>
+
+                  {# Last month's margin for this product/package, filled in by JS from lastMonthLookup - the same figure the Simple View's "was X%" comparison uses - purely informational, not submitted #}
+                  <td class="prior-month-section section-divider-right">
+                    <input class="form-control form-control-sm computed last-month-margin" readonly tabindex="-1" value="—">
                   </td>
 
                   {# Our Cost #}
@@ -881,8 +951,24 @@
                     >
                   </td>
 
-                  {# Margin % #}
+                  {# Price (computed: final_cost * (1 + margin/100)). Default
+                     to 2 decimals, but if this row's saved price actually
+                     carries 3-4 decimals of precision, render it (and Sale
+                     Price below) with that same precision instead of
+                     silently truncating it back to 2 on every page load. #}
+                  {% set _price = r.price or 0 %}
+                  {% set _price_decimals = 4 if (_price|round(2, 'common')) != _price else 2 %}
                   <td class="price-section section-divider-left">
+                    <input
+                      class="form-control form-control-sm price"
+                      name="row_price"
+                      value="{{ 'Inquire' if r.get('is_inquire') else ('%.4f'|format(_price) if _price_decimals == 4 else '%.2f'|format(_price)) }}"
+                      inputmode="decimal"
+                    >
+                  </td>
+
+                  {# Margin % #}
+                  <td class="price-section">
                     <input
                       class="form-control form-control-sm margin"
                       name="row_margin"
@@ -891,42 +977,23 @@
                     >
                   </td>
 
-                  {# Price (computed: final_cost * (1 + margin/100)) #}
-                  <td class="price-section">
-                    <input
-                      class="form-control form-control-sm price"
-                      name="row_price"
-                      value="{{ 'Inquire' if r.get('is_inquire') else '%.2f'|format(r.price or 0) }}"
-                      inputmode="decimal"
-                    >
-                  </td>
-
-                  {# Additional Shipping #}
-                  <td class="price-section">
+                  {# Additional Shipping & Packaging (single combined field) #}
+                  <td class="price-section section-divider-right">
                     <input
                       class="form-control form-control-sm add-shipping"
                       name="row_add_shipping"
-                      value="{{ '%.4f'|format(r.get('add_shipping', 0) or 0) }}"
+                      value="{{ '%.4f'|format((r.get('add_shipping', 0) or 0) + (r.get('add_packaging', 0) or 0)) }}"
                       inputmode="decimal"
                     >
+                    <input type="hidden" class="add-packaging" name="row_add_packaging" value="0">
                   </td>
 
-                  {# Additional Packaging #}
-                  <td class="price-section section-divider-right">
-                    <input
-                      class="form-control form-control-sm add-packaging"
-                      name="row_add_packaging"
-                      value="{{ '%.4f'|format(r.get('add_packaging', 0) or 0) }}"
-                      inputmode="decimal"
-                    >
-                  </td>
-
-                  {# Final Price (computed: price + add_shipping + add_packaging) #}
+                  {# Final Price / Sale Price (computed: price + add_shipping + add_packaging) - mirrors Price's decimal precision, see above #}
                   <td class="final-price-section section-divider-left section-divider-right">
                     <input
                       class="form-control form-control-sm computed final"
                       name="row_final"
-                      value="{{ 'Inquire' if r.get('is_inquire') else '%.4f'|format(r.final_price or 0) }}"
+                      value="{{ 'Inquire' if r.get('is_inquire') else ('%.4f'|format(r.final_price or 0) if _price_decimals == 4 else '%.2f'|format(r.final_price or 0)) }}"
                       inputmode="decimal"
                       readonly
                       tabindex="-1"
@@ -940,8 +1007,7 @@
         </div>
 
         <div class="text-muted-small" style="margin-top:8px;">
-          Tip: Edit cost, pre-margin packaging/shipping, margin, price, or additional shipping/packaging. Final Cost and Final Price update automatically. Type <strong>IQ</strong> in the Price box and press Enter to mark a product as "Inquire" instead of a set price.
-        </div>
+          Tip: Prior Months information is for reference only. All other fields can be adjusted. Final Cost and Final Price update automatically. Type <strong>IQ</strong> in the Sale Price box and press Enter to mark a product as "Inquire" instead of a set price.             </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
           <button class="btn btn-outline-secondary btn-sm" type="submit" name="action" value="delete_selected">
@@ -987,6 +1053,55 @@
     function fmt2(n) {
       return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
     }
+
+    // How many decimal places did the user actually type into a price-ish
+    // field? Used so Price/Sale Price default to 2 decimals, but if someone
+    // deliberately types 3 or 4 decimals of precision, that precision is
+    // kept (and mirrored onto Sale Price) instead of being silently rounded
+    // away. Anything at or under 2 decimals (or a whole number) just stays
+    // the normal 2-decimal default; anything above 4 is clamped to 4.
+    function priceDecimalsFromRaw(raw) {
+      const s = String(raw == null ? "" : raw).trim();
+      const dot = s.indexOf(".");
+      if (dot === -1) return 2;
+      const d = s.length - dot - 1;
+      return d > 2 ? Math.min(d, 4) : 2;
+    }
+
+    // A row "remembers" its price precision (2 by default, 3-4 once the
+    // user has typed that much detail into Price) via a data attribute, so
+    // later edits elsewhere in the row (Cost, Margin, etc.) keep using it
+    // instead of resetting back to 2 decimals.
+    function getRowPriceDecimals(tr) {
+      const stored = tr && tr.dataset ? tr.dataset.priceDecimals : null;
+      const n = stored ? parseInt(stored, 10) : 2;
+      return (n >= 2 && n <= 4) ? n : 2;
+    }
+
+    function fmtPrice(n, decimals) {
+      const d = decimals || 2;
+      const factor = Math.pow(10, d);
+      return (Math.round((Number(n) || 0) * factor) / factor).toFixed(d);
+    }
+
+    // Seeds a row's remembered price precision from whatever's already in
+    // its Price box - covers rows rendered by the server (a saved quote
+    // that had 3-4 decimal precision shouldn't lose it just because the
+    // page reloaded) as well as rows restored from an autosave draft.
+    function initRowPriceDecimals(tr) {
+      if (!tr) return;
+      const priceEl = tr.querySelector(".price");
+      if (!priceEl) return;
+      const raw = priceEl.value;
+      if (isInquireValue(raw)) return;
+      tr.dataset.priceDecimals = String(priceDecimalsFromRaw(raw));
+    }
+
+    function initAllRowPriceDecimals() {
+      document.querySelectorAll("#quote-table tbody tr").forEach(initRowPriceDecimals);
+    }
+
+    document.addEventListener("DOMContentLoaded", initAllRowPriceDecimals);
 
     function normalizeUM(v) {
       return String(v || "").trim().toUpperCase();
@@ -1281,9 +1396,12 @@
 
           const finalCost = cost + preShip + prePack;
           if (finalCostEl) finalCostEl.value = fmt4(finalCost);
+
+          const decimals = getRowPriceDecimals(tr);
           price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt2(price);
-          finalEl.value = fmt4(price + addShip + addPack);
+          price = parseFloat(fmtPrice(price, decimals));
+          priceEl.value = fmtPrice(price, decimals);
+          finalEl.value = fmtPrice(price + addShip + addPack, decimals);
         }
         return;
       }
@@ -1303,9 +1421,12 @@
       }
 
       if (changed === "cost" || changed === "pre-shipping" || changed === "pre-packaging") {
+        const decimals = getRowPriceDecimals(tr);
+
         if (!priceLocked) {
           price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt2(price);
+          price = parseFloat(fmtPrice(price, decimals));
+          priceEl.value = fmtPrice(price, decimals);
         } else {
           price = toNum(priceEl.value);
         }
@@ -1318,14 +1439,17 @@
           if (changed === "pre-packaging") prePackEl.value = fmt4(prePack);
         }
 
-        finalEl.value = fmt4(finalP);
+        finalEl.value = fmtPrice(finalP, decimals);
         return;
       }
 
       if (changed === "margin") {
+        const decimals = getRowPriceDecimals(tr);
+
         if (!priceLocked) {
           price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt2(price);
+          price = parseFloat(fmtPrice(price, decimals));
+          priceEl.value = fmtPrice(price, decimals);
         } else {
           price = toNum(priceEl.value);
         }
@@ -1333,7 +1457,7 @@
         finalP = price + addShip + addPack;
 
         if (!liveEdit) marginEl.value = fmt2(margin);
-        finalEl.value = fmt4(finalP);
+        finalEl.value = fmtPrice(finalP, decimals);
         return;
       }
 
@@ -1348,6 +1472,16 @@
           return;
         }
 
+        // Figure out how many decimals the user actually typed (2 by
+        // default, 3-4 if they deliberately typed that much precision) and
+        // remember it on the row so Sale Price mirrors it, and so later
+        // edits elsewhere in this row keep using it instead of resetting
+        // back to 2 decimals.
+        const decimals = priceDecimalsFromRaw(priceEl.value);
+        tr.dataset.priceDecimals = String(decimals);
+
+        price = parseFloat(fmtPrice(price, decimals));
+
         // back-calc margin from finalCost
         if (finalCost > 0) {
           margin = ((price - finalCost) / finalCost) * 100;
@@ -1356,27 +1490,30 @@
         }
         finalP = price + addShip + addPack;
 
-        if (!liveEdit) priceEl.value = fmt2(price);
+        if (!liveEdit) priceEl.value = fmtPrice(price, decimals);
         marginEl.value = fmt2(margin);
-        finalEl.value  = fmt4(finalP);
+        finalEl.value  = fmtPrice(finalP, decimals);
         return;
       }
 
       if (changed === "add-shipping" || changed === "add-packaging") {
+        const decimals = getRowPriceDecimals(tr);
         finalP = price + addShip + addPack;
 
         if (!liveEdit) {
           if (changed === "add-shipping") addShipEl.value = fmt4(addShip);
           if (changed === "add-packaging") addPackEl.value = fmt4(addPack);
         }
-        finalEl.value = fmt4(finalP);
+        finalEl.value = fmtPrice(finalP, decimals);
         return;
       }
 
       if (changed === "final") {
         // back-calc price from final, then margin from finalCost
+        const decimals = getRowPriceDecimals(tr);
         price = finalP - addShip - addPack;
         if (price < 0) price = 0;
+        price = parseFloat(fmtPrice(price, decimals));
 
         if (finalCost > 0) {
           margin = ((price - finalCost) / finalCost) * 100;
@@ -1384,8 +1521,8 @@
           margin = 0;
         }
 
-        if (!liveEdit) finalEl.value = fmt4(finalP);
-        priceEl.value  = fmt2(price);
+        if (!liveEdit) finalEl.value = fmtPrice(finalP, decimals);
+        priceEl.value  = fmtPrice(price, decimals);
         marginEl.value = fmt2(margin);
         return;
       }
@@ -1402,7 +1539,7 @@
     function getEditableInputsInRow(tr) {
       if (!tr) return [];
       return Array.from(
-        tr.querySelectorAll(".cost, .pre-packaging, .pre-shipping, .margin, .price, .add-shipping, .add-packaging")
+        tr.querySelectorAll(".cost, .pre-packaging, .pre-shipping, .margin, .price, .add-shipping")
       );
     }
 
@@ -1413,7 +1550,7 @@
       const nextTr = tr.nextElementSibling;
       if (!nextTr) return;
 
-      const classes = ["cost", "pre-packaging", "pre-shipping", "margin", "price", "add-shipping", "add-packaging"];
+      const classes = ["cost", "pre-packaging", "pre-shipping", "margin", "price", "add-shipping"];
       const colClass = classes.find(cls => currentInput.classList.contains(cls));
       if (!colClass) return;
 
@@ -1430,7 +1567,7 @@
       const prevTr = tr.previousElementSibling;
       if (!prevTr) return;
 
-      const classes = ["cost", "pre-packaging", "pre-shipping", "margin", "price", "add-shipping", "add-packaging"];
+      const classes = ["cost", "pre-packaging", "pre-shipping", "margin", "price", "add-shipping"];
       const colClass = classes.find(cls => currentInput.classList.contains(cls));
       if (!colClass) return;
 
@@ -1494,6 +1631,12 @@
       else if (el.classList.contains("add-shipping"))  updateRow(tr, "add-shipping", liveEdit);
       else if (el.classList.contains("add-packaging")) updateRow(tr, "add-packaging", liveEdit);
       else if (el.classList.contains("final"))         updateRow(tr, "final", liveEdit);
+
+      // Any of these edits can change what "current" margin actually is -
+      // not just typing directly into Margin %, but also Cost, Price, and
+      // Final Price, which all feed into it. Always refresh the Last Mo.
+      // Margin comparison color so it never falls out of sync.
+      updateLastMonthMarginCell(tr);
     }
 
     const table = document.getElementById("quote-table");
@@ -1536,7 +1679,7 @@
           // box and isn't a complete setting yet).
           if (selectedLocation && selectedLocation !== "__custom__") {
             const shouldDeploy = confirm(
-              "Deploy this location setting for all products on this row?"
+              "Would you like this location to be the same for all products on the price list?"
             );
             if (shouldDeploy) {
               applyShippingSettingsToAllRows(tr);
@@ -1846,7 +1989,7 @@
       const addShipInput    = tr.querySelector('input[name="row_add_shipping"]');
       const addPackInput    = tr.querySelector('input[name="row_add_packaging"]');
       const finalInput      = tr.querySelector('input[name="row_final"]');
-      const shippingTypeInput     = tr.querySelector('select[name="row_shipping_type"]');
+      const shippingTypeInput     = tr.querySelector('input[name="row_shipping_type"]');
       const shippingLocationInput = tr.querySelector('select[name="row_shipping_location"]');
       const shippingCustomInput   = tr.querySelector('input[name="row_shipping_custom"]');
       const isInquireInput        = tr.querySelector('input[name="row_is_inquire"]');
@@ -1893,88 +2036,45 @@
       form.submit();
     }
   }
-  function handleShippingTypeChange(select, preserveValue) {
-    const td = select.closest("td");
-    const locationSelect = td.querySelector(".shipping-location-select");
-    const customInput = td.querySelector(".shipping-custom-input");
-    const type = select.value;
+  // Customer locations feed the single shipping dropdown (FOB + each city
+  // the customer has set up on their profile). Shared by the JS-built
+  // "add custom row" template and by applyShippingSettingsToAllRows.
+  const customerLocationsList = {{ customer_locations | tojson }};
 
-    const customerLocs = {{ customer_locations | tojson }};
-    const pickupLocs = {{ pickup_locations | tojson }};
+  function buildCustomerLocationOptionsHtml() {
+    return customerLocationsList.map(function(loc) {
+      return '<option value="' + loc.replace(/"/g, "&quot;") + '">' + loc + '</option>';
+    }).join("");
+  }
 
-    locationSelect.innerHTML = '<option value="">— Location —</option>';
-
-    let matchedPreserve = false;
-
-    if (type === "DEL") {
-      customerLocs.forEach(function(loc) {
-        const opt = document.createElement("option");
-        opt.value = loc;
-        opt.textContent = loc;
-        locationSelect.appendChild(opt);
-        if (preserveValue && loc === preserveValue) matchedPreserve = true;
-      });
-    } else if (type === "FOB") {
-      pickupLocs.forEach(function(loc) {
-        const val = loc.city + " " + loc.state;
-        const opt = document.createElement("option");
-        opt.value = val;
-        opt.textContent = loc.city + ", " + loc.state;
-        locationSelect.appendChild(opt);
-        if (preserveValue && val === preserveValue) matchedPreserve = true;
-      });
-    }
-
-    // If a saved location no longer matches anything on the current list
-    // (customer locations changed, etc.), keep it as a selectable option
-    // instead of silently dropping it - the select would otherwise just
-    // show blank even though the row's actual data is still correct.
-    if (preserveValue && preserveValue !== "__custom__" && !matchedPreserve) {
-      const preserveOpt = document.createElement("option");
-      preserveOpt.value = preserveValue;
-      preserveOpt.textContent = preserveValue + " (not on current list)";
-      locationSelect.appendChild(preserveOpt);
-    }
-
-    const customOpt = document.createElement("option");
-    customOpt.value = "__custom__";
-    customOpt.textContent = "Other...";
-    locationSelect.appendChild(customOpt);
-
-    // Always show both boxes. Deliberately NOT disabling the location
-    // dropdown here - a disabled <select> is excluded from form submission
-    // entirely, which silently shifted row_shipping_location out of sync
-    // with every other row_* list (product, cost, etc.) for any row that
-    // still had a blank type. Leaving it enabled (with just a placeholder
-    // option) keeps every row's fields aligned by position on submit.
-    locationSelect.style.display = "";
-    customInput.style.display = "none";
-    customInput.value = "";
+  // A row's shipping type (FOB vs DEL) is now derived from the single
+  // location dropdown instead of a separate selector: choosing "FOB" means
+  // FOB, choosing any customer city (or a typed "Other..." location) means
+  // DEL. Kept as a hidden field so the rest of the row_* submission stays
+  // unchanged for anything reading row_shipping_type server-side.
+  function deriveShippingType(locationValue) {
+    if (locationValue === "FOB") return "FOB";
+    if (locationValue) return "DEL";
+    return "";
   }
 
   function applyShippingSettingsToAllRows(sourceTr) {
-    const sourceTypeSel    = sourceTr.querySelector(".shipping-type-select");
-    const sourceLocSel     = sourceTr.querySelector(".shipping-location-select");
+    const sourceLocSel      = sourceTr.querySelector(".shipping-location-select");
     const sourceCustomInput = sourceTr.querySelector(".shipping-custom-input");
 
-    if (!sourceTypeSel || !sourceLocSel) return;
+    if (!sourceLocSel) return;
 
-    const type        = sourceTypeSel.value;
-    const location     = sourceLocSel.value;
+    const location    = sourceLocSel.value;
     const customValue = sourceCustomInput ? sourceCustomInput.value : "";
+    const type        = deriveShippingType(location);
 
     document.querySelectorAll("#quote-table tbody tr").forEach(function(tr) {
       if (tr === sourceTr) return;
 
-      const typeSel     = tr.querySelector(".shipping-type-select");
       const locSel      = tr.querySelector(".shipping-location-select");
       const customInput = tr.querySelector(".shipping-custom-input");
-      if (!typeSel || !locSel) return;
-
-      // Rebuild this row's location options for the chosen type (DEL/FOB
-      // pull from different location lists) before setting the value.
-      typeSel.value = type;
-      handleShippingTypeChange(typeSel);
+      const typeInput   = tr.querySelector('input[name="row_shipping_type"]');
+      if (!locSel) return;
 
       locSel.value = location;
 
@@ -1991,43 +2091,36 @@
           customInput.value = "";
         }
       }
+
+      if (typeInput) typeInput.value = type;
     });
   }
 
-  document.addEventListener("DOMContentLoaded", function() {
-    document.querySelectorAll(".shipping-location-select").forEach(function(sel) {
-      sel.addEventListener("change", function() {
-        const td = sel.closest("td");
-        const customInput = td.querySelector(".shipping-custom-input");
-        if (sel.value === "__custom__") {
-          sel.style.display = "none";       // hide dropdown
-          customInput.style.display = "";   // show text box in its place
-          customInput.focus();
-        } else {
-          customInput.style.display = "none";
-          customInput.value = "";
-        }
-      });
-    });
+  // Delegated so it covers existing rows, duplicated rows, and rows added
+  // via "add custom row" alike - toggles the free-text box for "Other..."
+  // and keeps the hidden row_shipping_type in sync with the picked location.
+  document.addEventListener("change", function(e) {
+    if (!e.target.classList || !e.target.classList.contains("shipping-location-select")) return;
 
-    // If a row already has __custom__ saved, wire up a click on the input to go back
-    document.querySelectorAll(".shipping-custom-input").forEach(function(input) {
-      input.addEventListener("blur", function() {
-        // keep it as-is, value is preserved in the hidden field on sync
-      });
-    });
-  });
+    const sel          = e.target;
+    const td            = sel.closest("td");
+    const customInput  = td ? td.querySelector(".shipping-custom-input") : null;
+    const typeInput    = td ? td.querySelector('input[name="row_shipping_type"]') : null;
 
-  // Wire up existing rows on load for the custom input toggle
-  document.addEventListener("DOMContentLoaded", function() {
-    document.querySelectorAll(".shipping-location-select").forEach(function(sel) {
-      sel.addEventListener("change", function() {
-        const td = sel.closest("td");
-        const customInput = td.querySelector(".shipping-custom-input");
-        customInput.style.display = sel.value === "__custom__" ? "" : "none";
-        if (sel.value !== "__custom__") customInput.value = "";
-      });
-    });
+    if (sel.value === "__custom__") {
+      sel.style.display = "none";
+      if (customInput) {
+        customInput.style.display = "";
+        customInput.focus();
+      }
+    } else {
+      if (customInput) {
+        customInput.style.display = "none";
+        customInput.value = "";
+      }
+    }
+
+    if (typeInput) typeInput.value = deriveShippingType(sel.value);
   });
 
   function closeProductPanel() {
@@ -2072,6 +2165,8 @@
     tr.setAttribute("data-weight", "");
     tr.setAttribute("data-inquire", "0");
 
+    const customerLocationOptionsHtml = buildCustomerLocationOptionsHtml();
+
     tr.innerHTML = `
       <td class="selection-cell">
         <div class="row-actions">
@@ -2080,7 +2175,7 @@
         </div>
       </td>
 
-      <td class="product-col-frozen" style="font-weight:700; text-align:center;">
+      <td class="product-col-frozen section-divider-right" style="font-weight:700; text-align:center;">
         <input type="text" name="row_product" class="form-control form-control-sm" placeholder="Enter product name" style="font-weight:600; text-align:center;">
         <input type="hidden" name="row_description" value="">
         <input type="hidden" name="row_source_cost" value="0">
@@ -2092,25 +2187,16 @@
       </td>
 
       <td>
-        <select class="form-control form-control-sm um-select" name="row_um">
-          <option value="LB">LB</option>
-          <option value="GAL">GAL</option>
-          <option value="EACH">EACH</option>
-        </select>
-      </td>
-
-      <td>
         <div style="display:flex; gap:6px; align-items:center;">
-          <select class="form-control form-control-sm shipping-type-select" name="row_shipping_type" onchange="handleShippingTypeChange(this)" style="max-width:80px;">
-            <option value="">—</option>
-            <option value="DEL">DEL</option>
+          <input type="hidden" name="row_shipping_type" value="">
+          <select class="form-control form-control-sm shipping-location-select" name="row_shipping_location" style="width:100%;">
+            <option value="">— Select —</option>
             <option value="FOB">FOB</option>
-          </select>
-          <select class="form-control form-control-sm shipping-location-select" name="row_shipping_location" style="max-width:160px;">
-            <option value="">— Location —</option>
+            <option disabled>──────────</option>
+            ${customerLocationOptionsHtml}
             <option value="__custom__">Other...</option>
           </select>
-          <input type="text" class="form-control form-control-sm shipping-custom-input" name="row_shipping_custom" placeholder="Type location..." value="" style="max-width:160px; display:none;">
+          <input type="text" class="form-control form-control-sm shipping-custom-input" name="row_shipping_custom" placeholder="Type location..." value="" style="width:100%; display:none;">
         </div>
       </td>
 
@@ -2126,19 +2212,39 @@
         </select>
       </td>
 
+      <td>
+        <select class="form-control form-control-sm um-select" name="row_um">
+          <option value="LB">LB</option>
+          <option value="GAL">GAL</option>
+          <option value="EACH">EACH</option>
+        </select>
+      </td>
+
+      <td class="prior-month-section section-divider-left">
+        <input class="form-control form-control-sm computed last-month-final-price" readonly tabindex="-1" value="—">
+      </td>
+
+      <td class="prior-month-section section-divider-right">
+        <input class="form-control form-control-sm computed last-month-margin" readonly tabindex="-1" value="—">
+      </td>
+
       <td><input class="form-control form-control-sm cost" name="row_cost" value="0.0000" inputmode="decimal"></td>
       <td><input class="form-control form-control-sm pre-packaging" name="row_pre_packaging" value="0.0000" inputmode="decimal"></td>
       <td><input class="form-control form-control-sm pre-shipping" name="row_pre_shipping" value="0.0000" inputmode="decimal"></td>
       <td><input class="form-control form-control-sm computed final-cost" name="row_final_cost" value="0.0000" readonly tabindex="-1"></td>
-      <td class="price-section section-divider-left"><input class="form-control form-control-sm margin" name="row_margin" value="0.00" inputmode="decimal"></td>
-      <td class="price-section"><input class="form-control form-control-sm price" name="row_price" value="0.00" inputmode="decimal"></td>
-      <td class="price-section"><input class="form-control form-control-sm add-shipping" name="row_add_shipping" value="0.0000" inputmode="decimal"></td>
-      <td class="price-section section-divider-right"><input class="form-control form-control-sm add-packaging" name="row_add_packaging" value="0.0000" inputmode="decimal"></td>
+      <td class="price-section section-divider-left"><input class="form-control form-control-sm price" name="row_price" value="0.00" inputmode="decimal"></td>
+      <td class="price-section"><input class="form-control form-control-sm margin" name="row_margin" value="0.00" inputmode="decimal"></td>
+      <td class="price-section section-divider-right">
+        <input class="form-control form-control-sm add-shipping" name="row_add_shipping" value="0.0000" inputmode="decimal">
+        <input type="hidden" class="add-packaging" name="row_add_packaging" value="0">
+      </td>
       <td class="final-price-section section-divider-left section-divider-right"><input class="form-control form-control-sm computed final" name="row_final" value="0.0000" readonly tabindex="-1"></td>
     `;
 
     tbody.appendChild(tr);
 
+    updateLastMonthFinalPriceCell(tr);
+    updateLastMonthMarginCell(tr);
     savePrinterDraftState();
 
     const nameInput = tr.querySelector('[name="row_product"]');
@@ -2157,6 +2263,8 @@
     const dupBtn = clone.querySelector(".duplicate-btn");
     if (dupBtn) dupBtn.onclick = function() { duplicateCustomRow(this); };
     origTr.insertAdjacentElement("afterend", clone);
+    updateLastMonthFinalPriceCell(clone);
+    updateLastMonthMarginCell(clone);
 
     const clonedNameInput = clone.querySelector('[name="row_product"]');
     if (clonedNameInput) attachDupeCheckOnBlur(clonedNameInput);
@@ -2165,7 +2273,8 @@
   // Product name (normalized: trimmed, lowercased, single-spaced) -> last
   // month's saved cost/margin/price/final_price for this customer, from
   // build_last_month_lookup() in app.py. Empty {} if this customer had no
-  // saved price letter last month.
+  // saved price letter last month. Used both for the "was $X" comparisons
+  // in the Simple View and for the "Last Mo. Sale Price" column below.
   const lastMonthLookup = {{ last_month_lookup | tojson }};
 
   function normalizeProductNameJs(name) {
@@ -2179,6 +2288,77 @@
   function lastMonthLookupKey(product, packageTypeRawValue) {
     return normalizeProductNameJs(product) + "||" + normalizePackageTypeJs(packageTypeRawValue);
   }
+
+  // Fills in the read-only "Last Mo. Sale Price" column for one row, from
+  // lastMonthLookup - the exact same final_price figure the Simple View's
+  // "was $X" comparison uses. Purely informational (no name attribute, not
+  // submitted) - keyed off the row's current product name + package type,
+  // same as the Simple View comparison.
+  function updateLastMonthFinalPriceCell(tr) {
+    if (!tr) return;
+    const cell = tr.querySelector(".last-month-final-price");
+    if (!cell) return;
+
+    const productEl = tr.querySelector('[name="row_product"]');
+    const packageEl = tr.querySelector('select[name="row_package_type"]');
+    const product    = productEl ? productEl.value : "";
+    const packageVal = packageEl ? packageEl.value : "";
+
+    const entry      = lastMonthLookup[lastMonthLookupKey(product, packageVal)] || null;
+    const lmFinalPrice = entry ? parseFloat(entry.final_price) : NaN;
+
+    cell.value = (entry && !isNaN(lmFinalPrice)) ? ("$" + lmFinalPrice.toFixed(4)) : "—";
+  }
+
+  function updateAllLastMonthFinalPriceCells() {
+    document.querySelectorAll("#quote-table tbody tr").forEach(updateLastMonthFinalPriceCell);
+  }
+
+  // Fills in the read-only "Last Mo. Margin" column for one row, from
+  // lastMonthLookup - the exact same figure the Simple View's "was X%"
+  // margin comparison uses. Purely informational (no name attribute, not
+  // submitted) - keyed off the row's current product name + package type,
+  // same as the Simple View comparison.
+  function updateLastMonthMarginCell(tr) {
+    if (!tr) return;
+    const cell = tr.querySelector(".last-month-margin");
+    if (!cell) return;
+
+    const productEl = tr.querySelector('[name="row_product"]');
+    const packageEl = tr.querySelector('select[name="row_package_type"]');
+    const product    = productEl ? productEl.value : "";
+    const packageVal = packageEl ? packageEl.value : "";
+
+    const entry   = lastMonthLookup[lastMonthLookupKey(product, packageVal)] || null;
+    const lmMargin = entry ? parseFloat(entry.margin) : NaN;
+
+    cell.value = (entry && !isNaN(lmMargin)) ? (lmMargin.toFixed(2) + "%") : "—";
+  }
+
+  function updateAllLastMonthMarginCells() {
+    document.querySelectorAll("#quote-table tbody tr").forEach(updateLastMonthMarginCell);
+  }
+
+  document.addEventListener("DOMContentLoaded", updateAllLastMonthFinalPriceCells);
+  document.addEventListener("DOMContentLoaded", updateAllLastMonthMarginCells);
+
+  // Recompute on anything that could change which product/package a row is
+  // keyed by: package type changes on any row, and typed product names on
+  // custom rows.
+  document.addEventListener("change", function(e) {
+    if (e.target.matches && e.target.matches('select[name="row_package_type"]')) {
+      updateLastMonthFinalPriceCell(e.target.closest("tr"));
+      updateLastMonthMarginCell(e.target.closest("tr"));
+    }
+  });
+
+  document.addEventListener("input", function(e) {
+    if (e.target.matches && e.target.matches('input[name="row_product"]')) {
+      const tr = e.target.closest("tr");
+      updateLastMonthFinalPriceCell(tr);
+      updateLastMonthMarginCell(tr);
+    }
+  });
 
   function populateSimpleView() {
     const tbody = document.getElementById("simple-view-tbody");
@@ -2498,7 +2678,7 @@
         source_um: tr.querySelector('input[name="row_source_um"]')?.value || "",
         source_price: tr.querySelector('input[name="row_source_price"]')?.value || "0",
         weight: tr.querySelector('input[name="row_weight"]')?.value || "",
-        shipping_type:     tr.querySelector('select[name="row_shipping_type"]')?.value     || "",
+        shipping_type:     tr.querySelector('input[name="row_shipping_type"]')?.value     || "",
         shipping_location: tr.querySelector('select[name="row_shipping_location"]')?.value || "",
         shipping_custom:   tr.querySelector('input[name="row_shipping_custom"]')?.value    || "",
         is_inquire: tr.querySelector('input[name="row_is_inquire"]')?.value || (tr.dataset.inquire === "1" ? "1" : "0"),
@@ -2586,19 +2766,13 @@
       setRowField(tr, 'input[name="row_add_shipping"]', row.add_shipping);
       setRowField(tr, 'input[name="row_add_packaging"]', row.add_packaging);
       setRowField(tr, 'input[name="row_final"]', row.final || row.final_price);
-      // Shipping type/location need special handling: the location <select>'s
-      // options are rebuilt dynamically per type (DEL -> customer locations,
-      // FOB -> pickup locations). Just assigning .value on row_shipping_type
-      // (via setRowField) doesn't fire a change event, so handleShippingTypeChange
-      // never runs and the location dropdown still has whatever options it was
-      // rendered with. Setting row_shipping_location to a city that isn't in
-      // that stale option list silently no-ops, leaving it blank - which is why
-      // the type showed up but the city didn't. Rebuild the options first, the
-      // same way applyShippingSettingsToAllRows already does it correctly.
-      const shippingTypeSel = tr.querySelector('select[name="row_shipping_type"]');
-      if (shippingTypeSel && row.shipping_type !== undefined && row.shipping_type !== null) {
-        shippingTypeSel.value = row.shipping_type;
-        handleShippingTypeChange(shippingTypeSel, row.shipping_location);
+      // Shipping location is now a single dropdown with static options (FOB
+      // + customer cities), so restoring it is just setting .value - no
+      // option-list rebuild needed. row_shipping_type is derived from
+      // whatever location gets set below.
+      const shippingTypeInput = tr.querySelector('input[name="row_shipping_type"]');
+      if (shippingTypeInput && row.shipping_type !== undefined && row.shipping_type !== null) {
+        shippingTypeInput.value = row.shipping_type;
       }
 
       const shippingLocSel = tr.querySelector('select[name="row_shipping_location"]');
@@ -2663,6 +2837,10 @@
       rebuildRowsFromDraft(state);
       restoreVisibleRowsFromDraft(state);
     }
+
+    updateAllLastMonthFinalPriceCells();
+    updateAllLastMonthMarginCells();
+    initAllRowPriceDecimals();
   }
 
   document.addEventListener("DOMContentLoaded", function() {
