@@ -269,6 +269,18 @@
     box-shadow: 2px 0 3px rgba(0,0,0,0.06);
   }
 
+  /* Give the Product column room to breathe (it's now much wider than the
+     other columns) and keep long product names on one line instead of
+     wrapping; if a name is still too long for the wider column, truncate
+     it with an ellipsis rather than letting it wrap and grow the row. */
+  #quote-table td.product-col-frozen {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
   #quote-table thead th.product-col-frozen {
     z-index: 4;
     background: #f8f9fa;
@@ -742,13 +754,13 @@
         <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
           <thead>
             <tr>
-              <th style="width:18%; text-align:left; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Product</th>
-              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Package Type</th>
-              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Our Cost</th>
-              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Margin</th>
-              <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Price</th>
-              <th style="width:11%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Add. Shipping</th>
-              <th style="width:11%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Add. Packaging</th>
+              <th style="width:28%; text-align:left; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Product</th>
+              <th style="width:10%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Package Type</th>
+              <th style="width:10%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Our Cost</th>
+              <th style="width:10%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Margin</th>
+              <th style="width:10%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Price</th>
+              <th style="width:10%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Add. Shipping</th>
+              <th style="width:10%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Add. Packaging</th>
               <th style="width:12%; text-align:center; padding:8px 10px; font-size:13px; background:#f8f9fa; box-shadow: inset 0 -1px 0 #dee2e6;">Final Price</th>
             </tr>
           </thead>
@@ -780,7 +792,7 @@
                     <span style="width:28px; height:28px; display:block;"></span>
                   </div>
                 </th>
-                <th class="product-col-frozen section-divider-right" style="width:140px;" rowspan="2">Product</th>
+                <th class="product-col-frozen section-divider-right" style="width:320px;" rowspan="2">Product</th>
                 <th colspan="3" class="quote-group-header">General Information</th>
                 <th colspan="2" class="quote-group-header prior-month-section section-divider-left section-divider-right">Prior Months Info</th>
                 <th colspan="4" class="quote-group-header">Current Cost</th>
@@ -2474,7 +2486,7 @@
 
       html += `
         <tr${borderStyle}>
-          <td style="text-align:left; font-weight:700; padding:8px 10px; font-size:13px;">${product}</td>
+          <td style="text-align:left; font-weight:700; padding:8px 10px; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${product}</td>
           <td style="text-align:center; padding:8px 10px; font-size:13px;">${packageTy}</td>
           <td style="text-align:center; padding:8px 10px; font-size:13px;">
             <div style="font-weight:600;">${cost}</div>
