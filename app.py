@@ -6376,7 +6376,9 @@ def admin_users_page():
         elif action == "save_company":
             company_name = (request.form.get("company_name") or "").strip()
             website_url = (request.form.get("website_url") or "").strip()
-            address = (request.form.get("address") or "").strip()
+            address_line1 = (request.form.get("address_line1") or "").strip()
+            address_line2 = (request.form.get("address_line2") or "").strip()
+            address = "\n".join(line for line in [address_line1, address_line2] if line)
 
             company_info["company_name"] = company_name
             company_info["website_url"] = website_url

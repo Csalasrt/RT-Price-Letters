@@ -24,9 +24,15 @@
         <input name="website_url" value="{{ company_info.website_url }}">
       </div>
 
+      {% set addr_lines = (company_info.address or "").split('\n') %}
       <div class="row-form">
-        <label>Address</label>
-        <input name="address" value="{{ company_info.address }}">
+        <label>Street Address</label>
+        <input name="address_line1" value="{{ addr_lines[0] if addr_lines|length > 0 else '' }}" placeholder="123 Main St">
+      </div>
+
+      <div class="row-form">
+        <label>City, State ZIP</label>
+        <input name="address_line2" value="{{ addr_lines[1] if addr_lines|length > 1 else '' }}" placeholder="Houston, TX 77001">
       </div>
 
       <div class="row-form">
