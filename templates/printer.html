@@ -516,12 +516,14 @@
   #quote-table td.section-divider-right {
     border-right: 3px solid #98a2b3 !important;
   }
-  /* Make editable boxes visually distinct from read-only/computed ones */
+  /* Editable and computed cells share the same clean, borderless look.
+     A border only appears when a field is actively focused, so it's still
+     obvious which box you're typing into. */
   #quote-table input.form-control:not(.computed),
   #quote-table select.form-control,
   .build-toolbar-card .form-control,
   .build-toolbar-card select {
-    border: 1.5px solid #9cb8f2 !important;
+    border: 1px solid transparent !important;
   }
 
   #quote-table input.form-control:not(.computed):focus,
@@ -532,7 +534,7 @@
   }
 
   #quote-table input.computed {
-    border: 1px solid #e5e7eb;
+    border: 1px solid transparent;
   }
 
   /* Rows marked as "Inquire" get a subtle highlight so they're easy to spot */
