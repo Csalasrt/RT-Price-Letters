@@ -796,7 +796,7 @@
                 </th>
                 <th class="product-col-frozen section-divider-right" style="width:320px;" rowspan="2">Product</th>
                 <th colspan="3" class="quote-group-header">General Information</th>
-                <th colspan="2" class="quote-group-header prior-month-section section-divider-left section-divider-right">Prior Months Info</th>
+                <th colspan="3" class="quote-group-header prior-month-section section-divider-left section-divider-right">Prior Months Info</th>
                 <th colspan="4" class="quote-group-header">Current Cost</th>
                 <th colspan="4" class="quote-group-header section-divider-left section-divider-right">Current Month Pricing</th>
               </tr>
@@ -804,7 +804,8 @@
                 <th style="width:120px;">Location</th>
                 <th style="width:58px;">Package Type</th>
                 <th style="width:52px;">UM</th>
-                <th style="width:78px;" class="prior-month-section section-divider-left">Last Mo. Sale Price</th>
+                <th style="width:70px;" class="prior-month-section section-divider-left">Last Mo. Cost</th>
+                <th style="width:78px;" class="prior-month-section">Last Mo. Sale Price</th>
                 <th style="width:65px;" class="prior-month-section section-divider-right">Last Mo. Margin</th>
                 
                 
@@ -923,8 +924,13 @@
                     </select>
                   </td>
 
-                  {# Last month's final (sale) price for this product/package, filled in by JS from lastMonthLookup - the same figure the Simple View's "was $X" price comparison uses - purely informational, not submitted #}
+                  {# Last month's cost for this product/package, filled in by JS from lastMonthLookup - purely informational, not submitted #}
                   <td class="prior-month-section section-divider-left">
+                    <input class="form-control form-control-sm computed last-month-cost" readonly tabindex="-1" value="—">
+                  </td>
+
+                  {# Last month's final (sale) price for this product/package, filled in by JS from lastMonthLookup - the same figure the Simple View's "was $X" price comparison uses - purely informational, not submitted #}
+                  <td class="prior-month-section">
                     <input class="form-control form-control-sm computed last-month-final-price" readonly tabindex="-1" value="—">
                   </td>
 
@@ -2331,6 +2337,10 @@
       </td>
 
       <td class="prior-month-section section-divider-left">
+        <input class="form-control form-control-sm computed last-month-cost" readonly tabindex="-1" value="—">
+      </td>
+
+      <td class="prior-month-section">
         <input class="form-control form-control-sm computed last-month-final-price" readonly tabindex="-1" value="—">
       </td>
 
@@ -2353,6 +2363,7 @@
 
     tbody.appendChild(tr);
 
+    updateLastMonthCostCell(tr);
     updateLastMonthFinalPriceCell(tr);
     updateLastMonthMarginCell(tr);
     savePrinterDraftState();
@@ -2373,6 +2384,7 @@
     const dupBtn = clone.querySelector(".duplicate-btn");
     if (dupBtn) dupBtn.onclick = function() { duplicateCustomRow(this); };
     origTr.insertAdjacentElement("afterend", clone);
+    updateLastMonthCostCell(clone);
     updateLastMonthFinalPriceCell(clone);
     updateLastMonthMarginCell(clone);
 
@@ -2397,6 +2409,31 @@
 
   function lastMonthLookupKey(product, packageTypeRawValue) {
     return normalizeProductNameJs(product) + "||" + normalizePackageTypeJs(packageTypeRawValue);
+  }
+
+  // Fills in the read-only "Last Mo. Cost" column for one row, from
+  // lastMonthLookup - the same cost figure saved on last month's price
+  // letter for this customer. Purely informational (no name attribute, not
+  // submitted) - keyed off the row's current product name + package type,
+  // same as the Simple View comparison.
+  function updateLastMonthCostCell(tr) {
+    if (!tr) return;
+    const cell = tr.querySelector(".last-month-cost");
+    if (!cell) return;
+
+    const productEl = tr.querySelector('[name="row_product"]');
+    const packageEl = tr.querySelector('select[name="row_package_type"]');
+    const product    = productEl ? productEl.value : "";
+    const packageVal = packageEl ? packageEl.value : "";
+
+    const entry    = lastMonthLookup[lastMonthLookupKey(product, packageVal)] || null;
+    const lmCost   = entry ? parseFloat(entry.cost) : NaN;
+
+    cell.value = (entry && !isNaN(lmCost)) ? ("$" + lmCost.toFixed(4)) : "—";
+  }
+
+  function updateAllLastMonthCostCells() {
+    document.querySelectorAll("#quote-table tbody tr").forEach(updateLastMonthCostCell);
   }
 
   // Fills in the read-only "Last Mo. Sale Price" column for one row, from
@@ -2449,6 +2486,7 @@
     document.querySelectorAll("#quote-table tbody tr").forEach(updateLastMonthMarginCell);
   }
 
+  document.addEventListener("DOMContentLoaded", updateAllLastMonthCostCells);
   document.addEventListener("DOMContentLoaded", updateAllLastMonthFinalPriceCells);
   document.addEventListener("DOMContentLoaded", updateAllLastMonthMarginCells);
 
@@ -2457,14 +2495,17 @@
   // custom rows.
   document.addEventListener("change", function(e) {
     if (e.target.matches && e.target.matches('select[name="row_package_type"]')) {
-      updateLastMonthFinalPriceCell(e.target.closest("tr"));
-      updateLastMonthMarginCell(e.target.closest("tr"));
+      const tr = e.target.closest("tr");
+      updateLastMonthCostCell(tr);
+      updateLastMonthFinalPriceCell(tr);
+      updateLastMonthMarginCell(tr);
     }
   });
 
   document.addEventListener("input", function(e) {
     if (e.target.matches && e.target.matches('input[name="row_product"]')) {
       const tr = e.target.closest("tr");
+      updateLastMonthCostCell(tr);
       updateLastMonthFinalPriceCell(tr);
       updateLastMonthMarginCell(tr);
     }
