@@ -51,11 +51,14 @@
     vertical-align: top;
   }
 
-  /* Tighter horizontal padding so Package / Price / Shipping sit closer together */
+  /* A little breathing room so Package / Price / Shipping don't sit flush
+     together, without going back to the full default padding - the extra
+     width comes from trimming Product/Description slightly (see the
+     column widths on the header <th> tags below). */
   .print-letter-table th.col-tight,
   .print-letter-table td.col-tight {
-    padding-left: 2px;
-    padding-right: 2px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .preview-toolbar {
@@ -291,11 +294,11 @@
 
                 <thead>
                   <tr>
-                    <th style="width:27%; text-align:left;">Product</th>
-                    <th class="col-tight" style="width:13%; text-align:center;">Package</th>
-                    <th class="col-tight" style="width:11%; text-align:center;">Price</th>
-                    <th class="col-tight" style="width:16%; text-align:center;">Shipping</th>
-                    <th style="width:33%; text-align:center;">Description</th>
+                    <th style="width:24%; text-align:center; border-bottom:2px solid #222;">Product</th>
+                    <th class="col-tight" style="width:15%; text-align:center; border-bottom:2px solid #222;">Package</th>
+                    <th class="col-tight" style="width:13%; text-align:center; border-bottom:2px solid #222;">Price</th>
+                    <th class="col-tight" style="width:18%; text-align:center; border-bottom:2px solid #222;">Shipping</th>
+                    <th style="width:30%; text-align:center; border-bottom:2px solid #222;">Description</th>
                   </tr>
                 </thead>
 

@@ -985,14 +985,28 @@
                      to 2 decimals, but if this row's saved price actually
                      carries 3-4 decimals of precision, render it (and Sale
                      Price below) with that same precision instead of
-                     silently truncating it back to 2 on every page load. #}
+                     silently truncating it back to 2 on every page load.
+
+                     Round to 4 decimals FIRST, then compare that against a
+                     2-decimal rounding of itself - not the raw float. Prices
+                     computed as final_cost * (1 + margin/100) routinely land
+                     on values like 1.2299999999999998 instead of an exact
+                     1.23 due to ordinary binary floating-point rounding.
+                     Comparing that raw value straight against round(2) of
+                     itself sees them as "different" and wrongly flags the
+                     row as needing 4-decimal precision - so two rows with
+                     identical cost and margin could end up displaying (and
+                     then recalculating from) different decimal precision,
+                     and therefore different prices, purely from float noise
+                     rather than any real difference in the numbers. #}
                   {% set _price = r.price or 0 %}
-                  {% set _price_decimals = 4 if (_price|round(2, 'common')) != _price else 2 %}
+                  {% set _price_rounded4 = _price|round(4, 'common') %}
+                  {% set _price_decimals = 4 if (_price_rounded4|round(2, 'common')) != _price_rounded4 else 2 %}
                   <td class="price-section section-divider-left">
                     <input
                       class="form-control form-control-sm price"
                       name="row_price"
-                      value="{{ 'Inquire' if r.get('is_inquire') else ('%.4f'|format(_price) if _price_decimals == 4 else '%.2f'|format(_price)) }}"
+                      value="{{ 'Inquire' if r.get('is_inquire') else ('%.4f'|format(_price_rounded4) if _price_decimals == 4 else '%.2f'|format(_price_rounded4)) }}"
                       inputmode="decimal"
                     >
                   </td>
@@ -1019,11 +1033,12 @@
                   </td>
 
                   {# Final Price / Sale Price (computed: price + add_shipping + add_packaging) - mirrors Price's decimal precision, see above #}
+                  {% set _final_price_rounded4 = (r.final_price or 0)|round(4, 'common') %}
                   <td class="final-price-section section-divider-left section-divider-right">
                     <input
                       class="form-control form-control-sm computed final"
                       name="row_final"
-                      value="{{ 'Inquire' if r.get('is_inquire') else ('%.4f'|format(r.final_price or 0) if _price_decimals == 4 else '%.2f'|format(r.final_price or 0)) }}"
+                      value="{{ 'Inquire' if r.get('is_inquire') else ('%.4f'|format(_final_price_rounded4) if _price_decimals == 4 else '%.2f'|format(_final_price_rounded4)) }}"
                       inputmode="decimal"
                       readonly
                       tabindex="-1"
