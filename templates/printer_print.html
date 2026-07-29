@@ -493,11 +493,31 @@
       const data = await persistPriceLetter(built);
 
       // Then hand the user their chosen format as a local file too.
+      // PNG uses a Blob + object URL (not a raw base64 data URI) and waits
+      // a beat before continuing - a data URI can be several MB at scale:2,
+      // and immediately navigating away (as we do right after this) can
+      // cancel a large data-URI download before the browser actually
+      // starts writing it out. jsPDF's .save() below doesn't have this
+      // problem since it already downloads via a Blob under the hood.
       if (format === "png") {
-        const link = document.createElement("a");
-        link.download = built.pngFileName;
-        link.href = built.canvas.toDataURL("image/png");
-        link.click();
+        await new Promise((resolve) => {
+          built.canvas.toBlob(function (blob) {
+            if (!blob) { resolve(); return; }
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.download = built.pngFileName;
+            link.href = blobUrl;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            // Give the browser a moment to actually start the download
+            // before we revoke the URL and move on.
+            setTimeout(function () {
+              URL.revokeObjectURL(blobUrl);
+              resolve();
+            }, 250);
+          }, "image/png");
+        });
       } else {
         built.pdf.save(built.fileName);
       }
