@@ -1702,12 +1702,7 @@
           // placeholder and not "Other..." (which just reveals the free-text
           // box and isn't a complete setting yet).
           if (selectedLocation && selectedLocation !== "__custom__") {
-            const shouldDeploy = confirm(
-              "Would you like this location to be the same for all products on the price list?"
-            );
-            if (shouldDeploy) {
-              applyShippingSettingsToAllRows(tr);
-            }
+            promptApplyLocationToAllRows(tr);
           }
         }
       });
@@ -1810,6 +1805,30 @@
       </button>
       <button type="button" class="btn btn-primary btn-sm" id="dupe-warning-accept-btn">
         Accept — Add Anyway
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- SHIPPING LOCATION "APPLY TO ALL" MODAL -->
+<div id="location-confirm-overlay" style="display:none; position:fixed; inset:0; background:rgba(16,24,40,0.45); z-index:5000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; max-width:440px; width:92%; padding:24px; box-shadow:0 12px 32px rgba(16,24,40,0.25);">
+    <div style="font-weight:700; font-size:16px; margin-bottom:10px; color:#101828;">
+      Apply location to all products?
+    </div>
+    <div style="font-size:14px; color:#344054; line-height:1.5; margin-bottom:16px;">
+      Would you like this location to be the same for all products on the price list?
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475467; margin-bottom:18px; cursor:pointer;">
+      <input type="checkbox" id="location-confirm-remember-checkbox" style="margin:0;">
+      Remember this selection for the rest of this list
+    </label>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="location-confirm-no-btn">
+        No
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" id="location-confirm-yes-btn">
+        Yes
       </button>
     </div>
   </div>
@@ -1924,6 +1943,73 @@
       hideDuplicateWarningModal();
       if (cb) cb();
     });
+  }
+
+  // ── Shipping location "apply to all" prompt ──
+  // Asks whether the chosen location should be applied to every row.
+  // If the user checks "Remember this selection", we stop asking for the
+  // rest of this list-building session and just silently replay whatever
+  // they chose (Yes = keep applying to all rows, No = never auto-apply).
+  const locationConfirmOverlay = document.getElementById("location-confirm-overlay");
+  const locationConfirmRememberCheckbox = document.getElementById("location-confirm-remember-checkbox");
+  const locationConfirmYesBtn = document.getElementById("location-confirm-yes-btn");
+  const locationConfirmNoBtn = document.getElementById("location-confirm-no-btn");
+
+  let locationChoiceRemembered = false;   // true once the user checks "remember" - just suppresses future popups
+  let pendingLocationConfirmRow = null;
+
+  function showLocationConfirmModal(tr) {
+    if (!locationConfirmOverlay) return;
+    pendingLocationConfirmRow = tr;
+    if (locationConfirmRememberCheckbox) locationConfirmRememberCheckbox.checked = false;
+    locationConfirmOverlay.style.display = "flex";
+  }
+
+  function hideLocationConfirmModal() {
+    if (!locationConfirmOverlay) return;
+    locationConfirmOverlay.style.display = "none";
+    pendingLocationConfirmRow = null;
+  }
+
+  function resolveLocationConfirm(applyToAll) {
+    const tr = pendingLocationConfirmRow;
+    const remember = !!(locationConfirmRememberCheckbox && locationConfirmRememberCheckbox.checked);
+    hideLocationConfirmModal();
+
+    if (remember) {
+      locationChoiceRemembered = true;
+    }
+
+    if (applyToAll && tr) {
+      applyShippingSettingsToAllRows(tr);
+    }
+  }
+
+  if (locationConfirmYesBtn) {
+    locationConfirmYesBtn.addEventListener("click", function () {
+      resolveLocationConfirm(true);
+    });
+  }
+
+  if (locationConfirmNoBtn) {
+    locationConfirmNoBtn.addEventListener("click", function () {
+      resolveLocationConfirm(false);
+    });
+  }
+
+  function promptApplyLocationToAllRows(tr) {
+    // Already told us not to ask again this session - just suppress the
+    // popup. NOTE: we deliberately do NOT re-run applyShippingSettingsToAllRows
+    // here even if the remembered answer was "Yes". The all-rows cascade
+    // should only happen once, at the moment the user actually confirmed
+    // it - "remember" means "stop asking", not "keep overwriting every row
+    // forever". Editing a single row afterward should only change that row
+    // (its own select value already updated itself independently of this
+    // prompt), not silently blow away edits the user made to other rows.
+    if (locationChoiceRemembered) {
+      return;
+    }
+    showLocationConfirmModal(tr);
   }
 
   // WeakSet (not a DOM attribute) so cloned rows - which copy attributes
