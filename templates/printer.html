@@ -1042,6 +1042,9 @@
                       inputmode="decimal"
                       readonly
                       tabindex="-1"
+                      onkeydown="return false;"
+                      onpaste="return false;"
+                      style="caret-color: transparent;"
                     >
                   </td>
 
@@ -2373,7 +2376,7 @@
         <input class="form-control form-control-sm add-shipping" name="row_add_shipping" value="0.0000" inputmode="decimal">
         <input type="hidden" class="add-packaging" name="row_add_packaging" value="0">
       </td>
-      <td class="final-price-section section-divider-left section-divider-right"><input class="form-control form-control-sm computed final" name="row_final" value="0.0000" readonly tabindex="-1"></td>
+      <td class="final-price-section section-divider-left section-divider-right"><input class="form-control form-control-sm computed final" name="row_final" value="0.0000" readonly tabindex="-1" onkeydown="return false;" onpaste="return false;" style="caret-color: transparent;"></td>
     `;
 
     tbody.appendChild(tr);

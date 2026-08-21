@@ -2433,7 +2433,7 @@ def normalize_phone(phone):
     digits = re.sub(r"\D", "", str(phone or ""))
 
     if len(digits) == 10:
-        return f"({digits[:3]})-{digits[3:6]}-{digits[6:]}"
+        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
     
     return phone
 
@@ -4290,7 +4290,7 @@ class LoginForm(FlaskForm):
 def login_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
+        if "user_id" not in session:
             return redirect(url_for("login"))
         return view_func(*args, **kwargs)
     return wrapper
@@ -4299,7 +4299,7 @@ def login_required(view_func):
 def admin_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
+        if "user_id" not in session:
             return redirect(url_for("login"))
         if not session.get("is_admin"):
             flash("Admin access required.", "error")
@@ -4340,7 +4340,7 @@ def dashboard():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("user_id"):
+    if "user_id" in session:
         return redirect(url_for("dashboard"))
 
     form = LoginForm()
@@ -4348,6 +4348,20 @@ def login():
     if form.validate_on_submit():
         email = (form.email.data or "").strip()
         password = form.password.data or ""
+
+        # TEMPORARY hardcoded unlock (username "editor", password "7922") so
+        # there's always a way in even with an empty/inaccessible users table.
+        # This is a single fixed, weak credential sitting in source code --
+        # meant to get through initial setup, not to stay in place long-term.
+        # Remove once real accounts exist via /admin and are confirmed working.
+        if email.lower() == "editor" and password == "7922":
+            session.clear()
+            session["user_id"] = 0
+            session["email"] = "editor"
+            session["full_name"] = "Editor"
+            session["phone"] = ""
+            session["is_admin"] = True
+            return redirect(url_for("dashboard"))
 
         user = find_user_by_email(email)
 
