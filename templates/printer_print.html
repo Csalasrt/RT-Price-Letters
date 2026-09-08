@@ -315,13 +315,7 @@
                     </td>
 
                     <td class="col-tight" style="text-align:center; white-space:nowrap;">
-                      {% if r.get("package_type") == "330gal Tote" %}
-                        330  Tote
-                      {% elif r.get("package_type") == "275gal Tote" %}
-                        275 Tote
-                      {% else %}
-                        {{ r.get("package_type","") or "-" }}
-                      {% endif %}
+                      {{ format_package_types(r.get("package_type","")) or "-" }}
                     </td>
 
                     <td class="col-tight" style="text-align:center; font-weight:700; white-space:nowrap;">
@@ -450,6 +444,18 @@
     };
   }
 
+  // Descriptions are edited in-place via contenteditable cells and are
+  // only reflected visually until they're sent back here. Collecting them
+  // in DOM order matches the row order the template rendered from
+  // `rows`/`quote.rows`, so the server can line them back up by index.
+  function getEditedRowDescriptions() {
+    return Array.from(
+      document.querySelectorAll('[data-field="row_description"]')
+    ).map(function (el) {
+      return (el.innerText || el.textContent || "").trim();
+    });
+  }
+
   // The actual save/finalize call - adds the history entry (with rows),
   // updates the customer's saved template, records margin history, and
   // marks the month's todo done. This is the single source of truth for
@@ -465,7 +471,8 @@
       },
       body: JSON.stringify({
         file_name: built.fileName,
-        pdf_data: pdfData
+        pdf_data: pdfData,
+        row_descriptions: getEditedRowDescriptions()
       })
     });
 

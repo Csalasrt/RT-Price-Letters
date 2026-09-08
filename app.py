@@ -1600,6 +1600,33 @@ def normalize_package_type(package_type: str) -> str:
     return str(package_type or "").strip().lower()
 
 
+# The Printer page's package type field lets a row hold more than one
+# package type at once (comma-separated, e.g. "Drum,Pail"), picked from a
+# checkbox dropdown instead of a single-choice select. This maps each raw
+# value to the same abbreviated text the old single-select options showed,
+# and joins multiple picks as "Choice 1 / Choice 2" wherever a row's
+# package type is displayed - the price letter, history, etc.
+PACKAGE_TYPE_DISPLAY_LABELS = {
+    "drum": "Drum",
+    "330gal tote": "330 Tote",
+    "275gal tote": "275 Tote",
+    "pail": "Pail",
+    "bulk": "Bulk",
+    "bag": "Bag",
+}
+
+
+def format_package_types(raw_value):
+    parts = [p.strip() for p in str(raw_value or "").split(",") if p.strip()]
+    if not parts:
+        return ""
+    labels = [PACKAGE_TYPE_DISPLAY_LABELS.get(p.lower(), p) for p in parts]
+    return " / ".join(labels)
+
+
+app.jinja_env.globals["format_package_types"] = format_package_types
+
+
 def load_company_products():
     products = CompanyProduct.query.order_by(CompanyProduct.product.asc()).all()
 
@@ -6657,6 +6684,48 @@ def printer_save_pdf():
 
     if not pdf_data or "," not in pdf_data:
         return jsonify({"ok": False, "error": "Missing PDF data."}), 400
+
+    # The print-preview description cells are contenteditable and only
+    # live in the DOM until the user hits Save/Download. Apply whatever
+    # they were left as onto the rows we're about to persist, so an
+    # edited description (a) shows up in this letter's history entry and
+    # (b) becomes the customer's new saved default description via
+    # finalize_price_letter -> save_customer_template_from_quote below.
+    # Without this, an edit only ever affected the rendered PDF image.
+    edited_descriptions = data.get("row_descriptions")
+    if isinstance(edited_descriptions, list):
+        description_map = get_product_description_map()
+        quote = dict(quote)
+        rows = list(quote.get("rows") or [])
+
+        for i, row in enumerate(rows):
+            if i >= len(edited_descriptions):
+                continue
+
+            edited = (edited_descriptions[i] or "").strip()
+            if not edited:
+                continue
+
+            product_name = (row.get("product") or "").strip()
+            saved_description = (row.get("description") or "").strip()
+            effective_description = saved_description or description_map.get(
+                normalize_product_name(product_name),
+                product_name
+            )
+
+            # Only write it back if the user actually changed it from what
+            # was showing. Otherwise a row with no custom description
+            # (falling back to the product's shared description) would get
+            # hard-pinned to today's text and stop following future edits
+            # to that shared description.
+            if edited != effective_description.strip():
+                row = dict(row)
+                row["description"] = edited
+                rows[i] = row
+
+        quote["rows"] = rows
+        session["print_quote"] = quote
+        session.modified = True
 
     safe_name = secure_filename(file_name or f"price-letter-{uuid.uuid4().hex}.pdf")
     if not safe_name.lower().endswith(".pdf"):

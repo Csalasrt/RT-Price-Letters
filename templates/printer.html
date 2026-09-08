@@ -546,6 +546,70 @@
     border-color: #f0b366 !important;
     background: #fffaf0;
   }
+  /* Package type checkbox dropdown - stands in for the old single-select */
+  .package-type-picker {
+    position: relative;
+  }
+
+  .package-type-toggle {
+    width: 100%;
+    text-align: left;
+    background: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .package-type-toggle::after {
+    content: "▾";
+    color: #94a3b8;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .package-type-toggle-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .package-type-menu {
+    /* position:fixed, not absolute - #quote-table-wrap below sets
+       overflow:auto (needed for its sticky header/scroll behavior), and
+       that clips any position:absolute content that opens inside it.
+       Fixed positioning + JS-computed coordinates (see
+       positionPackageTypeMenu) escapes that the same way
+       #build-toolbar-card.is-frozen does above. */
+    position: fixed;
+    z-index: 2000;
+    min-width: 140px;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+    padding: 6px 0;
+  }
+
+  .package-type-menu label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .package-type-menu label:hover {
+    background: #f1f5f9;
+  }
+
+  .package-type-menu input[type="checkbox"] {
+    margin: 0;
+  }
 </style>
 
 <div class="text-muted-small" style="margin-bottom:12px;">
@@ -905,15 +969,21 @@
                   </td>       
 
                   <td>
-                    <select class="form-control form-control-sm package-type" name="row_package_type">
-                      <option value="">Select pack</option>
-                      <option value="Drum" {% if r.package_type == "Drum" %}selected{% endif %}>Drum</option>
-                      <option value="330gal Tote" {% if r.package_type == "330gal Tote" %}selected{% endif %}>330 Tote</option>
-                      <option value="275gal Tote" {% if r.package_type == "275gal Tote" %}selected{% endif %}>275 Tote</option>
-                      <option value="Pail" {% if r.package_type == "Pail" %}selected{% endif %}>Pail</option>
-                      <option value="Bulk" {% if r.package_type == "Bulk" %}selected{% endif %}>Bulk</option>
-                      <option value="Bag" {% if r.package_type == "Bag" %}selected{% endif %}>Bag</option>
-                    </select>
+                    <div class="package-type-picker">
+                      <button type="button" class="form-control form-control-sm package-type-toggle" onclick="togglePackageTypeMenu(this)">
+                        <span class="package-type-toggle-label">{{ format_package_types(r.package_type) or "Select pack" }}</span>
+                      </button>
+                      <div class="package-type-menu" hidden>
+                        {% set _pkg_values = (r.package_type or '').split(',') | map('trim') | list %}
+                        <label><input type="checkbox" value="Drum" {% if "Drum" in _pkg_values %}checked{% endif %}> Drum</label>
+                        <label><input type="checkbox" value="330gal Tote" {% if "330gal Tote" in _pkg_values %}checked{% endif %}> 330 Tote</label>
+                        <label><input type="checkbox" value="275gal Tote" {% if "275gal Tote" in _pkg_values %}checked{% endif %}> 275 Tote</label>
+                        <label><input type="checkbox" value="Pail" {% if "Pail" in _pkg_values %}checked{% endif %}> Pail</label>
+                        <label><input type="checkbox" value="Bulk" {% if "Bulk" in _pkg_values %}checked{% endif %}> Bulk</label>
+                        <label><input type="checkbox" value="Bag" {% if "Bag" in _pkg_values %}checked{% endif %}> Bag</label>
+                      </div>
+                      <input type="hidden" class="package-type" name="row_package_type" value="{{ r.package_type }}">
+                    </div>
                   </td>
 
                   <td>
@@ -2114,7 +2184,7 @@
       const productInput    = tr.querySelector('input[name="row_product"]');
       const descriptionInput = tr.querySelector('input[name="row_description"]');
       const umInput         = tr.querySelector('select[name="row_um"]');
-      const packageInput    = tr.querySelector('select[name="row_package_type"]');
+      const packageInput    = tr.querySelector('input[name="row_package_type"]');
       const costInput       = tr.querySelector('input[name="row_cost"]');
       const preShipInput    = tr.querySelector('input[name="row_pre_shipping"]');
       const prePackInput    = tr.querySelector('input[name="row_pre_packaging"]');
@@ -2335,15 +2405,20 @@
       </td>
 
       <td>
-        <select class="form-control form-control-sm package-type" name="row_package_type">
-          <option value="">Select package type</option>
-          <option value="Drum">☐ Drum</option>
-          <option value="330gal Tote">☐ 330 GAL Tote</option>
-          <option value="275gal Tote">☐ 275 GAL Tote</option>
-          <option value="Pail">☐ Pail</option>
-          <option value="Bulk">☐ Bulk</option>
-          <option value="Bag">☐ Bag</option>
-        </select>
+        <div class="package-type-picker">
+          <button type="button" class="form-control form-control-sm package-type-toggle" onclick="togglePackageTypeMenu(this)">
+            <span class="package-type-toggle-label">Select pack</span>
+          </button>
+          <div class="package-type-menu" hidden>
+            <label><input type="checkbox" value="Drum"> Drum</label>
+            <label><input type="checkbox" value="330gal Tote"> 330 Tote</label>
+            <label><input type="checkbox" value="275gal Tote"> 275 Tote</label>
+            <label><input type="checkbox" value="Pail"> Pail</label>
+            <label><input type="checkbox" value="Bulk"> Bulk</label>
+            <label><input type="checkbox" value="Bag"> Bag</label>
+          </div>
+          <input type="hidden" class="package-type" name="row_package_type" value="">
+        </div>
       </td>
 
       <td>
@@ -2393,6 +2468,117 @@
     }
   }
 
+  // ---- Package type checkbox dropdown ----
+  // The package type field can hold more than one pick at once (comma-
+  // separated in the hidden input, e.g. "Drum,Pail"), chosen from a
+  // checkbox menu instead of a single-choice select. Everything below
+  // keeps that hidden input, the checkboxes, and the button label in sync,
+  // and uses event delegation so it keeps working on rows added/cloned/
+  // restored after page load without any extra wiring.
+
+  const PACKAGE_TYPE_LABELS = {
+    "drum": "Drum",
+    "330gal tote": "330 Tote",
+    "275gal tote": "275 Tote",
+    "pail": "Pail",
+    "bulk": "Bulk",
+    "bag": "Bag",
+  };
+
+  function packageTypeLabelFor(rawValue) {
+    const key = (rawValue || "").trim().toLowerCase();
+    return PACKAGE_TYPE_LABELS[key] || (rawValue || "").trim();
+  }
+
+  function packageTypeDisplayFromRaw(rawValue) {
+    const parts = (rawValue || "").split(",").map(v => v.trim()).filter(Boolean);
+    if (!parts.length) return "";
+    return parts.map(packageTypeLabelFor).join(" / ");
+  }
+
+  function closeAllPackageTypeMenus() {
+    document.querySelectorAll(".package-type-menu").forEach(function (menu) {
+      menu.hidden = true;
+    });
+  }
+
+  // Fixed-position menus don't move with the row when the table's internal
+  // scroll container (#quote-table-wrap) scrolls, so just close it instead
+  // of leaving it floating over the wrong row.
+  document.getElementById("quote-table-wrap")?.addEventListener("scroll", closeAllPackageTypeMenus, true);
+  window.addEventListener("scroll", closeAllPackageTypeMenus, true);
+  window.addEventListener("resize", closeAllPackageTypeMenus);
+
+  function positionPackageTypeMenu(button, menu) {
+    const rect = button.getBoundingClientRect();
+    menu.style.top = Math.round(rect.bottom + 2) + "px";
+    menu.style.left = Math.round(rect.left) + "px";
+    menu.style.minWidth = Math.round(rect.width) + "px";
+  }
+
+  function togglePackageTypeMenu(button) {
+    const picker = button.closest(".package-type-picker");
+    if (!picker) return;
+    const menu = picker.querySelector(".package-type-menu");
+    if (!menu) return;
+
+    const wasOpen = !menu.hidden;
+    closeAllPackageTypeMenus();
+    if (!wasOpen) {
+      positionPackageTypeMenu(button, menu);
+      menu.hidden = false;
+    }
+  }
+
+  // Close an open menu when clicking anywhere outside it.
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".package-type-picker")) {
+      closeAllPackageTypeMenus();
+    }
+  });
+
+  // Reflects the hidden input's current comma-separated value onto the
+  // checkboxes (checked state) and the button label. Called after any
+  // programmatic change to the hidden input, e.g. restoring a draft.
+  function refreshPackageTypePickerUi(picker) {
+    if (!picker) return;
+    const hiddenInput = picker.querySelector('input[name="row_package_type"]');
+    const labelEl = picker.querySelector(".package-type-toggle-label");
+    if (!hiddenInput) return;
+
+    const values = (hiddenInput.value || "").split(",").map(v => v.trim()).filter(Boolean);
+
+    picker.querySelectorAll('.package-type-menu input[type="checkbox"]').forEach(function (cb) {
+      cb.checked = values.includes(cb.value);
+    });
+
+    if (labelEl) {
+      labelEl.textContent = values.length ? values.map(packageTypeLabelFor).join(" / ") : "Select pack";
+    }
+  }
+
+  // Checking/unchecking a box rebuilds the hidden input's value and the
+  // button label, then fires a bubbling "change" on the hidden input so
+  // anything that used to listen for the old <select>'s change event
+  // (last-month lookups, autosave) still fires the same way.
+  document.addEventListener("change", function (e) {
+    const checkbox = e.target.closest('.package-type-menu input[type="checkbox"]');
+    if (!checkbox) return;
+
+    const picker = checkbox.closest(".package-type-picker");
+    const hiddenInput = picker ? picker.querySelector('input[name="row_package_type"]') : null;
+    if (!hiddenInput) return;
+
+    const checkedValues = Array.from(
+      picker.querySelectorAll('.package-type-menu input[type="checkbox"]:checked')
+    ).map(cb => cb.value);
+
+    hiddenInput.value = checkedValues.join(",");
+    refreshPackageTypePickerUi(picker);
+
+    hiddenInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
   function duplicateCustomRow(btn) {
     const origTr = btn.closest("tr");
     if (!origTr) return;
@@ -2440,7 +2626,7 @@
     if (!cell) return;
 
     const productEl = tr.querySelector('[name="row_product"]');
-    const packageEl = tr.querySelector('select[name="row_package_type"]');
+    const packageEl = tr.querySelector('input[name="row_package_type"]');
     const product    = productEl ? productEl.value : "";
     const packageVal = packageEl ? packageEl.value : "";
 
@@ -2465,7 +2651,7 @@
     if (!cell) return;
 
     const productEl = tr.querySelector('[name="row_product"]');
-    const packageEl = tr.querySelector('select[name="row_package_type"]');
+    const packageEl = tr.querySelector('input[name="row_package_type"]');
     const product    = productEl ? productEl.value : "";
     const packageVal = packageEl ? packageEl.value : "";
 
@@ -2490,7 +2676,7 @@
     if (!cell) return;
 
     const productEl = tr.querySelector('[name="row_product"]');
-    const packageEl = tr.querySelector('select[name="row_package_type"]');
+    const packageEl = tr.querySelector('input[name="row_package_type"]');
     const product    = productEl ? productEl.value : "";
     const packageVal = packageEl ? packageEl.value : "";
 
@@ -2512,7 +2698,7 @@
   // keyed by: package type changes on any row, and typed product names on
   // custom rows.
   document.addEventListener("change", function(e) {
-    if (e.target.matches && e.target.matches('select[name="row_package_type"]')) {
+    if (e.target.matches && e.target.matches('input[name="row_package_type"]')) {
       const tr = e.target.closest("tr");
       updateLastMonthCostCell(tr);
       updateLastMonthFinalPriceCell(tr);
@@ -2546,10 +2732,9 @@
       return (isNaN(num) ? "0.00" : num.toFixed(2)) + "%";
     }
 
-    function packageLabel(selectEl) {
-      if (!selectEl || !selectEl.selectedOptions || !selectEl.selectedOptions.length) return "-";
-      const text = selectEl.selectedOptions[0].textContent || "";
-      return text.replace(/^[☐☑]\s*/, "").trim() || "-";
+    function packageLabel(hiddenInputEl) {
+      if (!hiddenInputEl) return "-";
+      return packageTypeDisplayFromRaw(hiddenInputEl.value) || "-";
     }
 
     function fmtLmVal(num, isPercent) {
@@ -2603,7 +2788,7 @@
 
     sourceRows.forEach(function (tr, index) {
       const productEl  = tr.querySelector('input[name="row_product"]');
-      const packageEl  = tr.querySelector('select[name="row_package_type"]');
+      const packageEl  = tr.querySelector('input[name="row_package_type"]');
       const costEl     = tr.querySelector('input[name="row_cost"]');
       const marginEl   = tr.querySelector('input[name="row_margin"]');
       const priceEl    = tr.querySelector('input[name="row_price"]');
@@ -2832,7 +3017,7 @@
         product:      tr.querySelector('input[name="row_product"]')?.value      || "",
         description:  tr.querySelector('input[name="row_description"]')?.value  || "",
         um:           tr.querySelector('select[name="row_um"]')?.value          || "",
-        package_type: tr.querySelector('select[name="row_package_type"]')?.value || "",
+        package_type: tr.querySelector('input[name="row_package_type"]')?.value || "",
         cost:         tr.querySelector('input[name="row_cost"]')?.value         || "0",
         pre_shipping: tr.querySelector('input[name="row_pre_shipping"]')?.value || "0",
         pre_packaging:tr.querySelector('input[name="row_pre_packaging"]')?.value || "0",
@@ -2925,7 +3110,8 @@
       const row = draftRows[draftIndex];
 
       setRowField(tr, 'select[name="row_um"]', row.um);
-      setRowField(tr, 'select[name="row_package_type"]', row.package_type);
+      setRowField(tr, 'input[name="row_package_type"]', row.package_type);
+      refreshPackageTypePickerUi(tr.querySelector(".package-type-picker"));
       setRowField(tr, 'input[name="row_cost"]', row.cost);
       setRowField(tr, 'input[name="row_pre_shipping"]', row.pre_shipping);
       setRowField(tr, 'input[name="row_pre_packaging"]', row.pre_packaging);
