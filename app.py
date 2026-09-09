@@ -6665,6 +6665,7 @@ def printer_print():
         company_info=company_info,
         sales_person=sales_person,
         display_date=display_date,
+        from_history=request.args.get("from_history"),
         page="print",
         page_title="Print Preview"
     )
@@ -6684,18 +6685,69 @@ def _effective_description_for_row(row, description_map):
     )
 
 
-@app.route("/printer/print/update-description", methods=["POST"])
+# Maps each contenteditable cell on the print preview (by its data-field
+# attribute) to how an edit there should be written back onto the row.
+# "description" is special-cased since it has a shared-default fallback to
+# compare against (see _effective_description_for_row); everything else is
+# either a direct field on the row (Product, Package) or a free-text
+# override that's shown instead of the normal computed text once set
+# (Price, Shipping - both are synthesized from a few underlying fields, so
+# there's no single field to overwrite directly).
+EDITABLE_ROW_FIELDS = {
+    "row_display_product": {"kind": "direct", "field": "product"},
+    "row_description": {"kind": "description"},
+    "row_package_type_display": {"kind": "direct", "field": "package_type"},
+    "row_price_display": {"kind": "override", "field": "price_display_override"},
+    "row_shipping_display": {"kind": "override", "field": "shipping_display_override"},
+}
+
+
+def _apply_edited_field_to_row(row, field_key, raw_value, description_map):
+    """Applies one edited print-preview cell's value onto a quote row.
+    Shared by the per-field autosave endpoint and the Save/Download
+    fallback so an edit is captured whichever path reaches the server
+    first. Returns (row, changed) - row is a new dict if changed, or the
+    same object passed in if nothing needed to change.
+    """
+    config = EDITABLE_ROW_FIELDS.get(field_key)
+    value = (raw_value or "").strip()
+    if not config or not value:
+        return row, False
+
+    if config["kind"] == "description":
+        effective_description = _effective_description_for_row(row, description_map)
+        if value == effective_description.strip():
+            return row, False
+        row = dict(row)
+        row["description"] = value
+        return row, True
+
+    field = config["field"]
+    if value == (row.get(field) or "").strip():
+        return row, False
+
+    row = dict(row)
+    row[field] = value
+    return row, True
+
+
+@app.route("/printer/print/update-field", methods=["POST"])
 @login_required
-def printer_print_update_description():
-    # Autosaves a single row's description as soon as the user clicks out
-    # of the field on the print preview, so it survives navigating away
-    # before hitting Save/Download (which previously was the only time an
-    # edit got written back - see printer_save_pdf).
+def printer_print_update_field():
+    # Autosaves a single cell as soon as the user clicks out of it on the
+    # print preview - Product, Package, Price, Shipping, and Description
+    # are all wired to this so an edit survives navigating away before
+    # hitting Save/Download (which previously was the only time an edit
+    # got written back - see the row_fields fallback in printer_save_pdf).
     quote = session.get("print_quote") or {}
     if not quote:
         return jsonify({"ok": False, "error": "No quote available."}), 400
 
     data = request.get_json(silent=True) or {}
+    field_key = (data.get("field") or "").strip()
+    if field_key not in EDITABLE_ROW_FIELDS:
+        return jsonify({"ok": False, "error": "Unknown field."}), 400
+
     try:
         row_index = int(data.get("row_index"))
     except (TypeError, ValueError):
@@ -6705,21 +6757,17 @@ def printer_print_update_description():
     if not (0 <= row_index < len(rows)):
         return jsonify({"ok": False, "error": "Row not found."}), 400
 
-    edited = (data.get("description") or "").strip()
-    if edited:
-        description_map = get_product_description_map()
-        row = rows[row_index]
-        effective_description = _effective_description_for_row(row, description_map)
+    description_map = get_product_description_map()
+    new_row, changed = _apply_edited_field_to_row(
+        rows[row_index], field_key, data.get("value"), description_map
+    )
 
-        if edited != effective_description.strip():
-            row = dict(row)
-            row["description"] = edited
-            rows[row_index] = row
-
-            quote = dict(quote)
-            quote["rows"] = rows
-            session["print_quote"] = quote
-            session.modified = True
+    if changed:
+        rows[row_index] = new_row
+        quote = dict(quote)
+        quote["rows"] = rows
+        session["print_quote"] = quote
+        session.modified = True
 
     return jsonify({"ok": True})
 
@@ -6740,41 +6788,30 @@ def printer_save_pdf():
     if not pdf_data or "," not in pdf_data:
         return jsonify({"ok": False, "error": "Missing PDF data."}), 400
 
-    # The print-preview description cells are contenteditable and only
-    # live in the DOM until the user hits Save/Download. Apply whatever
-    # they were left as onto the rows we're about to persist, so an
-    # edited description (a) shows up in this letter's history entry and
-    # (b) becomes the customer's new saved default description via
-    # finalize_price_letter -> save_customer_template_from_quote below.
-    # Without this, an edit only ever affected the rendered PDF image.
-    # (In practice printer_print_update_description above will usually
-    # have already saved each edit on blur - this is the fallback for
-    # anything that didn't make it, e.g. a dropped autosave request.)
-    edited_descriptions = data.get("row_descriptions")
-    if isinstance(edited_descriptions, list):
+    # The print-preview cells are contenteditable and only live in the DOM
+    # until the user hits Save/Download. Each one autosaves on blur via
+    # printer_print_update_field above, but this is the fallback for
+    # anything that didn't make it (a dropped request, or an edit followed
+    # immediately by clicking Save/Download before the blur round-trip
+    # finished) - without it, an edit would only ever affect the rendered
+    # PDF image, not the saved history entry or the customer's template.
+    edited_row_fields = data.get("row_fields")
+    if isinstance(edited_row_fields, dict):
         description_map = get_product_description_map()
         quote = dict(quote)
         rows = list(quote.get("rows") or [])
 
-        for i, row in enumerate(rows):
-            if i >= len(edited_descriptions):
+        for field_key, values in edited_row_fields.items():
+            if field_key not in EDITABLE_ROW_FIELDS or not isinstance(values, list):
                 continue
-
-            edited = (edited_descriptions[i] or "").strip()
-            if not edited:
-                continue
-
-            effective_description = _effective_description_for_row(row, description_map)
-
-            # Only write it back if the user actually changed it from what
-            # was showing. Otherwise a row with no custom description
-            # (falling back to the product's shared description) would get
-            # hard-pinned to today's text and stop following future edits
-            # to that shared description.
-            if edited != effective_description.strip():
-                row = dict(row)
-                row["description"] = edited
-                rows[i] = row
+            for i, row in enumerate(rows):
+                if i >= len(values):
+                    continue
+                new_row, changed = _apply_edited_field_to_row(
+                    row, field_key, values[i], description_map
+                )
+                if changed:
+                    rows[i] = new_row
 
         quote["rows"] = rows
         session["print_quote"] = quote

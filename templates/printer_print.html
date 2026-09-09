@@ -315,25 +315,30 @@
                     </td>
 
                     <td class="col-tight" style="text-align:center; white-space:nowrap;">
-                      {{ format_package_types(r.get("package_type","")) or "-" }}
+                      <div
+                        contenteditable="true"
+                        data-field="row_package_type_display"
+                        class="print-edit-cell"
+                        style="text-align:center;"
+                      >{{ format_package_types(r.get("package_type","")) or "-" }}</div>
                     </td>
 
                     <td class="col-tight" style="text-align:center; font-weight:700; white-space:nowrap;">
-                      {% if r.get("is_inquire") %}
-                        Inquire
-                      {% else %}
-                        ${{ '%.2f'|format(r.get("final_price",0) or 0) }}
-                        {% if r.get("um") %} / {{ r.get("um")|upper }}{% endif %}
-                      {% endif %}
+                      <div
+                        contenteditable="true"
+                        data-field="row_price_display"
+                        class="print-edit-cell"
+                        style="text-align:center; font-weight:700;"
+                      >{% if r.get("price_display_override") %}{{ r.get("price_display_override") }}{% elif r.get("is_inquire") %}Inquire{% else %}${{ '%.2f'|format(r.get("final_price",0) or 0) }}{% if r.get("um") %} / {{ r.get("um")|upper }}{% endif %}{% endif %}</div>
                     </td>
 
                     <td class="col-tight" style="text-align:center;">
-                      {% if r.get("shipping_type") %}
-                        {% set loc = r.get("shipping_custom") if r.get("shipping_location") == "__custom__" else r.get("shipping_location", "") %}
-                        <strong>{{ r.get("shipping_type") }}</strong>{% if loc %} - {{ loc }}{% endif %}
-                      {% else %}
-                        —
-                      {% endif %}
+                      <div
+                        contenteditable="true"
+                        data-field="row_shipping_display"
+                        class="print-edit-cell"
+                        style="text-align:center;"
+                      >{% if r.get("shipping_display_override") %}{{ r.get("shipping_display_override") }}{% elif r.get("shipping_type") %}{% set loc = r.get("shipping_custom") if r.get("shipping_location") == "__custom__" else r.get("shipping_location", "") %}{{ r.get("shipping_type") }}{% if loc %} - {{ loc }}{% endif %}{% else %}—{% endif %}</div>
                     </td>
 
                     <td style="text-align:center;">
@@ -444,22 +449,36 @@
     };
   }
 
-  // Descriptions are edited in-place via contenteditable cells and are
-  // only reflected visually until they're sent back here. Collecting them
-  // in DOM order matches the row order the template rendered from
-  // `rows`/`quote.rows`, so the server can line them back up by index.
-  function getEditedRowDescriptions() {
+  // Every editable print-preview cell (Product, Package, Price, Shipping,
+  // Description) goes through this same generalized flow: autosave on
+  // blur, plus a fallback bundle sent along with Save/Download in case an
+  // autosave request didn't make it. Listed here once so both places stay
+  // in sync with EDITABLE_ROW_FIELDS on the server.
+  const EDITABLE_FIELD_NAMES = [
+    "row_display_product",
+    "row_package_type_display",
+    "row_price_display",
+    "row_shipping_display",
+    "row_description",
+  ];
+
+  // Collects the current text of every cell for one field, in DOM order -
+  // which matches the row order the template rendered from `rows`/
+  // `quote.rows`, so the server can line them back up by index. Used as
+  // the Save/Download fallback bundle.
+  function getEditedFieldValues(fieldName) {
     return Array.from(
-      document.querySelectorAll('[data-field="row_description"]')
+      document.querySelectorAll('[data-field="' + fieldName + '"]')
     ).map(function (el) {
       return (el.innerText || el.textContent || "").trim();
     });
   }
 
-  // Autosave a description as soon as you click out of it, so an edit
-  // survives navigating to another page instead of only being saved when
-  // you hit Save/Download Letter.
-  async function autosaveRowDescription(el) {
+  // Autosave one cell as soon as you click out of it, so an edit survives
+  // navigating to another page instead of only being saved when you hit
+  // Save/Download Letter.
+  async function autosaveEditableField(el) {
+    const fieldName = el.dataset.field;
     const text = (el.innerText || el.textContent || "").trim();
 
     // Nothing changed since the last time this field was saved (or since
@@ -471,16 +490,16 @@
     if (Number.isNaN(rowIndex)) return;
 
     try {
-      const resp = await fetch("{{ url_for('printer_print_update_description') }}", {
+      const resp = await fetch("{{ url_for('printer_print_update_field') }}", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ row_index: rowIndex, description: text })
+        body: JSON.stringify({ row_index: rowIndex, field: fieldName, value: text })
       });
       if (resp.ok) {
         el.dataset.lastSavedValue = text;
       }
       // On failure, just leave lastSavedValue as-is so the next blur (or
-      // the row_descriptions sent along with Save/Download) tries again.
+      // the row_fields bundle sent along with Save/Download) tries again.
     } catch (err) {
       // Offline/network hiccup - same fallback as above.
     }
@@ -489,17 +508,21 @@
   // blur doesn't bubble, so this has to listen in the capture phase to
   // catch it via delegation instead of binding one listener per cell.
   document.addEventListener("blur", function (e) {
-    const el = e.target.closest && e.target.closest('[data-field="row_description"]');
+    const el = e.target.closest && e.target.closest(
+      EDITABLE_FIELD_NAMES.map(function (f) { return '[data-field="' + f + '"]'; }).join(",")
+    );
     if (!el) return;
     el.dataset.lastSavedValue = el.dataset.lastSavedValue ?? "";
-    autosaveRowDescription(el);
+    autosaveEditableField(el);
   }, true);
 
   // Seed each cell's "last saved" value with what's on the page already,
   // so clicking into a field and back out without changing it doesn't
   // fire a needless save.
-  document.querySelectorAll('[data-field="row_description"]').forEach(function (el) {
-    el.dataset.lastSavedValue = (el.innerText || el.textContent || "").trim();
+  EDITABLE_FIELD_NAMES.forEach(function (fieldName) {
+    document.querySelectorAll('[data-field="' + fieldName + '"]').forEach(function (el) {
+      el.dataset.lastSavedValue = (el.innerText || el.textContent || "").trim();
+    });
   });
 
   // The actual save/finalize call - adds the history entry (with rows),
@@ -508,6 +531,11 @@
   // "a price letter was saved" - both Save and Download go through it.
   async function persistPriceLetter(built) {
     const pdfData = built.pdf.output("datauristring");
+
+    const rowFields = {};
+    EDITABLE_FIELD_NAMES.forEach(function (fieldName) {
+      rowFields[fieldName] = getEditedFieldValues(fieldName);
+    });
 
     const resp = await fetch("{{ url_for('printer_save_pdf') }}", {
       method: "POST",
@@ -518,7 +546,7 @@
       body: JSON.stringify({
         file_name: built.fileName,
         pdf_data: pdfData,
-        row_descriptions: getEditedRowDescriptions()
+        row_fields: rowFields
       })
     });
 
