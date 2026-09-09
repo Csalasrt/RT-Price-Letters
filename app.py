@@ -6669,6 +6669,61 @@ def printer_print():
         page_title="Print Preview"
     )
 
+def _effective_description_for_row(row, description_map):
+    """What the description cell shows for a row before any edit: its own
+    saved description if it has one, otherwise the product's shared
+    default description. Used to detect whether an edit actually changed
+    anything, so an unedited row keeps following the shared description
+    instead of getting hard-pinned to today's text.
+    """
+    product_name = (row.get("product") or "").strip()
+    saved_description = (row.get("description") or "").strip()
+    return saved_description or description_map.get(
+        normalize_product_name(product_name),
+        product_name
+    )
+
+
+@app.route("/printer/print/update-description", methods=["POST"])
+@login_required
+def printer_print_update_description():
+    # Autosaves a single row's description as soon as the user clicks out
+    # of the field on the print preview, so it survives navigating away
+    # before hitting Save/Download (which previously was the only time an
+    # edit got written back - see printer_save_pdf).
+    quote = session.get("print_quote") or {}
+    if not quote:
+        return jsonify({"ok": False, "error": "No quote available."}), 400
+
+    data = request.get_json(silent=True) or {}
+    try:
+        row_index = int(data.get("row_index"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Missing row index."}), 400
+
+    rows = list(quote.get("rows") or [])
+    if not (0 <= row_index < len(rows)):
+        return jsonify({"ok": False, "error": "Row not found."}), 400
+
+    edited = (data.get("description") or "").strip()
+    if edited:
+        description_map = get_product_description_map()
+        row = rows[row_index]
+        effective_description = _effective_description_for_row(row, description_map)
+
+        if edited != effective_description.strip():
+            row = dict(row)
+            row["description"] = edited
+            rows[row_index] = row
+
+            quote = dict(quote)
+            quote["rows"] = rows
+            session["print_quote"] = quote
+            session.modified = True
+
+    return jsonify({"ok": True})
+
+
 @app.route("/printer/save-pdf", methods=["POST"])
 @login_required
 def printer_save_pdf():
@@ -6692,6 +6747,9 @@ def printer_save_pdf():
     # (b) becomes the customer's new saved default description via
     # finalize_price_letter -> save_customer_template_from_quote below.
     # Without this, an edit only ever affected the rendered PDF image.
+    # (In practice printer_print_update_description above will usually
+    # have already saved each edit on blur - this is the fallback for
+    # anything that didn't make it, e.g. a dropped autosave request.)
     edited_descriptions = data.get("row_descriptions")
     if isinstance(edited_descriptions, list):
         description_map = get_product_description_map()
@@ -6706,12 +6764,7 @@ def printer_save_pdf():
             if not edited:
                 continue
 
-            product_name = (row.get("product") or "").strip()
-            saved_description = (row.get("description") or "").strip()
-            effective_description = saved_description or description_map.get(
-                normalize_product_name(product_name),
-                product_name
-            )
+            effective_description = _effective_description_for_row(row, description_map)
 
             # Only write it back if the user actually changed it from what
             # was showing. Otherwise a row with no custom description

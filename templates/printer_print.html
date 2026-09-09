@@ -304,7 +304,7 @@
 
                 <tbody>
                   {% for r in rows %}
-                  <tr>
+                  <tr data-row-index="{{ loop.index0 }}">
                     <td style="text-align:left;">
                       <div
                         contenteditable="true"
@@ -455,6 +455,52 @@
       return (el.innerText || el.textContent || "").trim();
     });
   }
+
+  // Autosave a description as soon as you click out of it, so an edit
+  // survives navigating to another page instead of only being saved when
+  // you hit Save/Download Letter.
+  async function autosaveRowDescription(el) {
+    const text = (el.innerText || el.textContent || "").trim();
+
+    // Nothing changed since the last time this field was saved (or since
+    // page load) - skip the request.
+    if (el.dataset.lastSavedValue === text) return;
+
+    const tr = el.closest("tr[data-row-index]");
+    const rowIndex = tr ? parseInt(tr.getAttribute("data-row-index"), 10) : NaN;
+    if (Number.isNaN(rowIndex)) return;
+
+    try {
+      const resp = await fetch("{{ url_for('printer_print_update_description') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ row_index: rowIndex, description: text })
+      });
+      if (resp.ok) {
+        el.dataset.lastSavedValue = text;
+      }
+      // On failure, just leave lastSavedValue as-is so the next blur (or
+      // the row_descriptions sent along with Save/Download) tries again.
+    } catch (err) {
+      // Offline/network hiccup - same fallback as above.
+    }
+  }
+
+  // blur doesn't bubble, so this has to listen in the capture phase to
+  // catch it via delegation instead of binding one listener per cell.
+  document.addEventListener("blur", function (e) {
+    const el = e.target.closest && e.target.closest('[data-field="row_description"]');
+    if (!el) return;
+    el.dataset.lastSavedValue = el.dataset.lastSavedValue ?? "";
+    autosaveRowDescription(el);
+  }, true);
+
+  // Seed each cell's "last saved" value with what's on the page already,
+  // so clicking into a field and back out without changing it doesn't
+  // fire a needless save.
+  document.querySelectorAll('[data-field="row_description"]').forEach(function (el) {
+    el.dataset.lastSavedValue = (el.innerText || el.textContent || "").trim();
+  });
 
   // The actual save/finalize call - adds the history entry (with rows),
   // updates the customer's saved template, records margin history, and
