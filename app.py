@@ -1730,6 +1730,53 @@ def cascade_product_rename(product_id, old_name, new_name):
         db.session.commit()
 
 
+def cascade_product_delete(product_ids, product_names=None):
+    """
+    When a product is removed from the master Products list, clean it up
+    everywhere else it's referenced so it doesn't linger in the system:
+
+    - Deletes that product's rows from every customer's saved default
+      product setup (matched by product_id, with a name-based fallback
+      for older rows saved before product_id existed), so it stops
+      showing up on customer templates/price letters.
+
+    Historical PricingEntry/margin-history records are intentionally left
+    alone - those are past records tied to a point in time, not live
+    references to the product, and get_printer_product_options() already
+    filters deleted products out of current pricing dropdowns.
+    """
+    product_ids = {str(pid).strip() for pid in (product_ids or []) if str(pid).strip()}
+    name_keys = {
+        normalize_product_name(n) for n in (product_names or []) if (n or "").strip()
+    }
+
+    if not product_ids and not name_keys:
+        return
+
+    changed = False
+
+    if product_ids:
+        for row in CustomerDefaultRow.query.filter(
+            CustomerDefaultRow.product_id.in_(product_ids)
+        ).all():
+            db.session.delete(row)
+            changed = True
+
+    if name_keys:
+        legacy_rows = (
+            CustomerDefaultRow.query
+            .filter(CustomerDefaultRow.product_id.is_(None))
+            .all()
+        )
+        for row in legacy_rows:
+            if normalize_product_name(row.product) in name_keys:
+                db.session.delete(row)
+                changed = True
+
+    if changed:
+        db.session.commit()
+
+
 def resolve_product_id(product_name):
     """
     Finds the CompanyProduct id matching this product name (case/spacing
@@ -7333,9 +7380,23 @@ def products_page():
                 flash("No products were selected.", "info")
                 return redirect(url_for("products_page"))
 
+            deleted_names = [
+                p.get("product") for p in products if str(p.get("id")) in delete_ids
+            ]
+
             products = [p for p in products if str(p.get("id")) not in delete_ids]
+
+            # A remaining product may have been sharing pricing with one of
+            # the products we're deleting - clear that link so it doesn't
+            # point at an id that no longer exists.
+            for p in products:
+                if str(p.get("pricing_id") or "") in delete_ids:
+                    p["pricing_id"] = None
+
             save_company_products(products)
-            flash("Selected products deleted.", "success")
+            cascade_product_delete(delete_ids, deleted_names)
+
+            flash(f"Deleted {len(delete_ids)} product(s) and removed them from customer templates.", "success")
             return redirect(url_for("products_page"))
 
     return render_template(
