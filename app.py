@@ -7,6 +7,7 @@ import re
 import base64
 import csv
 import io
+import hashlib
 from datetime import datetime, timezone, timedelta
 
 
@@ -1643,6 +1644,37 @@ def load_company_products():
         }
         for p in products
     ]
+
+def get_products_version():
+    """
+    Short fingerprint of the master Products list. Changes whenever a
+    product is added, removed, renamed, or has any of its fields edited
+    (description, LB/GAL, default price/U/M, shared-pricing link).
+
+    Every page that shows a product dropdown gets this value on load and
+    the browser polls /api/products/version to compare - when it differs,
+    the page pulls the fresh list and rebuilds its dropdowns in place. See
+    static/js/live_products.js.
+    """
+    rows = (
+        db.session.query(
+            CompanyProduct.id,
+            CompanyProduct.product,
+            CompanyProduct.description,
+            CompanyProduct.lb_per_gal,
+            CompanyProduct.default_price,
+            CompanyProduct.default_um,
+            CompanyProduct.pricing_id,
+        )
+        .order_by(CompanyProduct.id.asc())
+        .all()
+    )
+    h = hashlib.sha1()
+    for r in rows:
+        h.update(repr(tuple(r)).encode("utf-8"))
+        h.update(b"\n")
+    return h.hexdigest()[:16]
+
 
 def ensure_products_exist(product_names):
     """
@@ -3362,14 +3394,28 @@ def build_margin_chart_points(records):
     return points
 
 
-def get_margin_filter_options():
+def get_margin_filter_options(selected_product=""):
     records = get_margin_history_records()
 
-    products = sorted({
-        str(r.get("product") or "").strip()
-        for r in records
-        if str(r.get("product") or "").strip()
-    }, key=lambda x: x.lower())
+    # Product filter dropdown mirrors the live master Products list (same
+    # source as every other product dropdown in the app) instead of
+    # whatever names happen to appear in margin history.
+    products = []
+    seen_products = set()
+    for p in load_company_products() or []:
+        name = str(p.get("product") or "").strip()
+        key = normalize_product_name(name)
+        if name and key not in seen_products:
+            seen_products.add(key)
+            products.append(name)
+    products.sort(key=lambda x: x.lower())
+
+    # If the page was opened with a product filter that's no longer on the
+    # list (deleted/renamed since), keep it visible so the dropdown doesn't
+    # misleadingly show "All Products" while a filter is still applied.
+    selected_product = str(selected_product or "").strip()
+    if selected_product and normalize_product_name(selected_product) not in seen_products:
+        products.insert(0, selected_product)
 
     customers = sorted({
         str(r.get("customer") or "").strip()
@@ -7805,7 +7851,7 @@ def analytics_page():
     summary = build_margin_analytics_summary(records)
     product_rollup = build_margin_product_rollup(records)
     chart_points = build_margin_chart_points(records)
-    filter_options = get_margin_filter_options()
+    filter_options = get_margin_filter_options(filters.get("product"))
 
     return render_template(
         "analytics.html",
@@ -7835,7 +7881,7 @@ def margin_analytics_page():
     summary = build_margin_analytics_summary(records)
     product_rollup = build_margin_product_rollup(records)
     chart_data = build_margin_chart_points(records)
-    filter_options = get_margin_filter_options()
+    filter_options = get_margin_filter_options(filters.get("product"))
 
     return render_template(
         "margin_analytics.html",
@@ -7847,6 +7893,75 @@ def margin_analytics_page():
         chart_data=chart_data,
         filter_options=filter_options,
     )
+
+# -------------------------
+# Live product list API
+# -------------------------
+def api_login_required(view_func):
+    """Like login_required, but answers with a JSON 401 instead of a
+    redirect to the login page, so background fetches from
+    live_products.js fail cleanly when a session expires."""
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if "user_id" not in session:
+            return jsonify({"ok": False, "error": "Not logged in."}), 401
+        return view_func(*args, **kwargs)
+    return wrapper
+
+
+def _no_store(resp):
+    resp.headers["Cache-Control"] = "no-store, max-age=0"
+    return resp
+
+
+@app.route("/api/products/version")
+@api_login_required
+def api_products_version():
+    return _no_store(jsonify({"ok": True, "version": get_products_version()}))
+
+
+@app.route("/api/products")
+@api_login_required
+def api_products():
+    """
+    Current master Products list, in the same shape load_company_products()
+    returns (what the templates already receive on page load).
+
+    Optional ?period=<month_key> also returns the Build Letter picker's
+    options for that pricing period - same keys/ordering the printer page
+    renders server-side via get_printer_product_options().
+    """
+    payload = {
+        "ok": True,
+        "version": get_products_version(),
+        "products": load_company_products() or [],
+    }
+
+    period = (request.args.get("period") or "").strip()
+    if period:
+        try:
+            month_key, options, _ = get_printer_product_options(period)
+            payload["period"] = month_key
+            payload["printer_options"] = [
+                {"key": o.get("key"), "product": o.get("product")}
+                for o in options
+            ]
+        except Exception:
+            payload["printer_options"] = None
+
+    return _no_store(jsonify(payload))
+
+
+@app.context_processor
+def inject_products_version():
+    # Only logged-in pages run the live product list script.
+    if "user_id" not in session:
+        return {"products_version": ""}
+    try:
+        return {"products_version": get_products_version()}
+    except Exception:
+        return {"products_version": ""}
+
 
 @app.route("/health")
 def health():
