@@ -12,6 +12,18 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/nstock.css') }}">
 
+  {# Live product list - keeps every product dropdown in sync with the
+     Products page without a reload. Loaded in <head> (not deferred) so
+     page scripts inside {% block content %} can call LiveProducts.subscribe(). #}
+  <script>
+    window.LIVE_PRODUCTS_CONFIG = {% if session.get('user_id') %}{
+      version: {{ (products_version or "") | tojson }},
+      versionUrl: {{ url_for('api_products_version') | tojson }},
+      listUrl: {{ url_for('api_products') | tojson }}
+    }{% else %}{}{% endif %};
+  </script>
+  <script src="{{ url_for('static', filename='js/live_products.js') }}"></script>
+
   <style>
     html,
     body {

@@ -3703,8 +3703,8 @@ def build_default_rows_from_historical(historical_rows, reference_month, referen
 
 def get_pricing_entry_for_month_product_um(month_key, product, um):
     month_key = (month_key or "").strip().upper()
-    product_key = (product or "").strip().lower()
-    um_key = normalize_um(um).lower()
+    product_key = normalize_product_name(product)
+    um_key = normalize_um(um)
 
     if not month_key or not product_key or not um_key:
         return None
@@ -3713,8 +3713,8 @@ def get_pricing_entry_for_month_product_um(month_key, product, um):
 
     exact = None
     for r in rows:
-        r_product = (r.product or "").strip().lower()
-        r_um = (r.um or "").strip().lower()
+        r_product = normalize_product_name(r.product)
+        r_um = normalize_um(r.um)
         if r_product == product_key and r_um == um_key:
             exact = r
 
@@ -3734,7 +3734,7 @@ def get_company_product_map():
             lb_per_gal = 0.0
 
         if name:
-            result[name.lower()] = {
+            result[normalize_product_name(name)] = {
                 "product": name,
                 "lb_per_gal": lb_per_gal,
             }
@@ -3743,6 +3743,14 @@ def get_company_product_map():
 
 
 def convert_cost_value(cost, from_um, to_um, lb_per_gal=0.0):
+    """
+    Converts a cost between UMs using a product's LB/GAL.
+
+    Returns the converted float on success. Returns None - never a bare
+    0.0 - when the conversion genuinely can't be done (missing/invalid
+    LB/GAL, or a UM pair this function doesn't know how to convert), so
+    callers can't mistake "couldn't convert" for a real $0.00 result.
+    """
     cost = to_float(cost, 0.0)
     from_um = normalize_um(from_um)
     to_um = normalize_um(to_um)
@@ -3754,16 +3762,17 @@ def convert_cost_value(cost, from_um, to_um, lb_per_gal=0.0):
     if from_um == to_um:
         return cost
 
-    if not lb_per_gal or lb_per_gal <= 0:
-        return 0.0
-
     if from_um == "GAL" and to_um == "LB":
+        if not lb_per_gal or lb_per_gal <= 0:
+            return None
         return cost / lb_per_gal
 
     if from_um == "LB" and to_um == "GAL":
+        if not lb_per_gal or lb_per_gal <= 0:
+            return None
         return cost * lb_per_gal
 
-    return 0.0
+    return None
 
 
 def get_historical_customer_row_cost(reference_month, reference_year, product, um):
@@ -3782,14 +3791,14 @@ def get_historical_customer_row_cost(reference_month, reference_year, product, u
 
     fallback = None
     for r in rows:
-        if (r.product or "").strip().lower() == product.lower():
+        if normalize_product_name(r.product) == normalize_product_name(product):
             fallback = r
 
     if not fallback:
         return 0.0, f"No pricing found for {product} in {month_key}."
 
     company_product_map = get_company_product_map()
-    lb_per_gal = to_float(company_product_map.get(product.lower(), {}).get("lb_per_gal", 0.0), 0.0)
+    lb_per_gal = to_float(company_product_map.get(normalize_product_name(product), {}).get("lb_per_gal", 0.0), 0.0)
 
     converted = convert_cost_value(
         cost=float(fallback.final_price or 0.0),
@@ -3798,8 +3807,14 @@ def get_historical_customer_row_cost(reference_month, reference_year, product, u
         lb_per_gal=lb_per_gal
     )
 
-    if converted > 0:
+    if converted is not None and converted > 0:
         return converted, ""
+
+    if converted is None and lb_per_gal <= 0:
+        return 0.0, (
+            f"Found {product} pricing in {month_key} as {fallback.um}, but can't convert to {um} "
+            f"because '{product}' has no LB/GAL set on the Products page."
+        )
 
     return 0.0, f"No exact pricing found for {product} / {um} in {month_key}, and UM conversion could not be completed."
 
@@ -4756,8 +4771,8 @@ def pricing_page():
 
         def _pkey(e):
             return (
-                str(e.get("product", "")).strip().lower(),
-                str(e.get("um", "")).strip().lower(),
+                normalize_product_name(e.get("product", "")),
+                normalize_um(e.get("um", "")),
             )
 
         def _fullsig(e):
@@ -4880,8 +4895,8 @@ def pricing_apply_mods():
 
     def _pkey(e):
         return (
-            str(e.get("product", "")).strip().lower(),
-            str(e.get("um", "")).strip().lower(),
+            normalize_product_name(e.get("product", "")),
+            normalize_um(e.get("um", "")),
         )
 
     decision = (request.form.get("decision") or "").strip().lower()
@@ -7876,15 +7891,8 @@ def api_historical_customer_cost():
 @app.route("/customers/new", methods=["GET", "POST"])
 @login_required
 def customer_new_page():
-    # Use the same merged product list the printer uses so the dropdown shows
-    # every product — both from the company product list and from pricing uploads.
-    available_periods = get_available_pricing_periods()
-    if available_periods:
-        latest_period = available_periods[-1]["value"]
-        _, merged_options, _ = get_printer_product_options(latest_period)
-        company_products = merged_options
-    else:
-        company_products = load_company_products()
+    # Dropdown uses the exact same list as the Products page.
+    company_products = load_company_products()
     errors = []
 
     customer_name = ""
