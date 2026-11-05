@@ -2390,6 +2390,7 @@ def normalize_printer_row(row):
         "shipping_location": (row.get("shipping_location") or "").strip(),
         "shipping_custom":   (row.get("shipping_custom") or "").strip(),
         "is_inquire": is_inquire,
+        "price_locked": "1" if str(row.get("price_locked", "")).strip() == "1" else "",
     }
 
 def save_printer_working_draft(month_key, customer_id, sales_person_id, default_margin, rows):
@@ -2911,6 +2912,7 @@ def get_posted_printer_rows(form):
     posted_shipping_locations = form.getlist("row_shipping_location")
     posted_shipping_customs = form.getlist("row_shipping_custom")
     posted_is_inquire = form.getlist("row_is_inquire")
+    posted_price_locked = form.getlist("row_price_locked")
 
     row_count = len(posted_products)
     rows = []
@@ -2944,6 +2946,7 @@ def get_posted_printer_rows(form):
             "shipping_location": posted_shipping_locations[i] if i < len(posted_shipping_locations) else "",
             "shipping_custom":   posted_shipping_customs[i]   if i < len(posted_shipping_customs)   else "",
             "is_inquire":        posted_is_inquire[i]         if i < len(posted_is_inquire)         else "0",
+            "price_locked":      posted_price_locked[i]       if i < len(posted_price_locked)       else "",
         }
         
 
@@ -4311,6 +4314,93 @@ def convert_printer_cost_between_ums(cost, from_um, to_um, product_name):
     return None
 
 
+def resolve_line_cost(product_name, um, priced_by_name):
+    """The one rule for a price list line's cost.
+
+    priced_by_name holds the selected month's entries from the Prices page.
+    A price already in the line's unit is used as is. Otherwise the price is
+    converted using the product's LB/GAL from the Products page.
+
+    status is "priced" when the cost is in the line's unit, "cannot_convert"
+    when it's only available in another unit (returned in that unit, so a cost
+    is never mislabeled), or "no_price" when the month has no price.
+    """
+    matches = priced_by_name.get(normalize_product_name(product_name), []) or []
+    if not matches:
+        return {"status": "no_price"}
+
+    target_um = normalize_um(um)
+
+    def line(entry, cost, line_um, status="priced"):
+        return {
+            "status": status,
+            "um": line_um,
+            "cost": round(to_float(cost, 0.0), 4),
+            "source_um": normalize_um(entry.get("um", "")),
+            "source_cost": round(to_float(entry.get("cost"), 0.0), 4),
+        }
+
+    if not target_um:
+        first = matches[0]
+        return line(first, first.get("cost"), normalize_um(first.get("um", "")))
+
+    for entry in matches:
+        if normalize_um(entry.get("um", "")) == target_um:
+            return line(entry, entry.get("cost"), target_um)
+
+    for entry in matches:
+        converted = convert_printer_cost_between_ums(
+            entry.get("cost"), entry.get("um", ""), target_um, product_name
+        )
+        if converted is not None:
+            return line(entry, converted, target_um)
+
+    first = matches[0]
+    return line(first, first.get("cost"), normalize_um(first.get("um", "")), "cannot_convert")
+
+
+def apply_live_cost_to_row(row, priced_by_name):
+    """Sets a line's cost from resolve_line_cost and reprices it if the cost
+    changed. Margin, shipping, packaging and any typed price are kept. A line
+    with no price for the month keeps the cost it has."""
+    row = normalize_printer_row(row)
+    row["weight"] = get_product_weight(row.get("product"))
+
+    resolved = resolve_line_cost(row.get("product"), row.get("um"), priced_by_name)
+    if resolved["status"] == "no_price":
+        return row
+
+    cost_changed = (
+        abs(to_float(row.get("cost"), 0.0) - resolved["cost"]) >= 0.00005
+        or normalize_um(row.get("um")) != resolved["um"]
+    )
+
+    row["um"] = resolved["um"]
+    row["cost"] = resolved["cost"]
+    row["source_um"] = resolved["source_um"]
+    row["source_cost"] = resolved["source_cost"]
+
+    if not cost_changed:
+        return row
+
+    final_cost = resolved["cost"] + row["pre_shipping"] + row["pre_packaging"]
+    row["final_cost"] = round(final_cost, 4)
+
+    if row.get("is_inquire"):
+        return row
+
+    if row.get("price_locked"):
+        price = row["price"]
+        row["margin"] = round(((price - final_cost) / final_cost) * 100.0, 4) if final_cost > 0 else 0.0
+    else:
+        price = final_cost * (1.0 + row["margin"] / 100.0)
+
+    row["price"] = round(price, 4)
+    row["source_price"] = round(price, 4)
+    row["final_price"] = round(price + row["add_shipping"] + row["add_packaging"], 4)
+    return row
+
+
 def force_period_costs_on_rows(rows, priced_by_name):
     fixed_rows = []
 
@@ -5387,6 +5477,28 @@ def customer_delete(customer_id):
     flash(f'Customer "{customer_name}" deleted.', "success")
     return redirect(url_for("customers_page"))
 
+@app.route("/printer/live-costs", methods=["POST"])
+@login_required
+def printer_live_costs():
+    data = request.get_json(silent=True) or {}
+    month_key = str(data.get("pricing_period") or "").strip().upper()
+    _, priced_products = get_product_costs_for_month(month_key)
+
+    priced_by_name = {}
+    for p in priced_products:
+        priced_by_name.setdefault(normalize_product_name(p.get("product")), []).append(p)
+
+    lines = []
+    for item in data.get("rows") or []:
+        product = str(item.get("product") or "").strip()
+        lines.append({
+            **resolve_line_cost(product, item.get("um"), priced_by_name),
+            "weight": get_product_weight(product),
+        })
+
+    return jsonify({"month_key": month_key, "lines": lines})
+
+
 @app.route("/printer/autosave", methods=["POST"])
 @login_required
 def printer_autosave():
@@ -5973,7 +6085,10 @@ def printer_page():
 
             # Save exactly what's on screen, same as printing does, so the
             # saved list always matches what the user reviewed.
-            save_rows = get_posted_printer_rows(request.form)
+            save_rows = [
+                apply_live_cost_to_row(r, priced_by_name)
+                for r in get_posted_printer_rows(request.form)
+            ]
 
             form["customer_id"] = customer_id
             form["sales_person_id"] = (request.form.get("sales_person_id") or "").strip()
@@ -6064,7 +6179,10 @@ def printer_page():
             elif not sales_person:
                 errors.append("Selected salesperson was not found.")
 
-            print_rows = get_posted_printer_rows(request.form)
+            print_rows = [
+                apply_live_cost_to_row(r, priced_by_name)
+                for r in get_posted_printer_rows(request.form)
+            ]
 
             ensure_products_exist([r.get("product") for r in print_rows])
 
@@ -6208,6 +6326,12 @@ def printer_page():
     if action in ("refresh_period_costs",):
         quote_rows = force_period_costs_on_rows(quote_rows, priced_by_name)
 
+    # Every line's cost comes from the selected month's prices, except while
+    # viewing a saved letter from history, which shows what was saved.
+    live_costs_enabled = not force_history_load and request.args.get("history_load") != "1"
+    if live_costs_enabled:
+        quote_rows = [apply_live_cost_to_row(r, priced_by_name) for r in quote_rows]
+
     if quote_rows:
         session["printer_draft"] = {
             "month_key": month_key,
@@ -6257,6 +6381,7 @@ def printer_page():
         customer_locations=customer_locations,       # ← add
         pickup_locations=pickup_locations,           # ← add
         last_month_lookup=last_month_lookup,
+        live_costs_enabled=live_costs_enabled,
         page="printer",
         page_title="Build Letter"
     )

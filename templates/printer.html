@@ -537,6 +537,12 @@
     border: 1px solid transparent;
   }
 
+  /* Our Cost couldn't be pulled in the line's unit - hover text says why */
+  #quote-table input.cost-notice {
+    border: 1px solid #d92d20 !important;
+    background: #fef3f2 !important;
+  }
+
   /* Rows marked as "Inquire" get a subtle highlight so they're easy to spot */
   #quote-table tr[data-inquire="1"] .price,
   #quote-table tr[data-inquire="1"] .final {
@@ -738,7 +744,7 @@
       </div>
 
       <div class="toolbar-helper">
-        Products already on the list show a checked box. Check a new product to add it - nothing already on the list is ever changed. To remove a product, use its delete checkbox in the table below and click "Delete Selected."
+        Products already on the list show a checked box. Check a new product to add it. To remove a product, use its delete checkbox in the table below and click "Delete Selected."
       </div>
 
       <div style="height:1px; background:#e5e7eb; margin:14px 0;"></div>
@@ -1124,7 +1130,7 @@
         </div>
 
         <div class="text-muted-small" style="margin-top:8px;">
-          Tip: Prior Months information is for reference only. All other fields can be adjusted. Final Cost and Final Price update automatically. Type <strong>IQ</strong> in the Sale Price box and press Enter to mark a product as "Inquire" instead of a set price.             </div>
+          Tip: Prior Months information is for reference only. Our Cost comes from the Prices page for the selected month and is locked when a price exists; a red Our Cost means there's a problem with that price, so hover over it for details. All other fields can be adjusted. Final Cost and Final Price update automatically. Type <strong>IQ</strong> in the Sale Price box and press Enter to mark a product as "Inquire" instead of a set price.             </div>
 
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px; flex-wrap:wrap;">
           <button class="btn btn-outline-secondary btn-sm" type="submit" name="action" value="delete_selected">
@@ -1387,6 +1393,13 @@
       const currentPrice = toNum(priceEl.value);
 
       if (convertValueFromSource(1, fromUM, targetUM, weight) === null) {
+        // A line priced on the Prices page doesn't get a choice here: the live
+        // lookup that follows this change sets its unit and cost.
+        if (tr.dataset.livePriced === "1") {
+          tr.dataset.currentUm = targetUM;
+          return;
+        }
+
         const hasDollars = currentCost !== 0 || currentPrice !== 0 ||
           perUnitEls.some(function(el) { return toNum(el.value) !== 0; });
         const reason = (fromUM === "EACH" || targetUM === "EACH")
@@ -1817,6 +1830,7 @@
 
         if (e.target.classList.contains("um-select")) {
           updateRow(tr, "um", false);
+          refreshLiveCosts(tr);
         }
 
         if (e.target.classList.contains("shipping-location-select")) {
@@ -3079,6 +3093,125 @@
 
     sessionStorage.setItem("printer_draft_state", JSON.stringify(state));
   }
+
+  // ---- Live costs ----
+  // Asks the server for each line's cost: the selected month's price from the
+  // Prices page, converted with the product's LB/GAL when the units differ.
+  const LIVE_COSTS_ENABLED = {{ live_costs_enabled|tojson }};
+  const LIVE_COST_MONTH = {{ month_key|tojson }};
+  let latestLiveCostRequest = 0;
+
+  function setLiveCostNotice(costEl, message) {
+    costEl.title = message;
+    costEl.classList.toggle("cost-notice", !!message);
+  }
+
+  function applyLiveCost(tr, line, requestedUm) {
+    const costEl = tr.querySelector(".cost");
+    const umEl = tr.querySelector(".um-select");
+    if (!costEl || !umEl) return;
+
+    const weight = line.weight === null || line.weight === undefined ? "" : String(line.weight);
+    tr.dataset.weight = weight;
+    setRowField(tr, 'input[name="row_weight"]', weight);
+
+    const isPriced = line.status !== "no_price";
+    tr.dataset.livePriced = isPriced ? "1" : "";
+    costEl.readOnly = isPriced;
+    costEl.classList.toggle("computed", isPriced);
+
+    if (!isPriced) {
+      setLiveCostNotice(costEl, "No price for this month on the Prices page. This cost was not pulled from it.");
+      return;
+    }
+
+    let notice = "";
+    if (line.status === "cannot_convert") {
+      notice = "Priced per " + line.source_um + ". Can't convert to " + requestedUm +
+        (requestedUm === "EACH" || line.source_um === "EACH"
+          ? ": EACH can't be converted to or from LB/GAL."
+          : " without an LB/GAL on the Products page.");
+    }
+    setLiveCostNotice(costEl, notice);
+
+    umEl.value = line.um;
+    tr.dataset.currentUm = line.um;
+    tr.dataset.sourceUm = line.source_um;
+    tr.dataset.sourceCost = line.source_cost;
+    setRowField(tr, 'input[name="row_source_um"]', line.source_um);
+    setRowField(tr, 'input[name="row_source_cost"]', fmt4(line.source_cost));
+
+    if (fmt4(costEl.value) !== fmt4(line.cost)) {
+      costEl.value = fmt4(line.cost);
+      updateRow(tr, "cost", false);
+
+      // A typed price stays as typed, so its margin has to follow the new cost.
+      if (isPriceLocked(tr) && tr.dataset.inquire !== "1") {
+        const finalCost = toNum(tr.querySelector(".final-cost")?.value);
+        const price = toNum(tr.querySelector(".price")?.value);
+        tr.querySelector(".margin").value = fmt2(finalCost > 0 ? ((price - finalCost) / finalCost) * 100 : 0);
+      }
+
+      updateLastMonthMarginCell(tr);
+    }
+  }
+
+  async function refreshLiveCosts(changedRow) {
+    if (!LIVE_COSTS_ENABLED || window.printerFormSubmitting) return;
+
+    const trs = Array.from(document.querySelectorAll("#quote-table tbody tr")).filter(function(tr) {
+      return (tr.querySelector('[name="row_product"]')?.value || "").trim();
+    });
+    if (!trs.length) return;
+
+    const requestedUms = trs.map(function(tr) { return tr.querySelector(".um-select")?.value || ""; });
+    const requestId = ++latestLiveCostRequest;
+
+    let lines;
+    try {
+      const response = await fetch("/printer/live-costs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pricing_period: LIVE_COST_MONTH,
+          rows: trs.map(function(tr, i) {
+            return { product: tr.querySelector('[name="row_product"]').value, um: requestedUms[i] };
+          })
+        })
+      });
+      if (!response.ok) return;
+      lines = (await response.json()).lines;
+    } catch (err) {
+      // Saving and printing still look up every cost on the server.
+      return;
+    }
+
+    if (requestId !== latestLiveCostRequest || window.printerFormSubmitting) return;
+
+    trs.forEach(function(tr, i) {
+      applyLiveCost(tr, lines[i], requestedUms[i]);
+      if (tr === changedRow && lines[i].status === "cannot_convert") {
+        window.alert(tr.querySelector(".cost").title);
+      }
+    });
+
+    savePrinterDraftState();
+
+    const simplePanel = document.getElementById("simple-view-panel");
+    if (simplePanel && simplePanel.style.display !== "none") {
+      populateSimpleView();
+    }
+  }
+
+  window.addEventListener("load", function() { refreshLiveCosts(); });
+  window.addEventListener("focus", function() { refreshLiveCosts(); });
+
+  // Naming a custom line looks up its price too.
+  document.addEventListener("focusout", function(e) {
+    if (e.target.matches && e.target.matches('#quote-table input[type="text"][name="row_product"]')) {
+      refreshLiveCosts();
+    }
+  });
 
   function rebuildRowsFromDraft(state) {
     const holder = document.getElementById("existing-row-state");

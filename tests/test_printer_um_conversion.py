@@ -93,6 +93,88 @@ class PrinterConversionTests(unittest.TestCase):
         self.assertAlmostEqual(result["final_price"], 11.73)
 
 
+class LiveCostTests(unittest.TestCase):
+    """Every line's cost comes from the month's price and the product's weight."""
+
+    def setUp(self):
+        patcher = patch.object(app_module, "get_product_weight", fake_weight)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def apply(self, row, priced):
+        return app_module.apply_live_cost_to_row(row, priced)
+
+    def test_lb_price_on_gal_line_multiplies_by_weight(self):
+        line = app_module.resolve_line_cost("DDBSA", "GAL", LB_PRICED)
+        self.assertEqual(line["status"], "priced")
+        self.assertEqual(line["um"], "GAL")
+        self.assertAlmostEqual(line["cost"], 8.90)
+
+    def test_gal_price_on_lb_line_divides_by_weight(self):
+        line = app_module.resolve_line_cost("2EH", "LB", GAL_PRICED)
+        self.assertEqual(line["um"], "LB")
+        self.assertAlmostEqual(line["cost"], 1.00)
+
+    def test_price_in_line_unit_is_used_instead_of_converting(self):
+        priced = {"ddbsa": [
+            {"product": "DDBSA", "um": "GAL", "cost": 9.50},
+            {"product": "DDBSA", "um": "LB", "cost": 1.00},
+        ]}
+        self.assertAlmostEqual(app_module.resolve_line_cost("DDBSA", "GAL", priced)["cost"], 9.50)
+        self.assertAlmostEqual(app_module.resolve_line_cost("DDBSA", "LB", priced)["cost"], 1.00)
+
+    def test_no_weight_returns_cost_in_pricing_unit(self):
+        priced = {"unknown": [{"product": "Unknown", "um": "LB", "cost": 1.00}]}
+        line = app_module.resolve_line_cost("Unknown", "GAL", priced)
+        self.assertEqual(line["status"], "cannot_convert")
+        self.assertEqual(line["um"], "LB")
+        self.assertAlmostEqual(line["cost"], 1.00)
+
+    def test_stale_cost_is_replaced_and_repriced(self):
+        row = {
+            "product": "DDBSA", "um": "GAL", "cost": 7.0, "margin": 20, "price": 8.4,
+            "pre_shipping": 0.50, "add_shipping": 0.10, "final_price": 8.5,
+        }
+        result = self.apply(row, LB_PRICED)
+        self.assertAlmostEqual(result["cost"], 8.90)
+        self.assertAlmostEqual(result["final_cost"], 9.40)
+        self.assertAlmostEqual(result["price"], 11.28)
+        self.assertAlmostEqual(result["final_price"], 11.38)
+        self.assertAlmostEqual(result["pre_shipping"], 0.50)
+
+    def test_typed_price_is_kept_when_cost_changes(self):
+        row = {
+            "product": "DDBSA", "um": "GAL", "cost": 7.0, "margin": 20,
+            "price": 10.00, "price_locked": "1",
+        }
+        result = self.apply(row, LB_PRICED)
+        self.assertAlmostEqual(result["cost"], 8.90)
+        self.assertAlmostEqual(result["price"], 10.00)
+        self.assertAlmostEqual(result["margin"], 12.3596, places=3)
+        self.assertEqual(result["price_locked"], "1")
+
+    def test_correct_cost_leaves_rounded_price_alone(self):
+        row = {
+            "product": "DDBSA", "um": "GAL", "cost": 8.90, "margin": 20,
+            "price": 10.68, "final_price": 10.68, "final_cost": 8.90,
+        }
+        result = self.apply(row, LB_PRICED)
+        self.assertAlmostEqual(result["price"], 10.68)
+        self.assertAlmostEqual(result["final_price"], 10.68)
+
+    def test_no_price_for_month_keeps_line_cost(self):
+        row = {"product": "DDBSA", "um": "GAL", "cost": 7.0, "margin": 20, "price": 8.4}
+        result = self.apply(row, {})
+        self.assertAlmostEqual(result["cost"], 7.0)
+        self.assertAlmostEqual(result["price"], 8.4)
+
+    def test_inquire_line_gets_cost_without_a_price(self):
+        row = {"product": "DDBSA", "um": "GAL", "cost": 7.0, "margin": 0, "is_inquire": "1"}
+        result = self.apply(row, LB_PRICED)
+        self.assertAlmostEqual(result["cost"], 8.90)
+        self.assertTrue(result["is_inquire"])
+
+
 class AddedProductRowTests(unittest.TestCase):
     """A product added to a list gets the month's price, then its Default U/M."""
 
