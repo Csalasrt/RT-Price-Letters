@@ -4221,16 +4221,31 @@ def recost_existing_printer_rows(rows, priced_by_name):
             recosted.append(normalize_printer_row(old))
             continue
 
-        new_cost = to_float(matched.get("cost"), 0.0)
-        new_um = normalize_um(matched.get("um", preferred_um))
+        source_cost = to_float(matched.get("cost"), 0.0)
+        source_um = normalize_um(matched.get("um", preferred_um))
+        new_cost = source_cost
+        new_um = source_um
+
+        # Keep the unit the row is already showing. If this month is only
+        # priced in the other unit, convert the cost rather than switching
+        # the row's unit. Only fall back to the pricing unit if the cost
+        # can't be converted (no LB/GAL on file, or EACH).
+        if preferred_um and source_um and preferred_um != source_um:
+            converted_cost = convert_printer_cost_between_ums(
+                source_cost, source_um, preferred_um, product
+            )
+            if converted_cost is not None:
+                new_cost = converted_cost
+                new_um = preferred_um
+
         new_final_cost = new_cost + pre_shipping + pre_packaging
         new_price = new_final_cost * (1.0 + margin / 100.0)
         new_final = new_price + add_shipping + add_packaging
 
         old["cost"] = round(new_cost, 4)
-        old["source_cost"] = round(new_cost, 4)
+        old["source_cost"] = round(source_cost, 4)
         old["um"] = new_um or preferred_um
-        old["source_um"] = new_um or preferred_um
+        old["source_um"] = source_um or preferred_um
         old["pre_shipping"] = round(pre_shipping, 4)
         old["pre_packaging"] = round(pre_packaging, 4)
         old["final_cost"] = round(new_final_cost, 4)
@@ -4280,8 +4295,10 @@ def force_period_costs_on_rows(rows, priced_by_name):
             continue
 
         margin = to_float(old.get("margin"), 0.0)
-        shipping = to_float(old.get("shipping"), 0.0)
-        packaging = to_float(old.get("packaging"), 0.0)
+        pre_shipping = to_float(old.get("pre_shipping"), 0.0)
+        pre_packaging = to_float(old.get("pre_packaging"), 0.0)
+        add_shipping = to_float(old.get("add_shipping"), 0.0)
+        add_packaging = to_float(old.get("add_packaging"), 0.0)
         desired_um = normalize_um(old.get("um", ""))
 
         matches = priced_by_name.get(normalize_product_name(product), []) or []
@@ -4319,13 +4336,15 @@ def force_period_costs_on_rows(rows, priced_by_name):
                 else:
                     fallback_display_cost = converted
 
-            price = fallback_display_cost * (1.0 + margin / 100.0)
-            final_price = price + shipping + packaging
+            final_cost = fallback_display_cost + pre_shipping + pre_packaging
+            price = final_cost * (1.0 + margin / 100.0)
+            final_price = price + add_shipping + add_packaging
 
             old["um"] = fallback_display_um
             old["source_um"] = fallback_source_um
             old["cost"] = round(fallback_display_cost, 4)
             old["source_cost"] = round(fallback_source_cost, 4)
+            old["final_cost"] = round(final_cost, 4)
             old["price"] = round(price, 4)
             old["source_price"] = round(price, 4)
             old["final_price"] = round(final_price, 4)
@@ -4353,13 +4372,15 @@ def force_period_costs_on_rows(rows, priced_by_name):
             else:
                 display_cost = converted
 
-        price = display_cost * (1.0 + margin / 100.0)
-        final_price = price + shipping + packaging
+        final_cost = display_cost + pre_shipping + pre_packaging
+        price = final_cost * (1.0 + margin / 100.0)
+        final_price = price + add_shipping + add_packaging
 
         old["um"] = display_um
         old["source_um"] = source_um
         old["cost"] = round(display_cost, 4)
         old["source_cost"] = round(source_cost, 4)
+        old["final_cost"] = round(final_cost, 4)
         old["price"] = round(price, 4)
         old["source_price"] = round(price, 4)
         old["final_price"] = round(final_price, 4)
@@ -5750,7 +5771,10 @@ def printer_page():
 
                     "margin": round(margin, 4),
 
-                    "um": "",
+                    # The duplicate's cost is the source cost, so it must
+                    # carry the source unit. Left blank, the dropdown would
+                    # default to LB and mislabel a cost priced in GAL.
+                    "um": original.get("source_um") or original.get("um", ""),
                     "package_type": "",
                     "price": 0.0,
                     "shipping": 0.0,
@@ -5921,10 +5945,9 @@ def printer_page():
                 if c:
                     customer_name = c.get("name", "")
 
-            save_rows = force_period_costs_on_rows(
-                get_posted_printer_rows(request.form),
-                priced_by_name
-            )
+            # Save exactly what's on screen, same as printing does, so the
+            # saved list always matches what the user reviewed.
+            save_rows = get_posted_printer_rows(request.form)
 
             form["customer_id"] = customer_id
             form["sales_person_id"] = (request.form.get("sales_person_id") or "").strip()
