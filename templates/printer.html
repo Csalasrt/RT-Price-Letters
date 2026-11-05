@@ -890,7 +890,6 @@
               {% for r in quote_rows %}
                 <tr
                   data-source-cost="{{ '%.4f'|format(r.get('source_cost', r.get('cost', 0)) or 0) }}"
-                  data-source-price="{{ '%.4f'|format(r.get('source_price', r.get('price', 0)) or 0) }}"
                   data-source-um="{{ (r.get('source_um', r.get('um', '')))|upper }}"
                   data-weight="{{ r.get('weight', '') }}"
                   data-inquire="{{ '1' if r.get('is_inquire') else '0' }}"
@@ -1357,62 +1356,106 @@
       return null;
     }
 
+    // Called when a row's U/M dropdown changes. Every per-unit dollar field
+    // moves to the new unit together, then the price is worked out from
+    // those converted numbers, so cost, margin and price can't disagree.
+    // If the row can't be converted, the user decides what happens - a
+    // dollar figure is never silently relabeled as a different unit.
     function applyUMConversion(tr) {
       const umEl       = tr.querySelector(".um-select");
       const costEl     = tr.querySelector(".cost");
       const priceEl    = tr.querySelector(".price");
       const marginEl   = tr.querySelector(".margin");
-      const preShipEl  = tr.querySelector(".pre-shipping");
-      const prePackEl  = tr.querySelector(".pre-packaging");
       const finalCostEl = tr.querySelector(".final-cost");
-      const addShipEl  = tr.querySelector(".add-shipping");
-      const addPackEl  = tr.querySelector(".add-packaging");
       const finalEl    = tr.querySelector(".final");
 
-      if (!umEl || !costEl || !priceEl || !marginEl) return false;
+      if (!umEl || !costEl || !priceEl || !marginEl) return;
 
-      const sourceCost  = tr.dataset.sourceCost;
-      const sourcePrice = tr.dataset.sourcePrice;
-      const sourceUM    = tr.dataset.sourceUm;
-      const weight      = tr.dataset.weight;
-      const targetUM    = umEl.value;
-      const margin      = toNum(marginEl.value);
-      const preShip     = toNum(preShipEl ? preShipEl.value : 0);
-      const prePack     = toNum(prePackEl ? prePackEl.value : 0);
-      const addShip     = toNum(addShipEl ? addShipEl.value : 0);
-      const addPack     = toNum(addPackEl ? addPackEl.value : 0);
-      const priceLocked = isPriceLocked(tr);
+      const fromUM   = normalizeUM(tr.dataset.currentUm || tr.dataset.sourceUm);
+      const targetUM = normalizeUM(umEl.value);
+      const weight   = tr.dataset.weight;
 
-      const convertedCost  = convertValueFromSource(sourceCost, sourceUM, targetUM, weight);
-      const convertedPrice = convertValueFromSource(sourcePrice, sourceUM, targetUM, weight);
-
-      if (convertedCost === null && convertedPrice === null) {
-        return false;
+      if (!fromUM || fromUM === targetUM) {
+        tr.dataset.currentUm = targetUM;
+        return;
       }
 
-      let cost = toNum(costEl.value);
+      const perUnitEls = [".pre-shipping", ".pre-packaging", ".add-shipping", ".add-packaging"]
+        .map(function(sel) { return tr.querySelector(sel); })
+        .filter(Boolean);
+      const currentCost = toNum(costEl.value);
+      const currentPrice = toNum(priceEl.value);
 
-      if (convertedCost !== null) {
-        cost = convertedCost;
-        costEl.value = fmt4(cost);
+      if (convertValueFromSource(1, fromUM, targetUM, weight) === null) {
+        const hasDollars = currentCost !== 0 || currentPrice !== 0 ||
+          perUnitEls.some(function(el) { return toNum(el.value) !== 0; });
+        const reason = (fromUM === "EACH" || targetUM === "EACH")
+          ? "EACH can't be converted to or from LB/GAL."
+          : "this product has no LB/GAL value available on this row.";
+        const keepNumbers = !hasDollars || window.confirm(
+          "Can't convert " + fromUM + " to " + targetUM + ": " + reason + "\n\n" +
+          "OK = change the unit to " + targetUM + " and keep these numbers exactly as they are.\n" +
+          "Cancel = stay on " + fromUM + "."
+        );
+        if (keepNumbers) {
+          tr.dataset.currentUm = targetUM;
+        } else {
+          umEl.value = fromUM;
+        }
+        return;
       }
 
+      // Use the original pricing cost when the row still has it, so repeated
+      // unit switches don't build up rounding. A hand-typed cost is converted
+      // as typed instead of being replaced by the pricing cost.
+      const sourceCost = tr.dataset.sourceCost;
+      const sourceUM   = tr.dataset.sourceUm;
+      const sourceAtFrom = convertValueFromSource(sourceCost, sourceUM, fromUM, weight);
+      const sourceAtTarget = convertValueFromSource(sourceCost, sourceUM, targetUM, weight);
+      const costIsFromPricing = sourceAtFrom !== null && sourceAtTarget !== null &&
+        fmt4(sourceAtFrom) === fmt4(currentCost);
+      const cost = costIsFromPricing
+        ? sourceAtTarget
+        : convertValueFromSource(currentCost, fromUM, targetUM, weight);
+      costEl.value = fmt4(cost);
+
+      perUnitEls.forEach(function(el) {
+        el.value = fmt4(convertValueFromSource(toNum(el.value), fromUM, targetUM, weight));
+      });
+
+      const preShip = toNum((tr.querySelector(".pre-shipping") || {}).value);
+      const prePack = toNum((tr.querySelector(".pre-packaging") || {}).value);
+      const addShip = toNum((tr.querySelector(".add-shipping") || {}).value);
+      const addPack = toNum((tr.querySelector(".add-packaging") || {}).value);
       const finalCost = cost + preShip + prePack;
       if (finalCostEl) finalCostEl.value = fmt4(finalCost);
 
-      let price = toNum(priceEl.value);
-      if (!priceLocked) {
-        if (convertedPrice !== null) {
-          price = convertedPrice;
-          priceEl.value = fmt2(price);
-        } else {
-          price = finalCost * (1 + margin / 100);
-          priceEl.value = fmt2(price);
-        }
+      tr.dataset.currentUm = targetUM;
+
+      if (tr.dataset.inquire === "1") {
+        priceEl.value = "Inquire";
+        finalEl.value = "Inquire";
+        marginEl.value = "0.00";
+        return;
       }
 
-      if (finalEl) finalEl.value = fmt4(price + addShip + addPack);
-      return true;
+      const decimals = getRowPriceDecimals(tr);
+      let price;
+      if (isPriceLocked(tr)) {
+        // A typed price is still "per unit", so it converts too. Margin is
+        // recalculated from the rounded result so it matches what's shown.
+        price = parseFloat(fmtPrice(
+          convertValueFromSource(currentPrice, fromUM, targetUM, weight),
+          decimals
+        ));
+        const margin = finalCost > 0 ? ((price - finalCost) / finalCost) * 100 : 0;
+        marginEl.value = fmt2(margin);
+      } else {
+        price = parseFloat(fmtPrice(finalCost * (1 + toNum(marginEl.value) / 100), decimals));
+      }
+
+      priceEl.value = fmtPrice(price, decimals);
+      if (finalEl) finalEl.value = fmtPrice(price + addShip + addPack, decimals);
     }
 
     function isPriceLocked(tr) {
@@ -1494,33 +1537,7 @@
       let finalP  = toNum(finalEl.value);
 
       if (changed === "um") {
-        if (isInquireRow) {
-          const finalCost = cost + preShip + prePack;
-          if (finalCostEl) finalCostEl.value = fmt4(finalCost);
-          priceEl.value = "Inquire";
-          finalEl.value = "Inquire";
-          marginEl.value = "0.00";
-          return;
-        }
-
-        const didConvert = applyUMConversion(tr);
-        if (!didConvert) {
-          cost    = toNum(costEl.value);
-          preShip = toNum(preShipEl ? preShipEl.value : 0);
-          prePack = toNum(prePackEl ? prePackEl.value : 0);
-          margin  = toNum(marginEl.value);
-          addShip = toNum(addShipEl ? addShipEl.value : 0);
-          addPack = toNum(addPackEl ? addPackEl.value : 0);
-
-          const finalCost = cost + preShip + prePack;
-          if (finalCostEl) finalCostEl.value = fmt4(finalCost);
-
-          const decimals = getRowPriceDecimals(tr);
-          price = finalCost * (1 + margin / 100);
-          price = parseFloat(fmtPrice(price, decimals));
-          priceEl.value = fmtPrice(price, decimals);
-          finalEl.value = fmtPrice(price + addShip + addPack, decimals);
-        }
+        applyUMConversion(tr);
         return;
       }
 
@@ -1759,6 +1776,18 @@
 
     const table = document.getElementById("quote-table");
     if (table) {
+      // Remember a row's unit just before its dropdown can change, since the
+      // "change" event only reports the new value. Rows can be added or
+      // restored after page load, so this is captured at interaction time.
+      function rememberRowUM(e) {
+        const el = e.target;
+        if (!el || !el.classList || !el.classList.contains("um-select")) return;
+        const tr = el.closest("tr");
+        if (tr) tr.dataset.currentUm = normalizeUM(el.value);
+      }
+      table.addEventListener("pointerdown", rememberRowUM, true);
+      table.addEventListener("focusin", rememberRowUM, true);
+
       table.addEventListener("focusin", function(e) {
         clearZeroOnFocus(e);
       });
@@ -2364,7 +2393,6 @@
     const tr = document.createElement("tr");
     tr.setAttribute("data-custom-row", "1");
     tr.setAttribute("data-source-cost", "0");
-    tr.setAttribute("data-source-price", "0");
     tr.setAttribute("data-source-um", "");
     tr.setAttribute("data-weight", "");
     tr.setAttribute("data-inquire", "0");
