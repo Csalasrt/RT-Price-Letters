@@ -3122,15 +3122,14 @@
     const draftRows = state.rows.slice();
     const used = new Set();
 
-    Array.from(table.querySelectorAll("tbody tr")).forEach(function(tr, index) {
-      const productVal = tr.querySelector('input[name="row_product"]')?.value || "";
-      let draftIndex = draftRows.findIndex(function(row, i) {
-        return !used.has(i) && (row.product || "") === productVal;
+    // Match by product name only. The server sorts the list, so a row's position
+    // can change, and a newly added product has no draft and must keep the
+    // numbers the server just priced for it.
+    Array.from(table.querySelectorAll("tbody tr")).forEach(function(tr) {
+      const productVal = (tr.querySelector('input[name="row_product"]')?.value || "").trim();
+      const draftIndex = draftRows.findIndex(function(row, i) {
+        return !used.has(i) && (row.product || "").trim() === productVal;
       });
-
-      if (draftIndex === -1 && index < draftRows.length && !used.has(index)) {
-        draftIndex = index;
-      }
 
       if (draftIndex === -1) return;
 
@@ -3208,6 +3207,13 @@
     const currentAction = currentActionEl ? currentActionEl.value : "";
 
     if (currentAction === "clear" || currentAction === "new") {
+      sessionStorage.removeItem("printer_draft_state");
+      return;
+    }
+
+    // A draft from another month holds that month's costs. The server's month
+    // is the one new products get priced from, so the draft must not replace it.
+    if (state.pricing_period && state.pricing_period !== {{ month_key|tojson }}) {
       sessionStorage.removeItem("printer_draft_state");
       return;
     }
