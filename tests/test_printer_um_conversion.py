@@ -93,5 +93,53 @@ class PrinterConversionTests(unittest.TestCase):
         self.assertAlmostEqual(result["final_price"], 11.73)
 
 
+class AddedProductRowTests(unittest.TestCase):
+    """A product added to a list gets the month's price, then its Default U/M."""
+
+    def setUp(self):
+        patcher = patch.object(app_module, "get_product_weight", fake_weight)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def add(self, name, priced, default_um):
+        products = [{"product": name, "default_um": default_um}]
+        with patch.object(app_module, "load_company_products", lambda: products):
+            return app_module._build_added_printer_row(name, priced, 20)
+
+    def test_converts_month_price_to_default_um(self):
+        row = self.add("DDBSA", LB_PRICED, "GAL")
+        self.assertEqual(row["um"], "GAL")
+        self.assertAlmostEqual(row["cost"], 8.90)
+        self.assertAlmostEqual(row["final_price"], 10.68)
+        self.assertEqual(row["source_um"], "LB")
+        self.assertAlmostEqual(row["source_cost"], 1.00)
+
+    def test_same_unit_is_not_converted(self):
+        row = self.add("2EH", GAL_PRICED, "GAL")
+        self.assertEqual(row["um"], "GAL")
+        self.assertAlmostEqual(row["cost"], 6.90)
+        self.assertAlmostEqual(row["final_price"], 8.28)
+
+    def test_prefers_month_price_already_in_default_um(self):
+        priced = {"ddbsa": [
+            {"product": "DDBSA", "um": "GAL", "cost": 9.50},
+            {"product": "DDBSA", "um": "LB", "cost": 1.00},
+        ]}
+        row = self.add("DDBSA", priced, "LB")
+        self.assertEqual(row["um"], "LB")
+        self.assertAlmostEqual(row["cost"], 1.00)
+
+    def test_no_default_um_stays_in_pricing_unit(self):
+        row = self.add("DDBSA", LB_PRICED, "")
+        self.assertEqual(row["um"], "LB")
+        self.assertAlmostEqual(row["cost"], 1.00)
+
+    def test_no_weight_stays_in_pricing_unit(self):
+        priced = {"unknown": [{"product": "Unknown", "um": "LB", "cost": 1.00}]}
+        row = self.add("Unknown", priced, "GAL")
+        self.assertEqual(row["um"], "LB")
+        self.assertAlmostEqual(row["cost"], 1.00)
+
+
 if __name__ == "__main__":
     unittest.main()

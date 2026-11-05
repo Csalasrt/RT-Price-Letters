@@ -2132,6 +2132,33 @@ def _build_printer_row_from_product(product_name, priced_by_name, default_margin
         description=description
     )
 
+
+def _build_added_printer_row(product_name, priced_by_name, default_margin):
+    """Builds the row for a product picked from the Printer page's product list.
+
+    priced_by_name holds the selected month's pricing. The row shows the
+    product's Default U/M from the Products page, using that month's price in
+    that unit if there is one and converting from the other unit if not. With
+    no Default U/M, or no LB/GAL to convert with, the row stays in the unit the
+    price was entered in.
+    """
+    product_key = normalize_product_name(product_name)
+    default_um = next(
+        (
+            p.get("default_um", "")
+            for p in load_company_products() or []
+            if normalize_product_name(p.get("product")) == product_key
+        ),
+        "",
+    )
+
+    return _build_printer_row_from_default_letter_row(
+        {"product": product_name, "um": default_um, "margin": default_margin},
+        priced_by_name,
+        default_margin,
+    )
+
+
 def _build_printer_row_from_default_letter_row(default_row, priced_by_name, fallback_margin):
     default_row = _normalize_default_letter_row(default_row)
 
@@ -5666,12 +5693,11 @@ def printer_page():
                 if not product_key or product_key in preserved_product_keys:
                     continue
 
-                built_row = _build_printer_row_from_product(
+                built_row = _build_added_printer_row(
                     product_name=product_name,
                     priced_by_name=priced_by_name,
                     default_margin=default_margin
                 )
-                built_row = normalize_printer_row(built_row)
 
                 added_rows.append(built_row)
                 preserved_product_keys.add(product_key)
