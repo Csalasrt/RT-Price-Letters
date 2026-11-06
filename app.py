@@ -2095,10 +2095,15 @@ def _clean_default_letter_rows(rows):
         if not row["product"]:
             continue
 
+        # Location is part of what makes a row unique - the same product
+        # going to Liberty TX and Palestine TX is two lines, not a duplicate.
         row_key = (
             normalize_product_name(row["product"]),
             normalize_um(row["um"]),
             (row["package_type"] or "").strip().lower(),
+            (row.get("shipping_type") or "").strip().lower(),
+            (row.get("shipping_location") or "").strip().lower(),
+            (row.get("shipping_custom") or "").strip().lower(),
         )
 
         if row_key in seen:
