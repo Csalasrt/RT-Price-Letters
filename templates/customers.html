@@ -124,6 +124,9 @@
 </style>
 
 <div class="customers-wrap">
+  {% for category, msg in get_flashed_messages(with_categories=true) %}
+    <div class="alert {{ 'alert-danger' if category == 'error' else 'alert-success' }}" style="margin-bottom:12px">{{ msg }}</div>
+  {% endfor %}
   <div class="customers-card">
     <div class="customers-card-body">
 
@@ -136,6 +139,10 @@
         </div>
 
         <div class="customers-actions">
+          <form method="post" action="{{ url_for('customers_rebuild_templates') }}" style="display:inline"
+                onsubmit="return confirm('Replace every customer\'s template with the rows from their most recent saved letter? Customers with no saved letter are left alone.');">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">Rebuild Templates</button>
+          </form>
           <a href="{{ url_for('customer_new_page') }}" class="btn btn-primary btn-sm">
             Add New
           </a>

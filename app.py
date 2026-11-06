@@ -3974,8 +3974,11 @@ def save_customer_template_from_quote(customer_id, rows):
             "package_type": (row.get("package_type") or "").strip(),
             "um": normalize_um(row.get("um", "")),
             "margin": round(to_float(row.get("margin", 0.0), 0.0), 4),
-            "shipping": round(to_float(row.get("shipping", 0.0), 0.0), 4),
-            "packaging": round(to_float(row.get("packaging", 0.0), 0.0), 4),
+            # Template rows call these shipping/packaging; saved letter rows
+            # call them pre_shipping/pre_packaging. Accept either so a
+            # letter's freight carries into the customer's template.
+            "shipping": round(to_float(row.get("shipping", row.get("pre_shipping", 0.0)), 0.0), 4),
+            "packaging": round(to_float(row.get("packaging", row.get("pre_packaging", 0.0)), 0.0), 4),
             "shipping_type": (row.get("shipping_type") or "").strip(),
             "shipping_location": (row.get("shipping_location") or "").strip(),
             "shipping_custom": (row.get("shipping_custom") or "").strip(),
@@ -5347,6 +5350,32 @@ def customer_name_save(customer_id):
     db.session.commit()
 
     return jsonify({"ok": True, "name": new_name})
+
+
+@app.route("/customers/rebuild-templates", methods=["POST"])
+@login_required
+def customers_rebuild_templates():
+    """Reset every customer's template to the rows of their most recent saved letter."""
+    updated, skipped = 0, 0
+    for customer in Customer.query.all():
+        latest = (
+            PriceLetterHistory.query
+            .filter_by(customer_id=customer.id)
+            .order_by(PriceLetterHistory.created_at.desc())
+            .first()
+        )
+        rows = (_price_letter_history_row_to_dict(latest).get("rows") or []) if latest else []
+        if rows and save_customer_template_from_quote(customer.id, rows):
+            updated += 1
+        else:
+            skipped += 1
+
+    flash(
+        f"Rebuilt {updated} customer template(s) from their latest letter. "
+        f"{skipped} customer(s) had no saved letter and were left as is.",
+        "success",
+    )
+    return redirect(url_for("customers_page"))
 
 
 @app.route("/customers/<customer_id>/template/save", methods=["POST"])
