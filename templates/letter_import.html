@@ -11,8 +11,15 @@
   .il-grid{display:grid;grid-template-columns:repeat(3,260px);gap:12px;align-items:end}
   .il-grid label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;margin-bottom:6px}
   .il-grid select,.il-grid input{width:100%;height:40px}
+  .il-msg{padding:12px 14px;margin-bottom:14px;border:1px solid;font-size:14px}
+  .il-msg-err{background:#fef2f2;border-color:#fca5a5;color:#991b1b}
+  .il-msg-ok{background:#f0fdf4;border-color:#86efac;color:#166534}
 </style>
 <div class="il-wrap">
+  {% set messages = get_flashed_messages(with_categories=true) %}
+  {% for category, msg in messages %}
+    <div class="il-msg {{ 'il-msg-err' if category == 'error' else 'il-msg-ok' }}">{{ msg }}</div>
+  {% endfor %}
   <div class="il-card">
     <h2>Import Price Letter</h2>
     <form method="post" enctype="multipart/form-data">
@@ -31,8 +38,20 @@
           </select></div>
         <div><label>Letter File</label><input type="file" name="letter_pdf" accept=".pdf,.png,.jpg,.jpeg" required></div>
       </div><br>
-      <button name="action" value="upload" class="btn btn-primary">Read Letter</button>
+      <button name="action" value="upload" class="btn btn-primary" id="il-read-btn">Read Letter</button>
+      <input type="hidden" name="action" value="upload" id="il-action" disabled>
     </form>
+    <script>
+      (function () {
+        var btn = document.getElementById("il-read-btn");
+        btn.form.addEventListener("submit", function () {
+          // disabled buttons don't submit their value, so send it via the hidden field
+          document.getElementById("il-action").disabled = false;
+          btn.disabled = true;
+          btn.textContent = "Reading letter... (can take ~30 seconds)";
+        });
+      })();
+    </script>
   </div>
 
   {% if draft %}
