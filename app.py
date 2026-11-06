@@ -22,7 +22,7 @@ from flask import flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, jsonify
-from letter_import import extract_price_letter
+from letter_import import extract_price_letter, media_type_for
 
 
 PRICING_STORE_PATH = os.path.join("data", "pricing_entries.json")
@@ -8314,14 +8314,19 @@ def import_letter_page():
             month_key = (request.form.get("pricing_period") or "").strip().upper()
             customer = _find_customer_by_id(customers, customer_id) if customer_id else None
 
-            if not f or not f.filename.lower().endswith(".pdf"):
-                flash("Please choose a PDF price letter.", "error")
+            media_type = media_type_for(f.filename) if f else None
+
+            if not f or not media_type:
+                flash("Please choose a PDF, PNG or JPG price letter.", "error")
             elif not customer or not month_key:
                 flash("Customer and pricing period are required.", "error")
             else:
                 pdf_bytes = f.read()
+                if len(pdf_bytes) > 5 * 1024 * 1024 and media_type != "application/pdf":
+                    flash("Image is over 5 MB - try a smaller screenshot or save it as JPG.", "error")
+                    return redirect(url_for("import_letter_page"))
                 try:
-                    data = extract_price_letter(pdf_bytes)
+                    data = extract_price_letter(pdf_bytes, media_type)
                 except Exception as e:
                     flash(f"Could not read letter: {e}", "error")
                     return redirect(url_for("import_letter_page"))
