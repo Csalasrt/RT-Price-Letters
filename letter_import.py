@@ -1,6 +1,7 @@
 """letter_import.py - reads a saved price letter (PDF or image) with Claude and returns structured rows."""
 import os
 import base64
+import json
 import anthropic
 
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
@@ -61,7 +62,7 @@ def extract_price_letter(file_bytes: bytes, media_type: str = "application/pdf")
         model=MODEL,
         max_tokens=4000,
         tools=[EXTRACT_TOOL],
-        tool_choice={"type": "tool", "name": "record_price_letter"},
+        tool_choice={"type": "auto"},
         messages=[{
             "role": "user",
             "content": [
@@ -73,12 +74,24 @@ def extract_price_letter(file_bytes: bytes, media_type: str = "application/pdf")
                 {"type": "text", "text": (
                     "This is one of our own outgoing price letters. Extract every product row "
                     "in order. Copy product names and units exactly as printed. Numbers only, no $ signs. "
-                    "If a value is not on the letter, use 0 or an empty string - never guess."
+                    "If a value is not on the letter, use 0 or an empty string - never guess. "
+                    "Return the result by calling the record_price_letter tool."
                 )},
             ],
         }],
     )
     for block in resp.content:
-        if block.type == "tool_use":
+        if block.type == "tool_use" and block.name == "record_price_letter":
             return block.input
-    raise RuntimeError("Claude did not return structured data.")
+
+    # Fallback: model answered in text - pull out the JSON object.
+    text = "".join(getattr(b, "text", "") for b in resp.content)
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        try:
+            data = json.loads(text[start:end + 1])
+            if isinstance(data, dict) and isinstance(data.get("rows"), list):
+                return data
+        except ValueError:
+            pass
+    raise RuntimeError("Claude did not return structured data. Try the upload again.")
