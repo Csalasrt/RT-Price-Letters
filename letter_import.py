@@ -20,10 +20,11 @@ EXTRACT_TOOL = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "product": {"type": "string", "description": "Product name exactly as printed"},
+                        "product": {"type": "string", "description": "Closest name from OUR PRODUCT LIST; if nothing fits, the name as printed"},
+                        "letter_product": {"type": "string", "description": "Product name exactly as printed on the letter"},
                         "description": {"type": "string"},
-                        "um": {"type": "string", "description": "Unit of measure as printed, e.g. GAL, LB"},
-                        "package_type": {"type": "string"},
+                        "um": {"type": "string", "description": "One of the allowed U/M values"},
+                        "package_type": {"type": "string", "description": "Allowed package type(s), comma-separated if several, else empty"},
                         "final_price": {"type": "number", "description": "Final price per unit as printed"},
                         "shipping": {"type": "number", "description": "Shipping/freight added per unit if shown, else 0"},
                         "packaging": {"type": "number", "description": "Packaging added per unit if shown, else 0"},
@@ -51,7 +52,20 @@ def media_type_for(filename: str):
     return SUPPORTED_TYPES.get(ext)
 
 
-def extract_price_letter(file_bytes: bytes, media_type: str = "application/pdf") -> dict:
+def _lists_text(product_names, um_options, package_options):
+    parts = []
+    if product_names:
+        parts.append("OUR PRODUCT LIST:\n" + "\n".join(product_names))
+    if um_options:
+        parts.append("ALLOWED U/M: " + ", ".join(um_options))
+    if package_options:
+        parts.append("ALLOWED PACKAGE TYPES: " + ", ".join(package_options)
+                     + "\nA plain \"TOTE\" with no size means 330gal Tote; only use 275gal Tote when 275 is written.")
+    return "\n\n".join(parts) or "No reference lists provided."
+
+
+def extract_price_letter(file_bytes: bytes, media_type: str = "application/pdf",
+                         product_names=None, um_options=None, package_options=None) -> dict:
     """Send the letter (PDF or image) to Claude and return {'sales_person_*': ..., 'rows': [...]}."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -71,9 +85,11 @@ def extract_price_letter(file_bytes: bytes, media_type: str = "application/pdf")
                     "media_type": media_type,
                     "data": base64.b64encode(file_bytes).decode(),
                 }},
+                {"type": "text", "text": _lists_text(product_names, um_options, package_options)},
                 {"type": "text", "text": (
                     "This is one of our own outgoing price letters. Extract every product row "
-                    "in order. Copy product names and units exactly as printed. Numbers only, no $ signs. "
+                    "in order. Map each product, U/M and package type to the closest value from our lists above. "
+                    "Numbers only, no $ signs. "
                     "If a value is not on the letter, use 0 or an empty string - never guess. "
                     "Return the result by calling the record_price_letter tool."
                 )},

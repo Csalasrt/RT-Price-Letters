@@ -8263,6 +8263,96 @@ def customer_new_page():
 # =========================================================
 # Price letter import
 # =========================================================
+IMPORT_UM_OPTIONS = ["LB", "GAL", "EACH"]
+IMPORT_PACKAGE_OPTIONS = ["Drum", "330gal Tote", "275gal Tote", "Pail", "Bulk", "Bag"]
+_UM_ALIASES = {
+    "LB": "LB", "LBS": "LB", "POUND": "LB", "POUNDS": "LB", "#": "LB",
+    "GAL": "GAL", "GALS": "GAL", "GALLON": "GAL", "GALLONS": "GAL", "GL": "GAL",
+    "EACH": "EACH", "EA": "EACH", "UNIT": "EACH",
+}
+
+
+def _import_squash(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
+
+
+def snap_import_product(name, product_names):
+    """Closest real product name. Returns (name, how): exact / close / none."""
+    import difflib
+    raw = (name or "").strip()
+    if not raw or not product_names:
+        return raw, "none"
+    by_norm = {normalize_product_name(p): p for p in product_names}
+    if normalize_product_name(raw) in by_norm:
+        return by_norm[normalize_product_name(raw)], "exact"
+    by_squash = {_import_squash(p): p for p in product_names}
+    if _import_squash(raw) in by_squash:
+        return by_squash[_import_squash(raw)], "exact"
+    hit = difflib.get_close_matches(_import_squash(raw), list(by_squash.keys()), n=1, cutoff=0.6)
+    if hit:
+        return by_squash[hit[0]], "close"
+    return raw, "none"
+
+
+def snap_import_um(um):
+    key = re.sub(r"[^A-Z#]", "", str(um or "").upper())
+    return _UM_ALIASES.get(key, normalize_um(um))
+
+
+def snap_import_package(value):
+    picks = []
+    for part in re.split(r"[,/]", str(value or "")):
+        sq = _import_squash(part)
+        if not sq:
+            continue
+        found = None
+        for opt in IMPORT_PACKAGE_OPTIONS:
+            if _import_squash(opt) == sq:
+                found = opt
+        if not found:
+            if "330" in sq:
+                found = "330gal Tote"
+            elif "275" in sq:
+                found = "275gal Tote"
+            elif "tote" in sq:
+                # a plain "TOTE" on our letters means the 330 gal tote
+                found = "330gal Tote"
+            elif "drum" in sq:
+                found = "Drum"
+            elif "pail" in sq or "bucket" in sq:
+                found = "Pail"
+            elif "bulk" in sq or "truck" in sq:
+                found = "Bulk"
+            elif "bag" in sq or "sack" in sq:
+                found = "Bag"
+        if found and found not in picks:
+            picks.append(found)
+    return ",".join(picks)
+
+
+def snap_import_rows(rows):
+    """Map letter values onto real Products / U/M / package types."""
+    company = load_company_products() or []
+    names = [p.get("product", "") for p in company if p.get("product")]
+    desc_by_name = {p.get("product"): p.get("description", "") for p in company}
+    out = []
+    for r in rows or []:
+        r = dict(r)
+        letter_name = (r.get("letter_product") or r.get("product") or "").strip()
+        product, how = snap_import_product(r.get("product") or letter_name, names)
+        if how == "none" and letter_name:
+            product, how = snap_import_product(letter_name, names)
+        r["product"] = product
+        r["letter_product"] = letter_name
+        r["product_match"] = how
+        r["um"] = snap_import_um(r.get("um"))
+        r["package_type"] = snap_import_package(r.get("package_type"))
+        if not (r.get("description") or "").strip():
+            r["description"] = desc_by_name.get(product, "")
+        out.append(r)
+    return out
+
+
 def build_rows_from_extracted_letter(extracted_rows, month_key):
     """Turn letter rows into normal printer rows. Cost comes from the same
     monthly pricing the Build page uses; margin is solved backwards from the
@@ -8318,6 +8408,8 @@ def build_rows_from_extracted_letter(extracted_rows, month_key):
         row["shipping"] = shipping
         row["packaging"] = packaging
         row["cost_found"] = cost_found
+        row["letter_product"] = src.get("letter_product", product)
+        row["product_match"] = src.get("product_match", "exact")
         rows.append(row)
     return rows
 
@@ -8355,7 +8447,13 @@ def import_letter_page():
                 "shipping": to_float(request.form.get(f"shipping_{i}"), 0.0),
                 "packaging": to_float(request.form.get(f"packaging_{i}"), 0.0),
                 "cost": to_float(request.form.get(f"cost_{i}"), 0.0),
+                "letter_product": request.form.get(f"letter_product_{i}", ""),
             })
+        posted = snap_import_rows(posted)
+        for p in posted:
+            # whatever was picked in the dropdown is a deliberate choice
+            if p["product_match"] == "close":
+                p["product_match"] = "exact"
 
         return {
             "customer_id": customer_id,
@@ -8387,8 +8485,14 @@ def import_letter_page():
                 if len(file_bytes) > 5 * 1024 * 1024 and media_type != "application/pdf":
                     flash("Image is over 5 MB - try a smaller screenshot or save it as JPG.", "error")
                     return redirect(url_for("import_letter_page"))
+                product_names = [p.get("product", "") for p in (load_company_products() or []) if p.get("product")]
                 try:
-                    data = extract_price_letter(file_bytes, media_type)
+                    data = extract_price_letter(
+                        file_bytes, media_type,
+                        product_names=product_names,
+                        um_options=IMPORT_UM_OPTIONS,
+                        package_options=IMPORT_PACKAGE_OPTIONS,
+                    )
                 except Exception as e:
                     flash(f"Could not read letter: {e}", "error")
                     return redirect(url_for("import_letter_page"))
@@ -8406,7 +8510,7 @@ def import_letter_page():
                     "sales_person_phone": data.get("sales_person_phone", ""),
                     "sales_person_email": data.get("sales_person_email", ""),
                     "pdf_file_name": safe_name,
-                    "rows": build_rows_from_extracted_letter(data.get("rows") or [], month_key),
+                    "rows": build_rows_from_extracted_letter(snap_import_rows(data.get("rows") or []), month_key),
                 }
                 if not draft["rows"]:
                     flash("No product rows were found on that letter.", "error")
@@ -8445,6 +8549,9 @@ def import_letter_page():
         customers=customers,
         periods=periods,
         draft=draft,
+        product_names=[p.get("product", "") for p in (load_company_products() or []) if p.get("product")],
+        um_options=IMPORT_UM_OPTIONS,
+        package_options=IMPORT_PACKAGE_OPTIONS,
         page="import_letter",
         page_title="Import Price Letter",
     )
