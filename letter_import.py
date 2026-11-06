@@ -1,4 +1,4 @@
-"""letter_import.py - reads a saved price letter PDF with Claude and returns structured rows."""
+"""letter_import.py - reads a saved price letter (PDF or image) with Claude and returns structured rows."""
 import os
 import base64
 import anthropic
@@ -36,8 +36,22 @@ EXTRACT_TOOL = {
 }
 
 
-def extract_price_letter(pdf_bytes: bytes) -> dict:
-    """Send the PDF to Claude and return {'sales_person_*': ..., 'rows': [...]}."""
+SUPPORTED_TYPES = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+}
+
+
+def media_type_for(filename: str):
+    """Return the media type for a supported letter file, or None."""
+    ext = os.path.splitext(filename or "")[1].lower()
+    return SUPPORTED_TYPES.get(ext)
+
+
+def extract_price_letter(file_bytes: bytes, media_type: str = "application/pdf") -> dict:
+    """Send the letter (PDF or image) to Claude and return {'sales_person_*': ..., 'rows': [...]}."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set.")
@@ -51,10 +65,10 @@ def extract_price_letter(pdf_bytes: bytes) -> dict:
         messages=[{
             "role": "user",
             "content": [
-                {"type": "document", "source": {
+                {"type": "document" if media_type == "application/pdf" else "image", "source": {
                     "type": "base64",
-                    "media_type": "application/pdf",
-                    "data": base64.b64encode(pdf_bytes).decode(),
+                    "media_type": media_type,
+                    "data": base64.b64encode(file_bytes).decode(),
                 }},
                 {"type": "text", "text": (
                     "This is one of our own outgoing price letters. Extract every product row "
