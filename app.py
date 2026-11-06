@@ -22,6 +22,7 @@ from flask import flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, jsonify
+from letter_import import extract_price_letter
 
 
 PRICING_STORE_PATH = os.path.join("data", "pricing_entries.json")
@@ -8256,6 +8257,141 @@ def customer_new_page():
         location_states=location_states,
         page="app",
         page_title="Add Customer",
+    )
+
+
+# =========================================================
+# Price letter import
+# =========================================================
+def build_rows_from_extracted_letter(extracted_rows, month_key):
+    """Turn Claude's rows into normal printer rows, solving margin from
+    the selected period's cost - same math as Reverse Margin."""
+    enriched = enrich_reverse_margin_rows(extracted_rows, month_key)
+    rows = []
+    for src, er in zip(extracted_rows, enriched):
+        cost = to_float(er.get("historical_cost", 0.0), 0.0)
+        shipping = to_float(er.get("shipping", 0.0), 0.0)
+        packaging = to_float(er.get("packaging", 0.0), 0.0)
+        final_price = to_float(er.get("final_price", 0.0), 0.0)
+        price = final_price - shipping - packaging
+        margin = to_float(er.get("reverse_margin_pct"), 0.0) if er.get("reverse_margin_pct") is not None else 0.0
+
+        row = normalize_printer_row({
+            "product": er.get("product", ""),
+            "description": src.get("description", ""),
+            "um": er.get("um", ""),
+            "package_type": src.get("package_type", ""),
+            "cost": cost,
+            "source_cost": cost,
+            "final_cost": cost,
+            "margin": margin,
+            "price": price,
+            "source_price": price,
+            "add_shipping": shipping,
+            "add_packaging": packaging,
+            "final_price": final_price,
+        })
+        row["shipping"] = shipping
+        row["packaging"] = packaging
+        row["cost_found"] = bool(er.get("historical_cost_found"))
+        rows.append(row)
+    return rows
+
+
+@app.route("/import-letter", methods=["GET", "POST"])
+@login_required
+def import_letter_page():
+    customers = load_customers()
+    periods = get_available_pricing_periods()
+    draft = session.get("import_draft")
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "upload":
+            f = request.files.get("letter_pdf")
+            customer_id = (request.form.get("customer_id") or "").strip()
+            month_key = (request.form.get("pricing_period") or "").strip().upper()
+            customer = _find_customer_by_id(customers, customer_id) if customer_id else None
+
+            if not f or not f.filename.lower().endswith(".pdf"):
+                flash("Please choose a PDF price letter.", "error")
+            elif not customer or not month_key:
+                flash("Customer and pricing period are required.", "error")
+            else:
+                pdf_bytes = f.read()
+                try:
+                    data = extract_price_letter(pdf_bytes)
+                except Exception as e:
+                    flash(f"Could not read letter: {e}", "error")
+                    return redirect(url_for("import_letter_page"))
+
+                os.makedirs(PRICE_LETTER_FOLDER, exist_ok=True)
+                safe_name = secure_filename(f.filename)
+                with open(os.path.join(PRICE_LETTER_FOLDER, safe_name), "wb") as out:
+                    out.write(pdf_bytes)
+
+                draft = {
+                    "customer_id": customer_id,
+                    "customer_name": (customer.get("name") or "").strip(),
+                    "month_key": month_key,
+                    "sales_person_name": data.get("sales_person_name", ""),
+                    "sales_person_phone": data.get("sales_person_phone", ""),
+                    "sales_person_email": data.get("sales_person_email", ""),
+                    "pdf_file_name": safe_name,
+                    "rows": build_rows_from_extracted_letter(data.get("rows") or [], month_key),
+                }
+                session["import_draft"] = draft
+                session.modified = True
+
+        elif action == "recalculate" and draft:
+            posted = []
+            for i in range(len(draft["rows"])):
+                if request.form.get(f"remove_{i}"):
+                    continue
+                posted.append({
+                    "product": request.form.get(f"product_{i}", ""),
+                    "description": request.form.get(f"description_{i}", ""),
+                    "um": request.form.get(f"um_{i}", ""),
+                    "package_type": request.form.get(f"package_type_{i}", ""),
+                    "final_price": to_float(request.form.get(f"final_price_{i}"), 0.0),
+                    "shipping": to_float(request.form.get(f"shipping_{i}"), 0.0),
+                    "packaging": to_float(request.form.get(f"packaging_{i}"), 0.0),
+                })
+            draft["rows"] = build_rows_from_extracted_letter(posted, draft["month_key"])
+            session["import_draft"] = draft
+            session.modified = True
+
+        elif action == "save" and draft:
+            quote = {k: v for k, v in draft.items() if k != "pdf_file_name"}
+            user = find_user_by_id(session.get("user_id"))
+            saved_entry, error = finalize_price_letter(quote=quote, user_row=user, save_file=False)
+            if error:
+                flash(error, "error")
+            else:
+                row = db.session.get(PriceLetterHistory, saved_entry.get("id"))
+                if row:
+                    row.file_name = draft["pdf_file_name"]
+                    row.file_path = os.path.join(PRICE_LETTER_FOLDER, draft["pdf_file_name"])
+                    db.session.commit()
+                session.pop("import_draft", None)
+                session.pop("print_quote", None)
+                session.modified = True
+                flash("Imported price letter saved.", "download_success")
+                return redirect(url_for("import_letter_page"))
+
+        elif action == "discard":
+            session.pop("import_draft", None)
+            session.modified = True
+            return redirect(url_for("import_letter_page"))
+
+    return render_template(
+        "letter_import.html",
+        customers=customers,
+        periods=periods,
+        draft=session.get("import_draft"),
+        page="import_letter",
+        page_title="Import Price Letter",
     )
 
 
