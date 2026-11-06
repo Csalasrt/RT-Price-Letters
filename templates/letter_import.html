@@ -59,9 +59,16 @@
     <h3>Review: {{ draft.customer_name }} &mdash; {{ draft.month_key }}</h3>
     <p>Sales: {{ draft.sales_person_name }} {{ draft.sales_person_phone }} {{ draft.sales_person_email }}
        &nbsp;|&nbsp; <a href="{{ url_for('static', filename='price_letters/' ~ draft.pdf_file_name) }}" target="_blank">Open original</a></p>
-    <p>Red rows had no cost found for this period - margin will be wrong until fixed.</p>
+    <p>Red rows had no cost found for this period. Type the cost in and click Recalculate before saving.</p>
     <form method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+      <input type="hidden" name="customer_id" value="{{ draft.customer_id }}">
+      <input type="hidden" name="month_key" value="{{ draft.month_key }}">
+      <input type="hidden" name="pdf_file_name" value="{{ draft.pdf_file_name }}">
+      <input type="hidden" name="sales_person_name" value="{{ draft.sales_person_name }}">
+      <input type="hidden" name="sales_person_phone" value="{{ draft.sales_person_phone }}">
+      <input type="hidden" name="sales_person_email" value="{{ draft.sales_person_email }}">
+      <input type="hidden" name="row_count" value="{{ draft.rows|length }}">
       <table class="il-table">
         <tr><th>Product</th><th>Description</th><th>U/M</th><th>Package</th><th>Final Price</th>
             <th>Shipping</th><th>Packaging</th><th>Cost</th><th>Margin %</th><th>Remove</th></tr>
@@ -74,7 +81,7 @@
           <td><input name="final_price_{{i}}" value="{{ r.final_price }}"></td>
           <td><input name="shipping_{{i}}" value="{{ r.shipping }}"></td>
           <td><input name="packaging_{{i}}" value="{{ r.packaging }}"></td>
-          <td>{{ '%.4f'|format(r.cost) }}</td>
+          <td><input name="cost_{{i}}" value="{{ '%.4f'|format(r.cost) }}"></td>
           <td>{{ '%.2f'|format(r.margin) }}</td>
           <td><input type="checkbox" name="remove_{{i}}"></td>
         </tr>{% endfor %}
