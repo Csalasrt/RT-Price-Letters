@@ -5702,6 +5702,9 @@ def printer_page():
                             normalize_product_name(new_row.get("product")),
                             normalize_um(new_row.get("um")),
                             (new_row.get("package_type") or "").strip().lower(),
+                            (new_row.get("shipping_type") or "").strip().lower(),
+                            (new_row.get("shipping_location") or "").strip().lower(),
+                            (new_row.get("shipping_custom") or "").strip().lower(),
                         )
 
                         if row_key in existing_keys:
@@ -5739,6 +5742,9 @@ def printer_page():
                             normalize_product_name(new_row.get("product")),
                             normalize_um(new_row.get("um")),
                             (new_row.get("package_type") or "").strip().lower(),
+                            (new_row.get("shipping_type") or "").strip().lower(),
+                            (new_row.get("shipping_location") or "").strip().lower(),
+                            (new_row.get("shipping_custom") or "").strip().lower(),
                         )
 
                         if row_key in existing_keys:
